@@ -546,16 +546,18 @@ export default function StockMain() {
         </div>
       )}
 
-      {/* ── Settings Modal (scroll fixed) ── */}
+      {/* ── Settings Modal ── */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setShowSettings(false)}>
-          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl"
-            style={{ height: "88vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
-            {/* Header — fixed */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100"
-              style={{ flexShrink: 0 }}>
+          {/* Modal: whole box scrolls — most reliable pattern */}
+          <div className="w-full max-w-2xl shadow-2xl"
+            style={{ height: "88vh", overflowY: "scroll", borderRadius: "24px", backgroundColor: "white" }}>
+
+            {/* Sticky header — stays at top while content scrolls */}
+            <div style={{ position: "sticky", top: 0, zIndex: 10, backgroundColor: "white", borderBottom: "1px solid #f1f5f9" }}
+              className="flex items-center justify-between px-6 py-4">
               <div className="flex items-center gap-2.5">
                 <div className="bg-violet-100 rounded-xl p-2"><Settings className="w-4 h-4 text-violet-600" /></div>
                 <div>
@@ -569,9 +571,8 @@ export default function StockMain() {
               </button>
             </div>
 
-            {/* Scrollable content */}
-            <div style={{ flex: "1 1 0%", minHeight: 0, overflowY: "scroll" }}
-              className="p-5 flex flex-col gap-4">
+            {/* Content — no overflow needed, parent scrolls */}
+            <div className="p-5 flex flex-col gap-4">
 
               {/* Standard dropdown fields */}
               {(Object.keys(FIELD_LABELS) as DropdownField[]).map(field => (
