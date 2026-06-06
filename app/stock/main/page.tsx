@@ -28,6 +28,8 @@ const FIELD_LABELS: Record<DropdownField, string> = {
   poStatuses: "สถานะสั่งซื้อ",
   locations: "โลเคชั่น",
   stockStatuses: "สถานะ Stock",
+  customerTypes: "ประเภทลูกค้า",
+  financeCompanies: "บริษัทไฟแนนซ์",
 };
 
 const emptyForm = {

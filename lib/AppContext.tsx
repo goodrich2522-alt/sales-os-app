@@ -2,10 +2,17 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { Forklift, Sale, InspectionRecord, DeletedInspectionRecord, CustomFieldDef } from "./types";
-import { mockForklifts, mockSales, mockInspections, BRANDS, FUEL_TYPES, DEFAULT_VEHICLE_GROUPS, DEFAULT_CONTROL_TYPES, DEFAULT_PO_STATUSES, DEFAULT_LOCATIONS, DEFAULT_STOCK_STATUSES } from "./mockData";
+import {
+  mockForklifts, mockSales, mockInspections,
+  BRANDS, FUEL_TYPES,
+  DEFAULT_VEHICLE_GROUPS, DEFAULT_CONTROL_TYPES, DEFAULT_PO_STATUSES,
+  DEFAULT_LOCATIONS, DEFAULT_STOCK_STATUSES,
+  DEFAULT_CUSTOMER_TYPES, FINANCE_COMPANIES,
+} from "./mockData";
 
 // ── Field configuration ───────────────────────────────────────────────────────
 export interface FieldConfig {
+  // Stock form dropdowns
   brands: string[];
   vehicleGroups: string[];
   fuelTypes: string[];
@@ -13,9 +20,14 @@ export interface FieldConfig {
   poStatuses: string[];
   locations: string[];
   stockStatuses: string[];
-  customFieldDefs: CustomFieldDef[];     // extra fields on the stock form
-  saleExtraFieldDefs: CustomFieldDef[];  // extra fields on the checkout form
-  salesFilterRequests: string[];         // filter dimensions requested by sales team
+  // Sales form dropdowns
+  customerTypes: string[];
+  financeCompanies: string[];
+  // Custom field definitions
+  customFieldDefs: CustomFieldDef[];      // stock form custom fields
+  saleExtraFieldDefs: CustomFieldDef[];   // checkout form custom fields
+  // Sales filter requests
+  salesFilterRequests: string[];
 }
 
 const DEFAULT_FIELD_CFG: FieldConfig = {
@@ -26,6 +38,8 @@ const DEFAULT_FIELD_CFG: FieldConfig = {
   poStatuses: DEFAULT_PO_STATUSES,
   locations: DEFAULT_LOCATIONS,
   stockStatuses: DEFAULT_STOCK_STATUSES,
+  customerTypes: DEFAULT_CUSTOMER_TYPES,
+  financeCompanies: FINANCE_COMPANIES,
   customFieldDefs: [],
   saleExtraFieldDefs: [],
   salesFilterRequests: [],
@@ -56,9 +70,13 @@ interface AppContextType {
   addCustomFieldOption: (id: string, option: string) => void;
   removeCustomFieldOption: (id: string, idx: number) => void;
   editCustomFieldOption: (id: string, idx: number, val: string) => void;
-  // Checkout form extra fields
-  addSaleExtraFieldDef: (name: string) => void;
+  // Checkout extra field defs
+  addSaleExtraFieldDef: (name: string, type?: "text" | "select", options?: string[]) => void;
   removeSaleExtraFieldDef: (id: string) => void;
+  renameSaleExtraFieldDef: (id: string, name: string) => void;
+  addSaleExtraFieldOption: (id: string, option: string) => void;
+  removeSaleExtraFieldOption: (id: string, idx: number) => void;
+  editSaleExtraFieldOption: (id: string, idx: number, val: string) => void;
   // Sales filter requests
   addSalesFilterRequest: (name: string) => void;
   removeSalesFilterRequest: (name: string) => void;
@@ -84,34 +102,30 @@ function lsSave(key: string, val: unknown) {
 }
 
 function stripImages<T extends InspectionRecord>(arr: T[]): T[] {
-  return arr.map((r) => ({ ...r, images: [] as string[] }));
+  return arr.map(r => ({ ...r, images: [] as string[] }));
 }
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-  const [forklifts, setForklifts]     = useState<Forklift[]>(mockForklifts);
-  const [sales, setSales]             = useState<Sale[]>(mockSales);
-  const [inspections, setInspections] = useState<InspectionRecord[]>(mockInspections);
+  const [mounted, setMounted]     = useState(false);
+  const [forklifts, setForklifts] = useState<Forklift[]>(mockForklifts);
+  const [sales, setSales]         = useState<Sale[]>(mockSales);
+  const [inspections, setInspections]         = useState<InspectionRecord[]>(mockInspections);
   const [deletedInspections, setDeletedInspections] = useState<DeletedInspectionRecord[]>([]);
-  const [fieldConfig, setFieldConfig] = useState<FieldConfig>(DEFAULT_FIELD_CFG);
+  const [fieldConfig, setFieldConfig]         = useState<FieldConfig>(DEFAULT_FIELD_CFG);
 
   useEffect(() => {
     setForklifts(lsLoad(LS_KEYS.forklifts, mockForklifts));
     setSales(lsLoad(LS_KEYS.sales, mockSales));
-
     const savedMeta = lsLoad<InspectionRecord[]>(LS_KEYS.inspMeta, []);
     if (savedMeta.length > 0) setInspections(savedMeta);
-
     const rawDeleted = lsLoad<DeletedInspectionRecord[]>(LS_KEYS.deleted, []);
     const now = Date.now();
     setDeletedInspections(rawDeleted.filter(r => now - new Date(r.deletedAt).getTime() < SEVEN_DAYS_MS));
-
     const savedCfg = lsLoad<FieldConfig>(LS_KEYS.fieldCfg, DEFAULT_FIELD_CFG);
     setFieldConfig({ ...DEFAULT_FIELD_CFG, ...savedCfg });
-
     setMounted(true);
   }, []);
 
@@ -165,10 +179,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDeletedInspections(p => p.filter(r => r.id !== id));
   }, []);
 
-  // ── Stock field config CRUD ───────────────────────────────────────────────
+  // ── Shared field-config helper ─────────────────────────────────────────────
   const updateFieldOptions = useCallback((field: DropdownField, options: string[]) => {
     setFieldConfig(prev => ({ ...prev, [field]: options }));
   }, []);
+
+  // ── Stock custom field CRUD ───────────────────────────────────────────────
   const addCustomFieldDef = useCallback((name: string, type: "text" | "select" = "text", options: string[] = []) => {
     const def: CustomFieldDef = { id: `cf_${Date.now()}`, name: name.trim(), type, options: type === "select" ? options : undefined };
     setFieldConfig(prev => ({ ...prev, customFieldDefs: [...prev.customFieldDefs, def] }));
@@ -203,23 +219,52 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       customFieldDefs: prev.customFieldDefs.map(d => {
         if (d.id !== id) return d;
-        const opts = [...(d.options ?? [])];
-        opts[idx] = val.trim();
-        return { ...d, options: opts };
+        const opts = [...(d.options ?? [])]; opts[idx] = val.trim(); return { ...d, options: opts };
       }),
     }));
   }, []);
 
-  // ── Checkout extra field CRUD ─────────────────────────────────────────────
-  const addSaleExtraFieldDef = useCallback((name: string) => {
-    const def: CustomFieldDef = { id: `sef_${Date.now()}`, name: name.trim(), type: "text" };
+  // ── Sale extra field CRUD (checkout form) ─────────────────────────────────
+  const addSaleExtraFieldDef = useCallback((name: string, type: "text" | "select" = "text", options: string[] = []) => {
+    const def: CustomFieldDef = { id: `sef_${Date.now()}`, name: name.trim(), type, options: type === "select" ? options : undefined };
     setFieldConfig(prev => ({ ...prev, saleExtraFieldDefs: [...prev.saleExtraFieldDefs, def] }));
   }, []);
   const removeSaleExtraFieldDef = useCallback((id: string) => {
     setFieldConfig(prev => ({ ...prev, saleExtraFieldDefs: prev.saleExtraFieldDefs.filter(d => d.id !== id) }));
   }, []);
+  const renameSaleExtraFieldDef = useCallback((id: string, name: string) => {
+    setFieldConfig(prev => ({
+      ...prev,
+      saleExtraFieldDefs: prev.saleExtraFieldDefs.map(d => d.id === id ? { ...d, name: name.trim() } : d),
+    }));
+  }, []);
+  const addSaleExtraFieldOption = useCallback((id: string, option: string) => {
+    setFieldConfig(prev => ({
+      ...prev,
+      saleExtraFieldDefs: prev.saleExtraFieldDefs.map(d =>
+        d.id === id ? { ...d, options: [...(d.options ?? []), option.trim()] } : d
+      ),
+    }));
+  }, []);
+  const removeSaleExtraFieldOption = useCallback((id: string, idx: number) => {
+    setFieldConfig(prev => ({
+      ...prev,
+      saleExtraFieldDefs: prev.saleExtraFieldDefs.map(d =>
+        d.id === id ? { ...d, options: (d.options ?? []).filter((_, i) => i !== idx) } : d
+      ),
+    }));
+  }, []);
+  const editSaleExtraFieldOption = useCallback((id: string, idx: number, val: string) => {
+    setFieldConfig(prev => ({
+      ...prev,
+      saleExtraFieldDefs: prev.saleExtraFieldDefs.map(d => {
+        if (d.id !== id) return d;
+        const opts = [...(d.options ?? [])]; opts[idx] = val.trim(); return { ...d, options: opts };
+      }),
+    }));
+  }, []);
 
-  // ── Sales filter requests CRUD ────────────────────────────────────────────
+  // ── Sales filter requests ─────────────────────────────────────────────────
   const addSalesFilterRequest = useCallback((name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -238,9 +283,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addForklift, deleteForklift,
       addSale, deleteSale,
       addInspection, deleteInspection, restoreInspection, purgeInspection,
-      updateFieldOptions, addCustomFieldDef, removeCustomFieldDef, renameCustomFieldDef,
+      updateFieldOptions,
+      addCustomFieldDef, removeCustomFieldDef, renameCustomFieldDef,
       addCustomFieldOption, removeCustomFieldOption, editCustomFieldOption,
-      addSaleExtraFieldDef, removeSaleExtraFieldDef,
+      addSaleExtraFieldDef, removeSaleExtraFieldDef, renameSaleExtraFieldDef,
+      addSaleExtraFieldOption, removeSaleExtraFieldOption, editSaleExtraFieldOption,
       addSalesFilterRequest, removeSalesFilterRequest,
     }}>
       {children}
