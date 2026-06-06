@@ -50,9 +50,12 @@ interface AppContextType {
   purgeInspection: (id: string) => void;
   // Stock form field config
   updateFieldOptions: (field: DropdownField, options: string[]) => void;
-  addCustomFieldDef: (name: string) => void;
+  addCustomFieldDef: (name: string, type?: "text" | "select", options?: string[]) => void;
   removeCustomFieldDef: (id: string) => void;
   renameCustomFieldDef: (id: string, name: string) => void;
+  addCustomFieldOption: (id: string, option: string) => void;
+  removeCustomFieldOption: (id: string, idx: number) => void;
+  editCustomFieldOption: (id: string, idx: number, val: string) => void;
   // Checkout form extra fields
   addSaleExtraFieldDef: (name: string) => void;
   removeSaleExtraFieldDef: (id: string) => void;
@@ -166,8 +169,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateFieldOptions = useCallback((field: DropdownField, options: string[]) => {
     setFieldConfig(prev => ({ ...prev, [field]: options }));
   }, []);
-  const addCustomFieldDef = useCallback((name: string) => {
-    const def: CustomFieldDef = { id: `cf_${Date.now()}`, name: name.trim() };
+  const addCustomFieldDef = useCallback((name: string, type: "text" | "select" = "text", options: string[] = []) => {
+    const def: CustomFieldDef = { id: `cf_${Date.now()}`, name: name.trim(), type, options: type === "select" ? options : undefined };
     setFieldConfig(prev => ({ ...prev, customFieldDefs: [...prev.customFieldDefs, def] }));
   }, []);
   const removeCustomFieldDef = useCallback((id: string) => {
@@ -179,10 +182,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       customFieldDefs: prev.customFieldDefs.map(d => d.id === id ? { ...d, name: name.trim() } : d),
     }));
   }, []);
+  const addCustomFieldOption = useCallback((id: string, option: string) => {
+    setFieldConfig(prev => ({
+      ...prev,
+      customFieldDefs: prev.customFieldDefs.map(d =>
+        d.id === id ? { ...d, options: [...(d.options ?? []), option.trim()] } : d
+      ),
+    }));
+  }, []);
+  const removeCustomFieldOption = useCallback((id: string, idx: number) => {
+    setFieldConfig(prev => ({
+      ...prev,
+      customFieldDefs: prev.customFieldDefs.map(d =>
+        d.id === id ? { ...d, options: (d.options ?? []).filter((_, i) => i !== idx) } : d
+      ),
+    }));
+  }, []);
+  const editCustomFieldOption = useCallback((id: string, idx: number, val: string) => {
+    setFieldConfig(prev => ({
+      ...prev,
+      customFieldDefs: prev.customFieldDefs.map(d => {
+        if (d.id !== id) return d;
+        const opts = [...(d.options ?? [])];
+        opts[idx] = val.trim();
+        return { ...d, options: opts };
+      }),
+    }));
+  }, []);
 
   // ── Checkout extra field CRUD ─────────────────────────────────────────────
   const addSaleExtraFieldDef = useCallback((name: string) => {
-    const def: CustomFieldDef = { id: `sef_${Date.now()}`, name: name.trim() };
+    const def: CustomFieldDef = { id: `sef_${Date.now()}`, name: name.trim(), type: "text" };
     setFieldConfig(prev => ({ ...prev, saleExtraFieldDefs: [...prev.saleExtraFieldDefs, def] }));
   }, []);
   const removeSaleExtraFieldDef = useCallback((id: string) => {
@@ -209,6 +239,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addSale, deleteSale,
       addInspection, deleteInspection, restoreInspection, purgeInspection,
       updateFieldOptions, addCustomFieldDef, removeCustomFieldDef, renameCustomFieldDef,
+      addCustomFieldOption, removeCustomFieldOption, editCustomFieldOption,
       addSaleExtraFieldDef, removeSaleExtraFieldDef,
       addSalesFilterRequest, removeSalesFilterRequest,
     }}>

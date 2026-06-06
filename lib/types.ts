@@ -86,4 +86,6 @@ export interface SalesUser {
 export interface CustomFieldDef {
   id: string;
   name: string;
+  type: "text" | "select";
+  options?: string[];
 }
