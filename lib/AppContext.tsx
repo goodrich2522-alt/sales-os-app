@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import { Forklift, Sale, InspectionRecord, DeletedInspectionRecord, CustomFieldDef } from "./types";
 import {
   mockForklifts, mockSales, mockInspections,
@@ -9,6 +9,7 @@ import {
   DEFAULT_LOCATIONS, DEFAULT_STOCK_STATUSES,
   DEFAULT_CUSTOMER_TYPES, FINANCE_COMPANIES,
 } from "./mockData";
+import * as api from "./api";
 
 // ── Field configuration ───────────────────────────────────────────────────────
 export interface FieldConfig {
@@ -86,11 +87,13 @@ const AppContext = createContext<AppContextType | null>(null);
 
 // ── LocalStorage helpers ──────────────────────────────────────────────────────
 const LS_KEYS = {
-  forklifts: "salesos_forklifts_v2",
-  sales:     "salesos_sales_v2",
-  inspMeta:  "salesos_insp_meta_v2",
-  deleted:   "salesos_deleted_insp_v2",
-  fieldCfg:  "salesos_field_cfg_v2",
+  forklifts:    "salesos_forklifts_v2",
+  sales:        "salesos_sales_v2",
+  inspMeta:     "salesos_insp_meta_v2",
+  inspImages:   "salesos_insp_images_v2",
+  deleted:      "salesos_deleted_insp_v2",
+  deletedImages:"salesos_deleted_images_v2",
+  fieldConfig:  "salesos_field_config_v2",
 } as const;
 
 function lsLoad<T>(key: string, fallback: T): T {
@@ -116,54 +119,148 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [deletedInspections, setDeletedInspections] = useState<DeletedInspectionRecord[]>([]);
   const [fieldConfig, setFieldConfig]         = useState<FieldConfig>(DEFAULT_FIELD_CFG);
 
+  // ref ข้อมูลล่าสุด — ใช้หา forklift/sale ตอนต้องอัปเดตสถานะรถผ่าน API
+  const forkliftsRef = useRef<Forklift[]>(forklifts);
+  const salesRef     = useRef<Sale[]>(sales);
+  useEffect(() => { forkliftsRef.current = forklifts; }, [forklifts]);
+  useEffect(() => { salesRef.current = sales; }, [sales]);
+
   useEffect(() => {
-    setForklifts(lsLoad(LS_KEYS.forklifts, mockForklifts));
-    setSales(lsLoad(LS_KEYS.sales, mockSales));
-    const savedMeta = lsLoad<InspectionRecord[]>(LS_KEYS.inspMeta, []);
-    if (savedMeta.length > 0) setInspections(savedMeta);
-    const rawDeleted = lsLoad<DeletedInspectionRecord[]>(LS_KEYS.deleted, []);
-    const now = Date.now();
-    setDeletedInspections(rawDeleted.filter(r => now - new Date(r.deletedAt).getTime() < SEVEN_DAYS_MS));
-    const savedCfg = lsLoad<FieldConfig>(LS_KEYS.fieldCfg, DEFAULT_FIELD_CFG);
-    setFieldConfig({ ...DEFAULT_FIELD_CFG, ...savedCfg });
-    setMounted(true);
+    let cancelled = false;
+
+    // โหลดจาก localStorage (ใช้เป็น cache / fallback เมื่อไม่มี GAS หรือออฟไลน์)
+    const loadFromLocal = () => {
+      setForklifts(lsLoad(LS_KEYS.forklifts, mockForklifts));
+      setSales(lsLoad(LS_KEYS.sales, mockSales));
+      const savedMeta = lsLoad<InspectionRecord[]>(LS_KEYS.inspMeta, []);
+      const savedImages = lsLoad<Record<string, string[]>>(LS_KEYS.inspImages, {});
+      if (savedMeta.length > 0) {
+        setInspections(savedMeta.map(r => ({ ...r, images: savedImages[r.id] ?? [] })));
+      }
+      const rawDeleted = lsLoad<DeletedInspectionRecord[]>(LS_KEYS.deleted, []);
+      const deletedImages = lsLoad<Record<string, string[]>>(LS_KEYS.deletedImages, {});
+      const now = Date.now();
+      setDeletedInspections(
+        rawDeleted
+          .filter(r => now - new Date(r.deletedAt).getTime() < SEVEN_DAYS_MS)
+          .map(r => ({ ...r, images: deletedImages[r.id] ?? [] }))
+      );
+      const lsOverride = lsLoad<Partial<FieldConfig>>(LS_KEYS.fieldConfig, {});
+      setFieldConfig({ ...DEFAULT_FIELD_CFG, ...lsOverride });
+    };
+
+    (async () => {
+      // โหลดจาก Google Sheets (ผ่าน GAS) ถ้าตั้งค่า NEXT_PUBLIC_GAS_URL ไว้
+      if (api.apiEnabled) {
+        try {
+          const data = await api.bootstrap();
+          if (cancelled) return;
+          setForklifts(data.forklifts ?? []);
+          setSales(data.sales ?? []);
+          setInspections((data.inspections ?? []) as InspectionRecord[]);
+          setDeletedInspections((data.deletedInspections ?? []) as DeletedInspectionRecord[]);
+          setFieldConfig({ ...DEFAULT_FIELD_CFG, ...(data.fieldConfig as Partial<FieldConfig>) });
+          setMounted(true);
+          return;
+        } catch (e) {
+          console.warn("โหลดข้อมูลจาก Google Sheets ไม่สำเร็จ — ใช้ข้อมูลในเครื่องแทน", e);
+        }
+      }
+      if (cancelled) return;
+      loadFromLocal();
+      setMounted(true);
+    })();
+
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => { if (mounted) lsSave(LS_KEYS.forklifts, forklifts); }, [forklifts, mounted]);
   useEffect(() => { if (mounted) lsSave(LS_KEYS.sales, sales); }, [sales, mounted]);
-  useEffect(() => { if (mounted) lsSave(LS_KEYS.inspMeta, stripImages(inspections)); }, [inspections, mounted]);
   useEffect(() => {
-    if (mounted) lsSave(LS_KEYS.deleted, stripImages(deletedInspections as InspectionRecord[]).map(
+    if (!mounted) return;
+    lsSave(LS_KEYS.inspMeta, stripImages(inspections));
+    const imgMap: Record<string, string[]> = {};
+    inspections.forEach(r => { if (r.images.length > 0) imgMap[r.id] = r.images; });
+    lsSave(LS_KEYS.inspImages, imgMap);
+  }, [inspections, mounted]);
+  useEffect(() => {
+    if (!mounted) return;
+    lsSave(LS_KEYS.deleted, stripImages(deletedInspections as InspectionRecord[]).map(
       (r, i) => ({ ...r, deletedAt: (deletedInspections[i] as DeletedInspectionRecord).deletedAt })
     ));
+    const deletedImgMap: Record<string, string[]> = {};
+    deletedInspections.forEach(r => { if (r.images.length > 0) deletedImgMap[r.id] = r.images; });
+    lsSave(LS_KEYS.deletedImages, deletedImgMap);
   }, [deletedInspections, mounted]);
-  useEffect(() => { if (mounted) lsSave(LS_KEYS.fieldCfg, fieldConfig); }, [fieldConfig, mounted]);
+  useEffect(() => {
+    if (!mounted) return;
+    lsSave(LS_KEYS.fieldConfig, fieldConfig);
+    if (api.apiEnabled) api.saveFieldConfigApi(fieldConfig).catch(() => {});
+  }, [fieldConfig, mounted]);
 
   // ── Forklift CRUD ─────────────────────────────────────────────────────────
-  const addForklift    = useCallback((f: Forklift) => setForklifts(p => [f, ...p]), []);
-  const deleteForklift = useCallback((id: string) => setForklifts(p => p.filter(f => f.id !== id)), []);
+  const addForklift = useCallback((f: Forklift) => {
+    setForklifts(p => [f, ...p]);
+    if (api.apiEnabled) api.addForkliftApi(f).catch(e => console.warn("addForklift", e));
+  }, []);
+  const deleteForklift = useCallback((id: string) => {
+    setForklifts(p => p.filter(f => f.id !== id));
+    if (api.apiEnabled) api.deleteForkliftApi(id).catch(e => console.warn("deleteForklift", e));
+  }, []);
 
   // ── Sale CRUD ─────────────────────────────────────────────────────────────
   const addSale = useCallback((s: Sale) => {
     setSales(p => [s, ...p]);
-    setForklifts(p => p.map(f => f.id === s.forklift_id ? { ...f, status: "ส่งมอบแล้ว" } : f));
+    const nextStatus = s.sale_status === "จอง" || s.sale_status === "รอผ่านไฟแนนซ์" ? "จองแล้ว" : "ส่งมอบแล้ว";
+    setForklifts(p => p.map(f => f.id === s.forklift_id ? { ...f, status: nextStatus } : f));
+    if (api.apiEnabled) {
+      api.addSaleApi(s).catch(e => console.warn("addSale", e));
+      const target = forkliftsRef.current.find(f => f.id === s.forklift_id);
+      if (target) api.updateForkliftApi({ ...target, status: nextStatus }).catch(e => console.warn("updateForklift", e));
+    }
   }, []);
   const deleteSale = useCallback((saleId: string) => {
+    const sale = salesRef.current.find(s => s.id === saleId);
     setSales(prev => {
-      const sale = prev.find(s => s.id === saleId);
       if (sale) setForklifts(fls => fls.map(f => f.id === sale.forklift_id ? { ...f, status: "พร้อมขาย" } : f));
       return prev.filter(s => s.id !== saleId);
     });
+    if (api.apiEnabled) {
+      api.deleteSaleApi(saleId).catch(e => console.warn("deleteSale", e));
+      if (sale) {
+        const target = forkliftsRef.current.find(f => f.id === sale.forklift_id);
+        if (target) api.updateForkliftApi({ ...target, status: "พร้อมขาย" }).catch(e => console.warn("updateForklift", e));
+      }
+    }
   }, []);
 
   // ── Inspection CRUD ───────────────────────────────────────────────────────
-  const addInspection = useCallback((r: InspectionRecord) => setInspections(p => [r, ...p]), []);
+  const addInspection = useCallback((r: InspectionRecord) => {
+    setInspections(p => [r, ...p]); // optimistic — แสดงรูป base64 ทันที
+    if (!api.apiEnabled) return;
+    (async () => {
+      try {
+        // อัปโหลดรูป base64 → Google Drive แล้วเก็บเป็น URL แทน
+        const urls = await Promise.all((r.images || []).map(async (img) => {
+          if (!img.startsWith("data:")) return img; // เป็น URL อยู่แล้ว
+          const mime = /^data:(.*?);base64,/.exec(img)?.[1] || "image/jpeg";
+          return (await api.uploadImageApi(img, mime, `${r.unit_no}_${r.id}`)).url;
+        }));
+        const record: InspectionRecord = { ...r, images: urls };
+        await api.addInspectionApi(record);
+        setInspections(p => p.map(x => x.id === r.id ? record : x)); // เปลี่ยน base64 → URL
+      } catch (e) {
+        console.warn("addInspection", e);
+      }
+    })();
+  }, []);
   const deleteInspection = useCallback((id: string) => {
     setInspections(prev => {
       const item = prev.find(r => r.id === id);
       if (item) setDeletedInspections(d => [{ ...item, deletedAt: new Date().toISOString() }, ...d]);
       return prev.filter(r => r.id !== id);
     });
+    if (api.apiEnabled) api.deleteInspectionApi(id).catch(e => console.warn("deleteInspection", e));
   }, []);
   const restoreInspection = useCallback((id: string) => {
     setDeletedInspections(prev => {
@@ -174,9 +271,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       return prev.filter(r => r.id !== id);
     });
+    if (api.apiEnabled) api.restoreInspectionApi(id).catch(e => console.warn("restoreInspection", e));
   }, []);
   const purgeInspection = useCallback((id: string) => {
     setDeletedInspections(p => p.filter(r => r.id !== id));
+    if (api.apiEnabled) api.purgeInspectionApi(id).catch(e => console.warn("purgeInspection", e));
   }, []);
 
   // ── Shared field-config helper ─────────────────────────────────────────────

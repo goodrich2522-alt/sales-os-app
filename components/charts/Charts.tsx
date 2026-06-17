@@ -20,7 +20,15 @@ function fmt(n: number) { return Number(n).toLocaleString("th-TH"); }
 
 // ─── 1. Monthly Revenue Bar Chart ─────────────────────────────────────────────
 interface RevenueData { month: string; revenue: number; units: number; }
-export function SalesRevenueChart({ data }: { data: RevenueData[] }) {
+export function SalesRevenueChart({
+  data,
+  onBarClick,
+  activeMonth,
+}: {
+  data: RevenueData[];
+  onBarClick?: (month: string) => void;
+  activeMonth?: string;
+}) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
@@ -29,12 +37,22 @@ export function SalesRevenueChart({ data }: { data: RevenueData[] }) {
             <stop offset="0%" stopColor="#6366f1" stopOpacity={1} />
             <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.85} />
           </linearGradient>
+          <linearGradient id="revenueGradActive" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#f59e0b" stopOpacity={1} />
+            <stop offset="100%" stopColor="#f97316" stopOpacity={0.9} />
+          </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
         <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
         <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => `${(v / 1e6).toFixed(1)}ล`} axisLine={false} tickLine={false} />
         <Tooltip formatter={(v) => [`฿${fmt(Number(v))}`, "รายได้"]} contentStyle={TT} cursor={{ fill: "#f8fafc" }} />
-        <Bar dataKey="revenue" fill="url(#revenueGrad)" radius={[6, 6, 0, 0]} />
+        <Bar dataKey="revenue" radius={[6, 6, 0, 0]} cursor={onBarClick ? "pointer" : "default"}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          onClick={(d: any) => onBarClick?.(d?.month ?? "")}>
+          {data.map((entry) => (
+            <Cell key={entry.month} fill={entry.month === activeMonth ? "url(#revenueGradActive)" : "url(#revenueGrad)"} />
+          ))}
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   );
@@ -176,6 +194,31 @@ export function WeeklyBreakdownChart({ data }: { data: WeekPoint[] }) {
   );
 }
 
+// ─── 7. Sale Type Bar Chart ───────────────────────────────────────────────────
+interface SaleTypeData { type: string; count: number; revenue: number; color: string; }
+export function SaleTypeChart({ data }: { data: SaleTypeData[] }) {
+  if (!data.length) {
+    return <div className="flex items-center justify-center h-full text-slate-400 text-sm">ไม่มีข้อมูล</div>;
+  }
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+        <XAxis dataKey="type" tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} allowDecimals={false} axisLine={false} tickLine={false} />
+        <Tooltip
+          formatter={(v, name) => name === "count" ? [`${v} คัน`, "จำนวน"] : [`฿${fmt(Number(v))}`, "รายได้"]}
+          contentStyle={TT}
+          cursor={{ fill: "#f8fafc" }}
+        />
+        <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+          {data.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 export const MONTH_LABELS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 
@@ -195,6 +238,25 @@ export function buildStaffMonthly(sales: Sale[], staffName: string): StaffSalePo
 export interface WeeklyDrilldown {
   weeks: { week: string; revenue: number; units: number; sales: Sale[] }[];
   allSales: Sale[];
+}
+
+export function buildAllMonthlyWeekly(sales: Sale[], monthLabel: string): WeeklyDrilldown {
+  const monthIdx = MONTH_LABELS.indexOf(monthLabel);
+  const filtered = sales.filter((s) => new Date(s.created_at).getMonth() === monthIdx);
+  const weeks = [
+    { week: "สัปดาห์ 1\n(1-7)", revenue: 0, units: 0, sales: [] as Sale[] },
+    { week: "สัปดาห์ 2\n(8-14)", revenue: 0, units: 0, sales: [] as Sale[] },
+    { week: "สัปดาห์ 3\n(15-21)", revenue: 0, units: 0, sales: [] as Sale[] },
+    { week: "สัปดาห์ 4\n(22-31)", revenue: 0, units: 0, sales: [] as Sale[] },
+  ];
+  filtered.forEach((s) => {
+    const day = new Date(s.created_at).getDate();
+    const wIdx = Math.min(Math.floor((day - 1) / 7), 3);
+    weeks[wIdx].revenue += s.actual_sale;
+    weeks[wIdx].units   += 1;
+    weeks[wIdx].sales.push(s);
+  });
+  return { weeks, allSales: filtered };
 }
 
 export function buildStaffWeekly(sales: Sale[], staffName: string, monthLabel: string): WeeklyDrilldown {

@@ -1,16 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   TrendingUp, LogOut, X, CheckCircle, AlertCircle,
   Search, Fuel, Zap, Filter, ChevronRight, Target,
   Package, Trash2, History, RotateCcw, Pencil, Check, Camera,
   SlidersHorizontal, ImageOff, ZoomIn, ChevronLeft, Plus, ClipboardList,
-  Settings, ChevronDown, Type, ListOrdered, ArrowLeft
+  Settings, ChevronDown, Type, ListOrdered, ArrowLeft, Bell, Eye, ChevronUp,
 } from "lucide-react";
-import { PROVINCES } from "@/lib/mockData";
-import { Forklift, PaymentType, CustomerType, Sale } from "@/lib/types";
+import { PROVINCES, CONTACT_SOURCES, SALE_TYPES } from "@/lib/mockData";
+import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, ContactSource, SaleType } from "@/lib/types";
 import { useApp } from "@/lib/AppContext";
 
 const PAYMENT_TYPES: PaymentType[] = ["เงินสด", "ไฟแนนซ์"];
@@ -21,22 +21,52 @@ const STATUS_BADGE: Record<string, string> = {
   "ส่งมอบแล้ว": "bg-slate-100 text-slate-600 border-slate-200",
 };
 
+const SALE_STATUS_BADGE: Record<SaleStatus, string> = {
+  "ขายแล้ว":        "bg-emerald-100 text-emerald-700 border-emerald-200",
+  "จอง":            "bg-amber-100 text-amber-700 border-amber-200",
+  "รอผ่านไฟแนนซ์":  "bg-red-100 text-red-700 border-red-200",
+};
+
+const CONTACT_SOURCE_COLORS: Record<string, string> = {
+  "Line":          "bg-green-100 text-green-700",
+  "Facebook":      "bg-blue-100 text-blue-700",
+  "TikTok":        "bg-pink-100 text-pink-700",
+  "โทร":           "bg-indigo-100 text-indigo-700",
+  "Google":        "bg-orange-100 text-orange-700",
+  "คนอื่นบอกต่อ": "bg-violet-100 text-violet-700",
+};
+
 const emptyCheckout = {
   customer_name: "", customer_tel: "",
   customer_type: "" as CustomerType | "",
   province: "", payment_type: "" as PaymentType | "",
   finance_company: "", actual_sale: "", deposit: "",
   delivery_date: "", remark: "",
+  warranty_expiry: "", parts_schedule: "",
+  contact_source: "" as ContactSource | "",
+  sale_type: "" as SaleType | "",
 };
 
 type SaleInlineStep = "name" | "type" | "options" | null;
 
-// Labels for the standard configurable dropdowns in the sales settings modal
 const SALE_FIELD_LABELS: Record<string, string> = {
   customerTypes: "ประเภทลูกค้า",
   financeCompanies: "บริษัทไฟแนนซ์",
 };
 type SaleDropdown = "customerTypes" | "financeCompanies";
+
+const HISTORY_TABS: { key: SaleStatus | "all"; label: string }[] = [
+  { key: "all",           label: "ทั้งหมด" },
+  { key: "ขายแล้ว",       label: "ขายแล้ว" },
+  { key: "จอง",           label: "จอง" },
+  { key: "รอผ่านไฟแนนซ์", label: "รอผ่านไฟแนนซ์" },
+];
+
+function daysUntil(dateStr: string): number {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr); target.setHours(0, 0, 0, 0);
+  return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
 
 export default function SalesMain() {
   const router = useRouter();
@@ -59,6 +89,25 @@ export default function SalesMain() {
   const [undoToast, setUndoToast]         = useState<string | null>(null);
   const [editingTarget, setEditingTarget] = useState(false);
   const [targetInput, setTargetInput]     = useState("");
+  const [historyTab, setHistoryTab]       = useState<SaleStatus | "all">("all");
+  const [detailSale, setDetailSale]       = useState<Sale | null>(null);
+  const [showNotif, setShowNotif]         = useState(true);
+  const [detailLightboxIdx, setDetailLightboxIdx] = useState<number | null>(null);
+
+  // Vehicle category tabs (main product separator)
+  const [activeCategory, setActiveCategory] = useState<"all" | VehicleType>("all");
+
+  // Test notification demo
+  const [testNotifActive, setTestNotifActive] = useState(false);
+
+  // Vehicle type selector in checkout (auto-set from product category)
+  const [vehicleType, setVehicleType] = useState<VehicleType>("Forklift");
+
+  // Custom notification items in checkout
+  const [showCustomNotifs, setShowCustomNotifs] = useState(false);
+  const [customNotifItems, setCustomNotifItems] = useState<{ label: string; date: string }[]>([]);
+  const [newNotifLabel, setNewNotifLabel] = useState("");
+  const [newNotifDate, setNewNotifDate] = useState("");
 
   // Cascade filter
   const [showFilter, setShowFilter] = useState(false);
@@ -71,6 +120,11 @@ export default function SalesMain() {
   const [showAddFilter, setShowAddFilter] = useState(false);
   const [newFilterName, setNewFilterName] = useState("");
 
+  // Category-specific spec filters (shown below category tabs)
+  const [fSpecModel, setFSpecModel]   = useState("");
+  const [fForkLength, setFForkLength] = useState("");
+  const [fForkWidth, setFForkWidth]   = useState("");
+
   // Checkout custom fields
   const [saleCustomVals, setSaleCustomVals]   = useState<Record<string, string>>({});
   const [lightboxIdx, setLightboxIdx]         = useState<number | null>(null);
@@ -80,13 +134,11 @@ export default function SalesMain() {
   const [editingSaleField, setEditingSaleField] = useState<SaleDropdown | null>(null);
   const [sNewOpt, setSNewOpt]                   = useState("");
   const [sEditOpt, setSEditOpt]                 = useState<{ idx: number; val: string } | null>(null);
-  // saleExtraFieldDefs management
   const [expandedSefId, setExpandedSefId] = useState<string | null>(null);
   const [editingSefId, setEditingSefId]   = useState<string | null>(null);
   const [editingSefVal, setEditingSefVal] = useState("");
   const [sefNewOpt, setSefNewOpt]         = useState("");
   const [sefEditOpt, setSefEditOpt]       = useState<{ idx: number; val: string } | null>(null);
-  // Multi-step wizard for adding saleExtraFieldDef
   const [sefStep, setSefStep]         = useState<SaleInlineStep>(null);
   const [sefName, setSefName]         = useState("");
   const [sefType, setSefType]         = useState<"text" | "select">("text");
@@ -105,7 +157,7 @@ export default function SalesMain() {
   const fuels      = [...new Set(available.map(f => f.fuel))].sort();
   const capacities = [...new Set(available.filter(f => (!fBrand || f.brand === fBrand) && (!fModel || f.model === fModel)).map(f => f.capacity).filter(Boolean))].sort();
   const heights    = [...new Set(available.filter(f => (!fBrand || f.brand === fBrand) && (!fModel || f.model === fModel)).map(f => f.height).filter(Boolean))].sort();
-  const hasFilter  = !!(fBrand || fModel || fFuel || fCapacity || fHeight || search || Object.values(extraFilterVals).some(Boolean));
+  const hasFilter  = !!(fBrand || fModel || fFuel || fCapacity || fHeight || search || fSpecModel || fForkLength || fForkWidth || Object.values(extraFilterVals).some(Boolean));
 
   const filtered = available.filter(f => {
     const q = search.toLowerCase();
@@ -117,11 +169,54 @@ export default function SalesMain() {
       if (!val.trim()) return true;
       return Object.values(f).join(" ").toLowerCase().includes(val.toLowerCase());
     });
-    return base && extra;
+    const cat = activeCategory === "all" || (f.vehicle_category ?? "Forklift") === activeCategory;
+    const spec =
+      (!fSpecModel   || f.model === fSpecModel) &&
+      (!fForkLength  || (f.fork_length ?? "").toLowerCase().includes(fForkLength.toLowerCase())) &&
+      (!fForkWidth   || Object.values(f).join(" ").toLowerCase().includes(fForkWidth.toLowerCase()));
+    return base && extra && cat && spec;
   });
 
-  const clearFilters = () => { setFBrand(""); setFModel(""); setFFuel(""); setFCapacity(""); setFHeight(""); setSearch(""); setExtraFilterVals({}); };
+  const clearFilters = () => {
+    setFBrand(""); setFModel(""); setFFuel(""); setFCapacity(""); setFHeight("");
+    setSearch(""); setExtraFilterVals({});
+    setFSpecModel(""); setFForkLength(""); setFForkWidth("");
+  };
   const mySales = salesUser ? sales.filter(s => s.sales_staff === salesUser.name) : [];
+
+  // Notifications — sales with warranty/parts approaching
+  const notifications = useMemo(() => {
+    const result: { sale: Sale; type: "warranty" | "parts" | "custom"; days: number; label?: string }[] = [];
+    mySales.forEach(s => {
+      if (s.warranty_expiry) {
+        const d = daysUntil(s.warranty_expiry);
+        if (d >= 0 && d <= 7) result.push({ sale: s, type: "warranty", days: d });
+      }
+      if (s.parts_schedule) {
+        const d = daysUntil(s.parts_schedule);
+        if (d >= 0 && d <= 7) result.push({ sale: s, type: "parts", days: d });
+      }
+      (s.custom_notifications ?? []).forEach(n => {
+        const d = daysUntil(n.date);
+        if (d >= 0 && d <= 7) result.push({ sale: s, type: "custom", days: d, label: n.label });
+      });
+    });
+    if (testNotifActive) {
+      result.unshift({
+        sale: { id: "__test__", forklift_unit_no: "TEST-001", customer_name: "ลูกค้าทดสอบ" } as Sale,
+        type: "warranty", days: 3, label: "การแจ้งเตือนทดสอบ",
+      });
+    }
+    return result;
+  }, [mySales, testNotifActive]);
+
+  const detailInspPhotos = useMemo(() => {
+    if (!detailSale) return { receiver: [] as string[], deliverer: [] as string[], all: [] as string[] };
+    const recs = inspections.filter(r => r.unit_no === detailSale.forklift_unit_no);
+    const receiver  = recs.filter(r => r.role === "ผู้รับรถ" || !r.role).flatMap(r => r.images);
+    const deliverer = recs.filter(r => r.role === "ผู้ส่งมอบรถ").flatMap(r => r.images);
+    return { receiver, deliverer, all: [...receiver, ...deliverer] };
+  }, [detailSale, inspections]);
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -136,15 +231,12 @@ export default function SalesMain() {
     return e;
   };
 
-  const handleSell = (e: React.FormEvent) => {
-    e.preventDefault();
-    const errs = validate();
-    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+  const buildSale = (status: SaleStatus): Sale => {
     const customFields: Record<string, string> = {};
     fieldConfig.saleExtraFieldDefs.forEach(def => {
       if (saleCustomVals[def.id]?.trim()) customFields[def.name] = saleCustomVals[def.id].trim();
     });
-    const newSale: Sale = {
+    return {
       id: `sale_${Date.now()}`,
       forklift_id: selected!.id, forklift_unit_no: selected!.unit_no,
       forklift_brand: selected!.brand, forklift_model: selected!.model,
@@ -157,9 +249,44 @@ export default function SalesMain() {
       delivery_date: form.delivery_date, remark: form.remark || undefined,
       custom_fields: Object.keys(customFields).length > 0 ? customFields : undefined,
       created_at: new Date().toISOString().slice(0, 10),
+      sale_status: status,
+      vehicle_type: vehicleType,
+      warranty_expiry: form.warranty_expiry || undefined,
+      parts_schedule: form.parts_schedule || undefined,
+      custom_notifications: customNotifItems.length > 0 ? customNotifItems : undefined,
+      contact_source: (form.contact_source as ContactSource) || undefined,
+      sale_type: (form.sale_type as SaleType) || undefined,
     };
-    addSale(newSale); setSubmitted(true);
-    setTimeout(() => { setSelected(null); setForm(emptyCheckout); setErrors({}); setSaleCustomVals({}); setSubmitted(false); }, 3000);
+  };
+
+  const resetCheckout = () => {
+    setSelected(null); setForm(emptyCheckout); setErrors({}); setSaleCustomVals({});
+    setSubmitted(false); setCustomNotifItems([]); setShowCustomNotifs(false);
+    setNewNotifLabel(""); setNewNotifDate("");
+  };
+
+  const handleSell = (e: React.FormEvent) => {
+    e.preventDefault();
+    const errs = validate();
+    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    addSale(buildSale("ขายแล้ว")); setSubmitted(true);
+    setTimeout(resetCheckout, 3000);
+  };
+
+  const handleBook = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const errs = validate();
+    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    addSale(buildSale("จอง")); setSubmitted(true);
+    setTimeout(resetCheckout, 3000);
+  };
+
+  const handleFinance = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const errs = validate();
+    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    addSale(buildSale("รอผ่านไฟแนนซ์")); setSubmitted(true);
+    setTimeout(resetCheckout, 3000);
   };
 
   const handleUpdateTarget = () => {
@@ -174,11 +301,14 @@ export default function SalesMain() {
   const handleDeleteSale = (saleId: string) => {
     const sale = sales.find(s => s.id === saleId);
     deleteSale(saleId); setDeleteConfirm(null);
-    if (sale) { setUndoToast(`ลบรายการขาย ${sale.forklift_unit_no} แล้ว — รถกลับสู่สต็อก`); setTimeout(() => setUndoToast(null), 4000); }
+    if (sale) { setUndoToast(`ลบรายการ ${sale.forklift_unit_no} แล้ว — รถกลับสู่สต็อก`); setTimeout(() => setUndoToast(null), 4000); }
   };
 
   const fmt = (n: number) => n.toLocaleString("th-TH");
-  const selectedPhotos = selected ? inspections.filter(r => r.unit_no === selected.unit_no).flatMap(r => r.images) : [];
+  const selectedInspRecs = selected ? inspections.filter(r => r.unit_no === selected.unit_no) : [];
+  const receiverPhotos   = selectedInspRecs.filter(r => r.role === "ผู้รับรถ" || !r.role).flatMap(r => r.images);
+  const delivererPhotos  = selectedInspRecs.filter(r => r.role === "ผู้ส่งมอบรถ").flatMap(r => r.images);
+  const selectedPhotos   = [...receiverPhotos, ...delivererPhotos]; // combined for lightbox
 
   // Settings — standard dropdown handlers
   const saveStdOption = () => {
@@ -198,7 +328,6 @@ export default function SalesMain() {
     setSEditOpt(null);
   };
 
-  // Wizard helpers
   const resetSefWizard = () => { setSefStep(null); setSefName(""); setSefType("text"); setSefOptions([]); setSefOptInput(""); };
   const addSefOption = () => { if (!sefOptInput.trim()) return; setSefOptions(p => [...p, sefOptInput.trim()]); setSefOptInput(""); };
   const commitSef = () => {
@@ -207,11 +336,14 @@ export default function SalesMain() {
     resetSefWizard();
   };
 
-  // Filter request helpers
   const confirmAddFilter = () => {
     if (!newFilterName.trim()) return;
     addSalesFilterRequest(newFilterName.trim()); setNewFilterName(""); setShowAddFilter(false);
   };
+
+  const filteredHistory = historyTab === "all"
+    ? mySales
+    : mySales.filter(s => (s.sale_status ?? "ขายแล้ว") === historyTab);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -234,6 +366,19 @@ export default function SalesMain() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {notifications.length > 0 && (
+              <button onClick={() => setShowNotif(!showNotif)}
+                className="relative flex items-center gap-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-amber-200">
+                <Bell className="w-4 h-4" />
+                <span className="bg-red-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">{notifications.length}</span>
+              </button>
+            )}
+            <button
+              onClick={() => { setTestNotifActive(p => !p); setShowNotif(true); }}
+              title="ทดสอบการแจ้งเตือน"
+              className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border transition-all ${testNotifActive ? "bg-amber-100 text-amber-700 border-amber-300" : "text-slate-500 border-dashed border-slate-300 hover:border-amber-300 hover:text-amber-600"}`}>
+              <Bell className="w-3.5 h-3.5" />ทดสอบ
+            </button>
             <button onClick={() => setShowSettings(true)}
               className="flex items-center gap-1.5 text-slate-600 hover:text-indigo-700 hover:bg-indigo-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-transparent hover:border-indigo-200">
               <Settings className="w-4 h-4" /><span className="hidden sm:inline">จัดการตัวเลือก</span>
@@ -251,6 +396,37 @@ export default function SalesMain() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-5">
+        {/* Notification Banner */}
+        {notifications.length > 0 && showNotif && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4 text-amber-600" />
+                <span className="text-sm font-bold text-amber-800">การแจ้งเตือน ({notifications.length} รายการ)</span>
+              </div>
+              <button onClick={() => setShowNotif(false)} className="text-amber-500 hover:text-amber-700"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="flex flex-col gap-2">
+              {notifications.map((n, i) => (
+                <div key={i} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm ${n.days <= 1 ? "bg-red-100 border border-red-200" : "bg-amber-100 border border-amber-200"}`}>
+                  <span className={`font-bold text-xs px-2 py-0.5 rounded-full ${n.days <= 1 ? "bg-red-500 text-white" : "bg-amber-500 text-white"}`}>
+                    {n.days === 0 ? "วันนี้!" : `อีก ${n.days} วัน`}
+                  </span>
+                  <span className={`font-semibold ${n.days <= 1 ? "text-red-800" : "text-amber-800"}`}>
+                    {n.sale.forklift_unit_no} — {n.sale.customer_name}
+                  </span>
+                  <span className={`text-xs ${n.days <= 1 ? "text-red-600" : "text-amber-600"}`}>
+                    {n.type === "warranty" ? "ประกันรถหมดอายุ" : n.type === "parts" ? "ถึงรอบเปลี่ยนอะไหล่" : (n.label ?? "การแจ้งเตือนพิเศษ")}
+                  </span>
+                  {n.sale.id === "__test__" && (
+                    <span className="text-xs bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded font-semibold ml-1">TEST</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Stats Banner */}
         <div className="bg-gradient-to-r from-indigo-600 via-indigo-700 to-blue-800 rounded-2xl p-5 text-white relative overflow-hidden shadow-lg shadow-indigo-200">
           <div className="absolute right-0 top-0 w-48 h-full bg-white/5 rounded-l-full" />
@@ -380,7 +556,93 @@ export default function SalesMain() {
           </div>
         )}
 
-        {/* Forklift Grid */}
+        {/* Vehicle Category Tabs */}
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {([
+            { key: "all",      label: "ทั้งหมด", icon: "📋" },
+            { key: "Forklift", label: "Forklift", icon: "🚜" },
+            { key: "Stacker",  label: "Stacker",  icon: "📦" },
+            { key: "Handlift", label: "Handlift", icon: "🔧" },
+          ] as { key: "all" | VehicleType; label: string; icon: string }[]).map(({ key, label, icon }) => {
+            const count = key === "all"
+              ? available.length
+              : available.filter(f => (f.vehicle_category ?? "Forklift") === key).length;
+            return (
+              <button key={key} onClick={() => { setActiveCategory(key); setFSpecModel(""); setFForkLength(""); setFForkWidth(""); setFFuel(""); setFCapacity(""); setFHeight(""); }}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold border transition-all flex-shrink-0 shadow-sm ${activeCategory === key ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-700"}`}>
+                <span>{icon}</span>
+                <span>{label}</span>
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${activeCategory === key ? "bg-white/30 text-white" : "bg-slate-100 text-slate-500"}`}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Category-specific spec filters */}
+        {activeCategory !== "all" && (
+          <div className="bg-white border border-indigo-100 rounded-2xl p-4 flex flex-col gap-3 shadow-sm">
+            <p className="text-xs font-semibold text-indigo-700 flex items-center gap-1.5">
+              <Filter className="w-3.5 h-3.5" />
+              ตัวกรองสเปค {activeCategory === "Forklift" ? "🚜 Forklift" : activeCategory === "Stacker" ? "📦 Stacker" : "🔧 Handlift"}
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              {/* Model select — all categories */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">รุ่นรถ</label>
+                <select value={fSpecModel} onChange={e => setFSpecModel(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                  <option value="">ทั้งหมด</option>
+                  {[...new Set(available.filter(f => (f.vehicle_category ?? "Forklift") === activeCategory).map(f => f.model))].sort().map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              {/* Fuel — Forklift only */}
+              {activeCategory === "Forklift" && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">ประเภทเชื้อเพลิง</label>
+                  <select value={fFuel} onChange={e => setFFuel(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                    <option value="">ทั้งหมด</option>
+                    {[...new Set(available.filter(f => (f.vehicle_category ?? "Forklift") === "Forklift").map(f => f.fuel))].sort().map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+              )}
+              {/* Capacity — all */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">น้ำหนักยก (ตัน)</label>
+                <select value={fCapacity} onChange={e => setFCapacity(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                  <option value="">ทั้งหมด</option>
+                  {[...new Set(available.filter(f => (f.vehicle_category ?? "Forklift") === activeCategory).map(f => f.capacity).filter(Boolean))].sort().map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              {/* Height — all */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">ความสูงยก (ม.)</label>
+                <select value={fHeight} onChange={e => setFHeight(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                  <option value="">ทั้งหมด</option>
+                  {[...new Set(available.filter(f => (f.vehicle_category ?? "Forklift") === activeCategory).map(f => f.height).filter(Boolean))].sort().map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              {/* Fork length — all */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">ความยาวงา (ม.)</label>
+                <input value={fForkLength} onChange={e => setFForkLength(e.target.value)} placeholder="เช่น 1.15..."
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-400" />
+              </div>
+              {/* Width — Stacker & Handlift */}
+              {(activeCategory === "Stacker" || activeCategory === "Handlift") && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">ความกว้างงา (มม.)</label>
+                  <input value={fForkWidth} onChange={e => setFForkWidth(e.target.value)} placeholder="เช่น 550..."
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-400" />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Product Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.length === 0 && (
             <div className="col-span-full text-center py-16 text-slate-400 bg-white rounded-2xl border border-slate-100">
@@ -393,7 +655,7 @@ export default function SalesMain() {
             const photos = inspections.filter(r => r.unit_no === item.unit_no).flatMap(r => r.images);
             return (
               <div key={item.id}
-                onClick={() => { setSelected(item); setForm(emptyCheckout); setErrors({}); setSubmitted(false); setLightboxIdx(null); setSaleCustomVals({}); }}
+                onClick={() => { setSelected(item); setForm(emptyCheckout); setErrors({}); setSubmitted(false); setLightboxIdx(null); setSaleCustomVals({}); setVehicleType(item.vehicle_category ?? "Forklift"); setCustomNotifItems([]); setShowCustomNotifs(false); setNewNotifLabel(""); setNewNotifDate(""); }}
                 className="bg-white rounded-2xl shadow-sm hover:shadow-lg border border-slate-100 hover:border-indigo-200 transition-all cursor-pointer group overflow-hidden">
                 <div className="h-1 bg-gradient-to-r from-indigo-400 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 <div className="p-4 flex flex-col gap-3">
@@ -414,8 +676,7 @@ export default function SalesMain() {
                       {item.fuel === "ไฟฟ้า" ? <Zap className="w-3 h-3 text-blue-500" /> : <Fuel className="w-3 h-3 text-orange-500" />}{item.fuel}
                     </div>
                   </div>
-                  <div className="border-t border-slate-100 pt-3 grid grid-cols-2 gap-2">
-                    <div className="bg-red-50 border border-red-100 rounded-xl p-2.5"><p className="text-xs text-red-500 font-medium">ราคาทุน</p><p className="font-bold text-red-700 text-sm">฿{fmt(item.cost_price)}</p></div>
+                  <div className="border-t border-slate-100 pt-3">
                     <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-2.5"><p className="text-xs text-indigo-500 font-medium">ราคาสต็อก</p><p className="font-bold text-indigo-700 text-sm">฿{fmt(item.stock_price)}</p></div>
                   </div>
                   <button className="w-full bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600 text-white text-sm font-bold py-2.5 rounded-xl transition-all active:scale-[0.97] flex items-center justify-center gap-1.5 shadow-sm">
@@ -431,47 +692,90 @@ export default function SalesMain() {
       {/* ── Checkout Modal ── */}
       {selected && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
-          onClick={e => e.target === e.currentTarget && setSelected(null)}>
+          onClick={e => e.target === e.currentTarget && resetCheckout()}>
           <div className="bg-white rounded-3xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
             <div className="bg-gradient-to-r from-indigo-600 to-blue-700 px-6 py-4 flex items-center justify-between flex-shrink-0">
               <div>
                 <h3 className="text-lg font-bold text-white">ปิดการขาย</h3>
                 <p className="text-indigo-200 text-sm">{selected.unit_no} — {selected.brand} {selected.model}</p>
               </div>
-              <button onClick={() => setSelected(null)} className="text-white/70 hover:text-white hover:bg-white/20 rounded-xl p-2 transition-all"><X className="w-5 h-5" /></button>
+              <button onClick={resetCheckout} className="text-white/70 hover:text-white hover:bg-white/20 rounded-xl p-2 transition-all"><X className="w-5 h-5" /></button>
             </div>
             <div className="overflow-y-auto flex-1 min-h-0 p-5">
               {submitted ? (
                 <div className="flex flex-col items-center justify-center h-52 gap-4">
                   <div className="bg-emerald-100 rounded-full p-4"><CheckCircle className="w-12 h-12 text-emerald-600" /></div>
-                  <div className="text-center"><p className="text-xl font-bold text-slate-800">ปิดการขายสำเร็จ!</p><p className="text-slate-500 text-sm mt-1">บันทึกการขายในระบบแล้ว</p></div>
+                  <div className="text-center"><p className="text-xl font-bold text-slate-800">บันทึกสำเร็จ!</p><p className="text-slate-500 text-sm mt-1">บันทึกข้อมูลในระบบแล้ว</p></div>
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-red-50 border border-red-100 rounded-xl p-3"><p className="text-xs text-red-500 font-medium">ราคาทุน</p><p className="font-bold text-red-700">฿{fmt(selected.cost_price)}</p></div>
-                    <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3"><p className="text-xs text-indigo-500 font-medium">ราคาสต็อก</p><p className="font-bold text-indigo-700">฿{fmt(selected.stock_price)}</p></div>
+                  {/* Stock price only */}
+                  <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3">
+                    <p className="text-xs text-indigo-500 font-medium">ราคาสต็อก</p>
+                    <p className="font-bold text-indigo-700">฿{fmt(selected.stock_price)}</p>
                   </div>
+
+                  {/* Photos split by role */}
                   {selectedPhotos.length > 0 ? (
-                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                      <p className="text-xs font-semibold text-slate-600 mb-3 flex items-center gap-1.5"><Camera className="w-3.5 h-3.5 text-indigo-500" />รูปตรวจรับรถ ({selectedPhotos.length} รูป)</p>
-                      <div className="grid grid-cols-3 gap-2">
-                        {selectedPhotos.map((img, i) => (
-                          <button key={i} onClick={e => { e.stopPropagation(); setLightboxIdx(i); }}
-                            className="relative aspect-square rounded-xl overflow-hidden bg-slate-200 group hover:ring-2 hover:ring-indigo-400 transition-all">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={img} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center"><ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100" /></div>
-                          </button>
-                        ))}
-                      </div>
+                    <div className="flex flex-col gap-3">
+                      {receiverPhotos.length > 0 && (
+                        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+                          <p className="text-xs font-semibold text-amber-700 mb-2.5 flex items-center gap-1.5">
+                            🚛 รูปจากผู้รับรถ ({receiverPhotos.length} รูป)
+                          </p>
+                          <div className="grid grid-cols-3 gap-2">
+                            {receiverPhotos.map((img, i) => (
+                              <button key={i} onClick={e => { e.stopPropagation(); setLightboxIdx(i); }}
+                                className="relative aspect-square rounded-xl overflow-hidden bg-amber-100 group hover:ring-2 hover:ring-amber-400 transition-all">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={img} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center"><ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100" /></div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {delivererPhotos.length > 0 && (
+                        <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
+                          <p className="text-xs font-semibold text-indigo-700 mb-2.5 flex items-center gap-1.5">
+                            📦 รูปจากผู้ส่งมอบรถ ({delivererPhotos.length} รูป)
+                          </p>
+                          <div className="grid grid-cols-3 gap-2">
+                            {delivererPhotos.map((img, i) => (
+                              <button key={i} onClick={e => { e.stopPropagation(); setLightboxIdx(receiverPhotos.length + i); }}
+                                className="relative aspect-square rounded-xl overflow-hidden bg-indigo-100 group hover:ring-2 hover:ring-indigo-400 transition-all">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={img} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center"><ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100" /></div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl px-4 py-3 flex items-center gap-2 text-slate-400">
                       <ImageOff className="w-4 h-4 flex-shrink-0" /><p className="text-xs">ยังไม่มีรูปตรวจรับสำหรับรถคันนี้</p>
                     </div>
                   )}
+
                   <form onSubmit={handleSell} className="flex flex-col gap-4">
+                    {/* ── ช่องทางติดต่อ + ประเภทขาย ── */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <SField label="ช่องทางที่ลูกค้าติดต่อ" error="">
+                        <select value={form.contact_source} onChange={e => setForm({ ...form, contact_source: e.target.value as ContactSource })} className={ss("")}>
+                          <option value="">-- เลือก --</option>
+                          {CONTACT_SOURCES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </SField>
+                      <SField label="ประเภทการขาย" error="">
+                        <select value={form.sale_type} onChange={e => setForm({ ...form, sale_type: e.target.value as SaleType })} className={ss("")}>
+                          <option value="">-- เลือก --</option>
+                          {SALE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </SField>
+                    </div>
+
                     <SField label="ชื่อลูกค้า *" error={errors.customer_name}><input value={form.customer_name} onChange={e => setForm({ ...form, customer_name: e.target.value })} placeholder="ชื่อ-นามสกุล / ชื่อบริษัท" className={si(errors.customer_name)} /></SField>
                     <SField label="เบอร์โทร *" error={errors.customer_tel}><input value={form.customer_tel} onChange={e => setForm({ ...form, customer_tel: e.target.value })} placeholder="0XX-XXX-XXXX" className={si(errors.customer_tel)} /></SField>
                     <div className="grid grid-cols-2 gap-3">
@@ -507,10 +811,88 @@ export default function SalesMain() {
                       <SField label="มัดจำ (฿)" error=""><input type="number" value={form.deposit} onChange={e => setForm({ ...form, deposit: e.target.value })} placeholder="บาท" className={si("")} /></SField>
                     </div>
                     <SField label="วันส่งมอบ *" error={errors.delivery_date}><input type="date" value={form.delivery_date} onChange={e => setForm({ ...form, delivery_date: e.target.value })} className={si(errors.delivery_date)} /></SField>
+
+                    {/* ── การแจ้งเตือน (Part 4) ── */}
+                    <div className="border border-amber-100 rounded-xl p-3.5 bg-amber-50/40">
+                      <div className="flex items-center justify-between mb-2.5">
+                        <p className="text-xs font-semibold text-amber-700 flex items-center gap-1.5"><Bell className="w-3.5 h-3.5" />ตั้งการแจ้งเตือน (ไม่บังคับ)</p>
+                        <button type="button" onClick={() => setShowCustomNotifs(p => !p)}
+                          className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-all ${showCustomNotifs ? "bg-amber-500 text-white border-amber-500" : "text-amber-600 border-amber-200 hover:bg-amber-100"}`}>
+                          <Pencil className="w-3 h-3" />เพิ่มเอง{customNotifItems.length > 0 && ` (${customNotifItems.length})`}
+                        </button>
+                      </div>
+
+                      {/* Fixed date fields with clear buttons */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1.5">วันหมดประกันรถ</label>
+                          <div className="flex items-center gap-1">
+                            <input type="date" value={form.warranty_expiry} onChange={e => setForm({ ...form, warranty_expiry: e.target.value })} className={`flex-1 ${si("")}`} />
+                            {form.warranty_expiry && (
+                              <button type="button" onClick={() => setForm({ ...form, warranty_expiry: "" })}
+                                className="text-slate-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-all flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1.5">รอบเปลี่ยนอะไหล่</label>
+                          <div className="flex items-center gap-1">
+                            <input type="date" value={form.parts_schedule} onChange={e => setForm({ ...form, parts_schedule: e.target.value })} className={`flex-1 ${si("")}`} />
+                            {form.parts_schedule && (
+                              <button type="button" onClick={() => setForm({ ...form, parts_schedule: "" })}
+                                className="text-slate-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-all flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Custom items — always visible once added */}
+                      {customNotifItems.length > 0 && (
+                        <div className="mt-3 border-t border-amber-100 pt-3 flex flex-col gap-1.5">
+                          {customNotifItems.map((item, i) => (
+                            <div key={i} className="flex items-center gap-2 bg-white border border-amber-100 rounded-lg px-2.5 py-1.5 text-xs">
+                              <Bell className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                              <span className="flex-1 font-medium text-slate-700">{item.label}</span>
+                              <span className="text-slate-400 text-xs">{item.date}</span>
+                              <button type="button" onClick={() => setCustomNotifItems(p => p.filter((_, j) => j !== i))}
+                                className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition-all flex-shrink-0">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Add-form — toggled by pencil button */}
+                      {showCustomNotifs && (
+                        <div className="mt-3 border-t border-amber-100 pt-3">
+                          <p className="text-xs font-semibold text-amber-700 mb-2">เพิ่มการแจ้งเตือนแบบกำหนดเอง</p>
+                          <div className="flex gap-2">
+                            <input value={newNotifLabel} onChange={e => setNewNotifLabel(e.target.value)}
+                              placeholder="ชื่อการแจ้งเตือน เช่น ต่อภาษี..."
+                              className="flex-1 border border-dashed border-amber-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder:text-slate-400 bg-white text-slate-800" />
+                            <input type="date" value={newNotifDate} onChange={e => setNewNotifDate(e.target.value)}
+                              className="border border-dashed border-amber-300 rounded-lg px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white text-slate-800" />
+                            <button type="button"
+                              onClick={() => {
+                                if (!newNotifLabel.trim() || !newNotifDate) return;
+                                setCustomNotifItems(p => [...p, { label: newNotifLabel.trim(), date: newNotifDate }]);
+                                setNewNotifLabel(""); setNewNotifDate("");
+                              }}
+                              disabled={!newNotifLabel.trim() || !newNotifDate}
+                              className="bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white px-2.5 py-2 rounded-lg text-xs font-semibold transition-colors flex-shrink-0">
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     <SField label="หมายเหตุ" error="">
                       <textarea value={form.remark} onChange={e => setForm({ ...form, remark: e.target.value })} rows={2} placeholder="หมายเหตุเพิ่มเติม..."
                         className="w-full border border-slate-200 hover:border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-800 placeholder:text-slate-400 resize-none transition-all" />
                     </SField>
+
                     {/* Extra sale fields */}
                     {fieldConfig.saleExtraFieldDefs.length > 0 && (
                       <div className="border border-violet-100 rounded-2xl p-4 bg-violet-50/30">
@@ -531,15 +913,23 @@ export default function SalesMain() {
                         </div>
                       </div>
                     )}
-                    {form.actual_sale && !isNaN(Number(form.actual_sale)) && Number(form.actual_sale) > 0 && (
-                      <div className={`rounded-xl p-3.5 text-sm font-semibold flex items-center gap-2 ${Number(form.actual_sale) >= selected.cost_price ? "bg-emerald-50 border border-emerald-200 text-emerald-700" : "bg-red-50 border border-red-200 text-red-600"}`}>
-                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${Number(form.actual_sale) >= selected.cost_price ? "bg-emerald-500" : "bg-red-500"}`} />
-                        กำไร: ฿{fmt(Number(form.actual_sale) - selected.cost_price)}{Number(form.actual_sale) < selected.cost_price && " — ราคาต่ำกว่าทุน!"}
+
+                    {/* ── Action buttons (Part 3) ── */}
+                    <div className="flex flex-col gap-2 pt-2">
+                      <button type="submit" className="w-full bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600 text-white font-bold py-3.5 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2">
+                        <CheckCircle className="w-4 h-4" />ยืนยันการขาย (ขายแล้ว)
+                      </button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={handleBook}
+                          className="w-full bg-amber-400 hover:bg-amber-500 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 text-sm">
+                          📌 จอง
+                        </button>
+                        <button type="button" onClick={handleFinance}
+                          className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 text-sm">
+                          🏦 รอผ่านไฟแนนซ์
+                        </button>
                       </div>
-                    )}
-                    <button type="submit" className="w-full bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600 text-white font-bold py-3.5 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2">
-                      <CheckCircle className="w-4 h-4" />ยืนยันการขาย
-                    </button>
+                    </div>
                   </form>
                 </div>
               )}
@@ -562,7 +952,138 @@ export default function SalesMain() {
         </div>
       )}
 
-      {/* ── Sales History Modal ── */}
+      {/* ── Sale Detail Modal (Part 2) ── */}
+      {detailSale && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[55] flex items-end sm:items-center justify-center p-4"
+          onClick={e => { if (e.target === e.currentTarget) { setDetailSale(null); setDetailLightboxIdx(null); } }}>
+          <div className="bg-white rounded-3xl w-full max-w-lg max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-indigo-50">
+              <div>
+                <h3 className="text-base font-bold text-slate-800">รายละเอียดการขาย</h3>
+                <p className="text-xs text-slate-500">{detailSale.forklift_unit_no} — {detailSale.forklift_brand} {detailSale.forklift_model}</p>
+              </div>
+              <button onClick={() => { setDetailSale(null); setDetailLightboxIdx(null); }} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="overflow-y-auto flex-1 min-h-0 p-5 flex flex-col gap-3">
+              {/* Status badge */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-xs font-bold px-3 py-1 rounded-full border ${SALE_STATUS_BADGE[detailSale.sale_status ?? "ขายแล้ว"]}`}>
+                  {detailSale.sale_status ?? "ขายแล้ว"}
+                </span>
+                {detailSale.vehicle_type && (
+                  <span className="text-xs bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-full font-semibold">{detailSale.vehicle_type}</span>
+                )}
+                {detailSale.contact_source && (
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${CONTACT_SOURCE_COLORS[detailSale.contact_source] ?? "bg-slate-100 text-slate-600"}`}>{detailSale.contact_source}</span>
+                )}
+                {detailSale.sale_type && (
+                  <span className="text-xs bg-violet-100 text-violet-700 px-2.5 py-1 rounded-full font-semibold">{detailSale.sale_type}</span>
+                )}
+              </div>
+
+              <DetailRow label="รถ" value={`${detailSale.forklift_brand} ${detailSale.forklift_model} (${detailSale.forklift_unit_no})`} />
+              <DetailRow label="พนักงานขาย" value={detailSale.sales_staff} />
+              <DetailRow label="ชื่อลูกค้า" value={detailSale.customer_name} />
+              <DetailRow label="เบอร์โทร" value={detailSale.customer_tel} />
+              <DetailRow label="ประเภทลูกค้า" value={detailSale.customer_type} />
+              <DetailRow label="จังหวัด" value={detailSale.province} />
+              <DetailRow label="การชำระ" value={detailSale.payment_type + (detailSale.finance_company ? ` — ${detailSale.finance_company}` : "")} />
+              <DetailRow label="ราคาขาย" value={`฿${detailSale.actual_sale.toLocaleString("th-TH")}`} highlight />
+              <DetailRow label="มัดจำ" value={`฿${detailSale.deposit.toLocaleString("th-TH")}`} />
+              <DetailRow label="วันส่งมอบ" value={detailSale.delivery_date} />
+              <DetailRow label="วันที่บันทึก" value={detailSale.created_at} />
+              {detailSale.warranty_expiry && (
+                <DetailRow label="วันหมดประกัน"
+                  value={`${detailSale.warranty_expiry}${(() => { const d = daysUntil(detailSale.warranty_expiry!); return d < 0 ? ` (เกินกำหนด ${Math.abs(d)} วัน)` : d === 0 ? " (วันนี้!)" : ` (เหลืออีก ${d} วัน)`; })()}`} />
+              )}
+              {detailSale.parts_schedule && (
+                <DetailRow label="รอบเปลี่ยนอะไหล่"
+                  value={`${detailSale.parts_schedule}${(() => { const d = daysUntil(detailSale.parts_schedule!); return d < 0 ? ` (เกินกำหนด ${Math.abs(d)} วัน)` : d === 0 ? " (วันนี้!)" : ` (เหลืออีก ${d} วัน)`; })()}`} />
+              )}
+              {(detailSale.custom_notifications ?? []).length > 0 && (
+                <div className="border-t border-amber-100 pt-3 mt-1">
+                  <p className="text-xs font-semibold text-amber-700 mb-2 flex items-center gap-1.5"><Bell className="w-3 h-3" />การแจ้งเตือนแบบกำหนดเอง</p>
+                  {(detailSale.custom_notifications ?? []).map((n, i) => {
+                    const d = daysUntil(n.date);
+                    const suffix = d < 0 ? ` (เกินกำหนด ${Math.abs(d)} วัน)` : d === 0 ? " (วันนี้!)" : ` (เหลืออีก ${d} วัน)`;
+                    return <DetailRow key={i} label={n.label} value={`${n.date}${suffix}`} />;
+                  })}
+                </div>
+              )}
+              {detailSale.remark && <DetailRow label="หมายเหตุ" value={detailSale.remark} />}
+              {detailSale.custom_fields && Object.keys(detailSale.custom_fields).length > 0 && (
+                <div className="border-t border-slate-100 pt-3 mt-1">
+                  <p className="text-xs font-semibold text-violet-700 mb-2">รายการเพิ่มเติม</p>
+                  {Object.entries(detailSale.custom_fields).map(([k, v]) => (
+                    <DetailRow key={k} label={k} value={v} />
+                  ))}
+                </div>
+              )}
+              {detailInspPhotos.all.length > 0 && (
+                <div className="border-t border-slate-100 pt-3 mt-1">
+                  <p className="text-xs font-semibold text-slate-700 mb-3 flex items-center gap-1.5">
+                    <Camera className="w-3.5 h-3.5" />รูปภาพประกอบ
+                  </p>
+                  {detailInspPhotos.receiver.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-xs font-semibold text-amber-700 mb-2">🚛 รูปผู้รับรถ ({detailInspPhotos.receiver.length} รูป)</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {detailInspPhotos.receiver.map((img, i) => (
+                          <button key={i} onClick={() => setDetailLightboxIdx(i)}
+                            className="relative aspect-square rounded-xl overflow-hidden bg-amber-50 group hover:ring-2 hover:ring-amber-400 transition-all">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={img} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center">
+                              <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100" />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {detailInspPhotos.deliverer.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-indigo-700 mb-2">📦 รูปผู้ส่งมอบรถ ({detailInspPhotos.deliverer.length} รูป)</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {detailInspPhotos.deliverer.map((img, i) => (
+                          <button key={i} onClick={() => setDetailLightboxIdx(detailInspPhotos.receiver.length + i)}
+                            className="relative aspect-square rounded-xl overflow-hidden bg-indigo-50 group hover:ring-2 hover:ring-indigo-400 transition-all">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={img} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center">
+                              <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100" />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Detail Photo Lightbox ── */}
+      {detailSale && detailLightboxIdx !== null && detailInspPhotos.all.length > 0 && (
+        <div className="fixed inset-0 bg-black/90 z-[70] flex items-center justify-center p-4" onClick={() => setDetailLightboxIdx(null)}>
+          <button onClick={() => setDetailLightboxIdx(null)} className="absolute top-4 right-4 text-white/70 hover:text-white bg-white/10 rounded-full p-2"><X className="w-6 h-6" /></button>
+          {detailLightboxIdx > 0 && (
+            <button onClick={e => { e.stopPropagation(); setDetailLightboxIdx(detailLightboxIdx - 1); }} className="absolute left-4 top-1/2 -translate-y-1/2 text-white bg-white/10 hover:bg-white/20 rounded-full p-3"><ChevronLeft className="w-6 h-6" /></button>
+          )}
+          <div className="max-w-3xl max-h-[80vh]" onClick={e => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={detailInspPhotos.all[detailLightboxIdx]} alt="" className="max-w-full max-h-[80vh] object-contain rounded-xl shadow-2xl" />
+          </div>
+          {detailLightboxIdx < detailInspPhotos.all.length - 1 && (
+            <button onClick={e => { e.stopPropagation(); setDetailLightboxIdx(detailLightboxIdx + 1); }} className="absolute right-4 top-1/2 -translate-y-1/2 text-white bg-white/10 hover:bg-white/20 rounded-full p-3"><ChevronRight className="w-6 h-6" /></button>
+          )}
+          <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm">{detailLightboxIdx + 1} / {detailInspPhotos.all.length}</p>
+        </div>
+      )}
+
+      {/* ── Sales History Modal (Part 2) ── */}
       {showHistory && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setShowHistory(false)}>
@@ -571,40 +1092,90 @@ export default function SalesMain() {
               <div><h3 className="text-base font-bold text-slate-800">ประวัติการขายของฉัน</h3><p className="text-xs text-slate-500 mt-0.5">{mySales.length} รายการ</p></div>
               <button onClick={() => { setShowHistory(false); setDeleteConfirm(null); }} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all"><X className="w-5 h-5" /></button>
             </div>
-            {mySales.length === 0 ? (
+
+            {/* Category Tabs */}
+            <div className="flex gap-1 px-4 pt-3 pb-2 border-b border-slate-100 flex-shrink-0 overflow-x-auto">
+              {HISTORY_TABS.map(tab => {
+                const count = tab.key === "all" ? mySales.length : mySales.filter(s => (s.sale_status ?? "ขายแล้ว") === tab.key).length;
+                return (
+                  <button key={tab.key} onClick={() => setHistoryTab(tab.key)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${historyTab === tab.key ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+                    {tab.label}
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${historyTab === tab.key ? "bg-white/30 text-white" : "bg-white text-slate-500"}`}>{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {filteredHistory.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-slate-400"><History className="w-10 h-10 text-slate-300 mb-2" /><p className="text-sm">ยังไม่มีประวัติการขาย</p></div>
             ) : (
               <div className="overflow-y-auto flex-1 min-h-0 p-4 flex flex-col gap-2">
-                {mySales.map(sale => (
+                {filteredHistory.map(sale => (
                   <div key={sale.id} className="bg-slate-50 border border-slate-100 rounded-xl p-4 group">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-bold text-slate-800 text-sm">{sale.forklift_unit_no}</p>
                           <p className="text-slate-600 text-sm">{sale.forklift_brand} {sale.forklift_model}</p>
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${SALE_STATUS_BADGE[sale.sale_status ?? "ขายแล้ว"]}`}>
+                            {sale.sale_status ?? "ขายแล้ว"}
+                          </span>
                         </div>
                         <p className="text-xs text-slate-500 mt-1 truncate">{sale.customer_name} · {sale.province}</p>
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${sale.payment_type === "เงินสด" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{sale.payment_type}</span>
+                          {sale.contact_source && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${CONTACT_SOURCE_COLORS[sale.contact_source] ?? "bg-slate-100 text-slate-600"}`}>{sale.contact_source}</span>}
                           <span className="text-xs text-slate-500">{sale.created_at}</span>
                         </div>
-                        {sale.custom_fields && Object.keys(sale.custom_fields).length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {Object.entries(sale.custom_fields).map(([k, v]) => (
-                              <span key={k} className="text-xs bg-violet-50 border border-violet-100 text-violet-700 px-2 py-0.5 rounded-full">{k}: {v}</span>
-                            ))}
-                          </div>
-                        )}
+                        {/* ── Notification countdown tags ── */}
+                        {(() => {
+                          const tags: { label: string; days: number }[] = [];
+                          if (sale.warranty_expiry) tags.push({ label: "ประกันรถ", days: daysUntil(sale.warranty_expiry) });
+                          if (sale.parts_schedule)  tags.push({ label: "เปลี่ยนอะไหล่", days: daysUntil(sale.parts_schedule) });
+                          (sale.custom_notifications ?? []).forEach(n => tags.push({ label: n.label, days: daysUntil(n.date) }));
+                          if (tags.length === 0) return null;
+                          return (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              {tags.map((tag, ti) => {
+                                const expired  = tag.days < 0;
+                                const urgent   = tag.days >= 0 && tag.days <= 7;
+                                const upcoming = tag.days > 7 && tag.days <= 30;
+                                const future   = tag.days > 30;
+                                const cls = expired  ? "bg-red-100 text-red-700 border-red-200"
+                                          : urgent   ? "bg-amber-100 text-amber-700 border-amber-200"
+                                          : upcoming ? "bg-blue-100 text-blue-700 border-blue-200"
+                                          : "bg-slate-100 text-slate-600 border-slate-200";
+                                const label = expired
+                                  ? `${tag.label} — เกินกำหนด ${Math.abs(tag.days)} วัน`
+                                  : tag.days === 0
+                                    ? `${tag.label} — วันนี้!`
+                                    : future
+                                      ? `${tag.label} — อีก ${tag.days} วัน`
+                                      : `${tag.label} — เหลืออีก ${tag.days} วัน`;
+                                return (
+                                  <span key={ti} className={`flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border ${cls}`}>
+                                    <Bell className="w-2.5 h-2.5 flex-shrink-0" />{label}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
                       </div>
-                      <div className="text-right flex-shrink-0">
+                      <div className="text-right flex-shrink-0 flex flex-col items-end gap-1">
                         <p className="font-bold text-indigo-700">฿{sale.actual_sale.toLocaleString("th-TH")}</p>
+                        <button onClick={() => setDetailSale(sale)}
+                          className="text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 p-1.5 rounded-lg transition-all flex items-center gap-1 text-xs font-medium">
+                          <Eye className="w-3.5 h-3.5" />ดูรายละเอียด
+                        </button>
                         {deleteConfirm === sale.id ? (
-                          <div className="flex gap-1.5 mt-2 justify-end">
-                            <button onClick={() => handleDeleteSale(sale.id)} className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1"><Trash2 className="w-3 h-3" />ลบ + คืนสต็อก</button>
+                          <div className="flex gap-1.5 mt-1 justify-end">
+                            <button onClick={() => handleDeleteSale(sale.id)} className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1"><Trash2 className="w-3 h-3" />ลบ</button>
                             <button onClick={() => setDeleteConfirm(null)} className="bg-slate-200 text-slate-700 text-xs font-bold px-2.5 py-1.5 rounded-lg">ยกเลิก</button>
                           </div>
                         ) : (
-                          <button onClick={() => setDeleteConfirm(sale.id)} className="mt-2 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-all ml-auto block"><Trash2 className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => setDeleteConfirm(sale.id)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
                         )}
                       </div>
                     </div>
@@ -623,7 +1194,6 @@ export default function SalesMain() {
           <div className="w-full max-w-2xl shadow-2xl"
             style={{ height: "88vh", overflowY: "scroll", borderRadius: "24px", backgroundColor: "white" }}>
 
-            {/* Sticky header */}
             <div style={{ position: "sticky", top: 0, zIndex: 10, backgroundColor: "white", borderBottom: "1px solid #f1f5f9" }}
               className="flex items-center justify-between px-6 py-4">
               <div className="flex items-center gap-2.5">
@@ -639,10 +1209,7 @@ export default function SalesMain() {
               </button>
             </div>
 
-            {/* Content */}
             <div className="p-5 flex flex-col gap-4">
-
-              {/* Standard dropdown fields */}
               {(Object.keys(SALE_FIELD_LABELS) as SaleDropdown[]).map(field => (
                 <div key={field} className="border border-slate-100 rounded-2xl overflow-hidden">
                   <button onClick={() => setEditingSaleField(editingSaleField === field ? null : field)}
@@ -689,7 +1256,7 @@ export default function SalesMain() {
                 </div>
               ))}
 
-              {/* Sale extra field defs (checkout form) */}
+              {/* Sale extra field defs */}
               <div className="border border-violet-100 rounded-2xl overflow-hidden">
                 <div className="px-4 py-3 bg-violet-50 flex items-center justify-between">
                   <span className="font-semibold text-violet-800 text-sm">รายการบันทึกเพิ่มในใบขาย</span>
@@ -763,7 +1330,6 @@ export default function SalesMain() {
                     </div>
                   ))}
 
-                  {/* Multi-step wizard */}
                   {sefStep === null && (
                     <button onClick={() => setSefStep("name")}
                       className="w-full border-2 border-dashed border-violet-200 hover:border-violet-400 bg-violet-50/50 hover:bg-violet-50 text-violet-600 text-sm font-semibold rounded-xl py-2.5 transition-all flex items-center justify-center gap-1.5">
@@ -858,7 +1424,6 @@ export default function SalesMain() {
                   ))}
                 </div>
               </div>
-
             </div>
           </div>
         </div>
@@ -873,6 +1438,14 @@ function SField({ label, error, children }: { label: string; error: string; chil
       <label className="block text-xs font-semibold text-slate-700 mb-1.5">{label}</label>
       {children}
       {error && <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3 flex-shrink-0" />{error}</p>}
+    </div>
+  );
+}
+function DetailRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className="flex items-start gap-3 py-1.5 border-b border-slate-50 last:border-0">
+      <span className="text-xs text-slate-500 font-medium w-28 flex-shrink-0 pt-0.5">{label}</span>
+      <span className={`text-sm flex-1 ${highlight ? "font-bold text-indigo-700" : "text-slate-800"}`}>{value}</span>
     </div>
   );
 }

@@ -9,10 +9,12 @@ const sarabun = Sarabun({
   weight: ["300", "400", "500", "600", "700"],
 });
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "/sales-os-app.github.io";
+
 export const metadata: Metadata = {
   title: "SalesOS - ระบบจัดการขายและสต็อกรถโฟล์คลิฟท์",
   description: "ระบบจัดการการขายและสินค้าคงคลังรถโฟล์คลิฟท์แบบเรียลไทม์",
-  manifest: "/manifest.json",
+  manifest: `${basePath}/manifest.json`,
 };
 
 export const viewport: Viewport = {

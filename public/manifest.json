@@ -2,19 +2,20 @@
   "name": "SalesOS - ระบบจัดการรถโฟล์คลิฟท์",
   "short_name": "SalesOS",
   "description": "ระบบจัดการการขายและสินค้าคงคลังรถโฟล์คลิฟท์",
-  "start_url": "/",
+  "start_url": "/sales-os-app.github.io/",
+  "scope": "/sales-os-app.github.io/",
   "display": "standalone",
   "background_color": "#1e40af",
   "theme_color": "#1e40af",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/icon-192.png",
+      "src": "/sales-os-app.github.io/icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/sales-os-app.github.io/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }

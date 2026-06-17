@@ -1,5 +1,9 @@
 export type PaymentType = "เงินสด" | "ไฟแนนซ์";
 export type CustomerType = "บุคคลทั่วไป" | "นิติบุคคล" | "ราชการ";
+export type SaleStatus = "ขายแล้ว" | "จอง" | "รอผ่านไฟแนนซ์";
+export type VehicleType = "Forklift" | "Stacker" | "Handlift";
+export type ContactSource = "Line" | "Facebook" | "TikTok" | "โทร" | "Google" | "คนอื่นบอกต่อ";
+export type SaleType = "รถเช่า" | "รถขายเต็มคัน" | "รถมือสอง" | "งานซ่อม";
 
 // Kept as string aliases for flexibility — dropdown options are user-configurable
 export type FuelType = string;
@@ -18,6 +22,7 @@ export interface Forklift {
   stock_price: number;
   status: string;
   created_at: string;
+  vehicle_category?: "Forklift" | "Stacker" | "Handlift";
   // Extended fields
   pi_no?: string;
   vehicle_group?: string;
@@ -31,6 +36,14 @@ export interface Forklift {
   location?: string;
   received_date?: string;
   custom_fields?: Record<string, string>;
+}
+
+export interface VehicleSpec {
+  fuel?: string;
+  weight?: string;
+  height?: string;
+  length?: string;
+  width?: string;
 }
 
 export interface Sale {
@@ -52,6 +65,15 @@ export interface Sale {
   remark?: string;
   custom_fields?: Record<string, string>;
   created_at: string;
+  // New fields
+  sale_status?: SaleStatus;
+  vehicle_type?: VehicleType;
+  vehicle_spec?: VehicleSpec;
+  warranty_expiry?: string;
+  parts_schedule?: string;
+  custom_notifications?: { label: string; date: string }[];
+  contact_source?: ContactSource;
+  sale_type?: SaleType;
 }
 
 export interface InspectionRecord {
@@ -60,6 +82,7 @@ export interface InspectionRecord {
   transporter_name: string;
   date: string;
   images: string[];
+  role?: "ผู้รับรถ" | "ผู้ส่งมอบรถ";
 }
 
 export interface DeletedInspectionRecord extends InspectionRecord {
