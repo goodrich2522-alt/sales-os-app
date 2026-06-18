@@ -33,12 +33,19 @@ const FIELD_LABELS: Record<DropdownField, string> = {
   financeCompanies: "บริษัทไฟแนนซ์",
 };
 
+// ช่องกรอกตามไฟล์ Excel STOCK (11 ช่อง)
 const emptyForm = {
-  unit_no: "", brand: "", model: "", year: "", vehicle_group: "",
-  capacity: "", capacity_kg: "", height: "", fuel: "", control_type: "", fork_length: "",
-  pi_no: "", po_status: "", received_date: "", location: "",
-  cost_price: "", stock_price: "", install_date: "", install_cost: "", attachments: "",
-  status: "พร้อมขาย",
+  sale_contract: "",    // 1 SALE CONTRACT
+  model: "",            // 2 MODEL
+  mast: "",             // 3 MAST
+  valve: "",            // 4 Valve
+  unit_no: "",          // 5 SN
+  cost_price: "",       // 6 PRICE(ทุน)
+  received_date: "",    // 7 วันรับรถ
+  status: "พร้อมขาย",   // 8 สถานะ
+  detail_customer: "",  // 9 รายละเอียด (ลูกค้า)
+  invoice_no: "",       // 10 เลขที่ใบกำกับภาษี
+  detail_note: "",      // 11 รายละเอียด (หมายเหตุ)
 };
 
 // Inline add step machine
@@ -87,12 +94,8 @@ export default function StockMain() {
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!form.unit_no.trim()) e.unit_no = "กรุณากรอกหมายเลขรถ";
-    if (!form.brand) e.brand = "กรุณาเลือกยี่ห้อ";
+    if (!form.unit_no.trim()) e.unit_no = "กรุณากรอก SN";
     if (!form.model.trim()) e.model = "กรุณากรอกรุ่น";
-    if (!form.fuel) e.fuel = "กรุณาเลือกเชื้อเพลิง";
-    if (!form.cost_price || isNaN(Number(form.cost_price))) e.cost_price = "กรุณากรอกราคาทุน";
-    if (!form.stock_price || isNaN(Number(form.stock_price))) e.stock_price = "กรุณากรอกราคาสต็อก";
     return e;
   };
 
@@ -100,27 +103,26 @@ export default function StockMain() {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    const cf: Record<string, string> = { ...customValues };
+    if (form.detail_customer.trim()) cf["รายละเอียด (ลูกค้า)"] = form.detail_customer.trim();
+    if (form.invoice_no.trim())      cf["เลขที่ใบกำกับภาษี"] = form.invoice_no.trim();
+    if (form.detail_note.trim())     cf["รายละเอียด (หมายเหตุ)"] = form.detail_note.trim();
     const newItem: Forklift = {
       id: String(Date.now()),
       unit_no: form.unit_no.toUpperCase(),
-      brand: form.brand, model: form.model, year: form.year || undefined,
-      vehicle_group: form.vehicle_group || undefined,
-      capacity: form.capacity, capacity_kg: form.capacity_kg || undefined,
-      height: form.height, fuel: form.fuel,
-      control_type: form.control_type || undefined,
-      fork_length: form.fork_length || undefined,
-      pi_no: form.pi_no || undefined,
-      po_status: form.po_status || undefined,
+      brand: "",
+      model: form.model,
+      capacity: "",
+      height: form.mast,                          // MAST
+      fuel: "",
+      control_type: form.valve || undefined,      // Valve
+      pi_no: form.sale_contract || undefined,     // SALE CONTRACT
       received_date: form.received_date || undefined,
-      location: form.location || undefined,
-      cost_price: Number(form.cost_price),
-      stock_price: Number(form.stock_price),
-      install_date: form.install_date || undefined,
-      install_cost: form.install_cost ? Number(form.install_cost) : undefined,
-      attachments: form.attachments || undefined,
+      cost_price: form.cost_price ? Number(form.cost_price) : 0,
+      stock_price: 0,
       status: form.status,
       created_at: new Date().toISOString().slice(0, 10),
-      custom_fields: Object.keys(customValues).length > 0 ? { ...customValues } : undefined,
+      custom_fields: Object.keys(cf).length > 0 ? cf : undefined,
     };
     addForklift(newItem);
     setForm(emptyForm); setCustomValues({}); setErrors({});
@@ -222,107 +224,46 @@ export default function StockMain() {
             )}
             <form onSubmit={handleSubmit} className="flex flex-col gap-6">
 
-              <Section title="ข้อมูลพื้นฐาน">
+              <Section title="ข้อมูลรถ (ตามไฟล์ STOCK)">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FF label="หมายเลขรถ *" error={errors.unit_no}>
-                    <input value={form.unit_no} onChange={e => setForm({ ...form, unit_no: e.target.value })} placeholder="เช่น HEL-013" className={ic(errors.unit_no)} />
+                  <FF label="SALE CONTRACT" error="">
+                    <input value={form.sale_contract} onChange={e => setForm({ ...form, sale_contract: e.target.value })} placeholder="เช่น PI001 / HCTH-BE..." className={ic("")} />
                   </FF>
-                  <FF label="ยี่ห้อ *" error={errors.brand}>
-                    <select value={form.brand} onChange={e => setForm({ ...form, brand: e.target.value })} className={sc(errors.brand)}>
-                      <option value="">-- เลือกยี่ห้อ --</option>
-                      {fieldConfig.brands.map(b => <option key={b} value={b}>{b}</option>)}
-                    </select>
+                  <FF label="MODEL (รุ่น) *" error={errors.model}>
+                    <input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder="เช่น CPCD30-Q22K2" className={ic(errors.model)} />
                   </FF>
-                  <FF label="รุ่น *" error={errors.model}>
-                    <input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder="เช่น CPCD30" className={ic(errors.model)} />
+                  <FF label="MAST (ความสูง)" error="">
+                    <input value={form.mast} onChange={e => setForm({ ...form, mast: e.target.value })} placeholder="เช่น M400 / 3000MM" className={ic("")} />
                   </FF>
-                  <FF label="ปีที่ผลิต" error="">
-                    <input value={form.year} onChange={e => setForm({ ...form, year: e.target.value })} placeholder="เช่น 2023" className={ic("")} />
+                  <FF label="Valve (คอนโทรล)" error="">
+                    <input value={form.valve} onChange={e => setForm({ ...form, valve: e.target.value })} placeholder="เช่น 2 / 3" className={ic("")} />
                   </FF>
-                  <FF label="กลุ่มรถ" error="">
-                    <select value={form.vehicle_group} onChange={e => setForm({ ...form, vehicle_group: e.target.value })} className={sc("")}>
-                      <option value="">-- เลือกกลุ่มรถ --</option>
-                      {fieldConfig.vehicleGroups.map(g => <option key={g} value={g}>{g}</option>)}
-                    </select>
+                  <FF label="SN (หมายเลขรถ) *" error={errors.unit_no}>
+                    <input value={form.unit_no} onChange={e => setForm({ ...form, unit_no: e.target.value })} placeholder="เช่น 010253N9305" className={ic(errors.unit_no)} />
                   </FF>
-                  <FF label="เลขที่ PI" error="">
-                    <input value={form.pi_no} onChange={e => setForm({ ...form, pi_no: e.target.value })} placeholder="เช่น PI-2024-001" className={ic("")} />
+                  <FF label="PRICE ทุน (บาท)" error="">
+                    <input type="number" value={form.cost_price} onChange={e => setForm({ ...form, cost_price: e.target.value })} placeholder="เช่น 220000" className={ic("")} />
                   </FF>
-                </div>
-              </Section>
-
-              <Section title="สเปครถ">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FF label="พิกัดยก" error="">
-                    <input value={form.capacity} onChange={e => setForm({ ...form, capacity: e.target.value })} placeholder="เช่น 3 ตัน" className={ic("")} />
-                  </FF>
-                  <FF label="ยก (kg) / Capacity" error="">
-                    <input value={form.capacity_kg} onChange={e => setForm({ ...form, capacity_kg: e.target.value })} placeholder="เช่น 3000" className={ic("")} />
-                  </FF>
-                  <FF label="ความสูงยก" error="">
-                    <input value={form.height} onChange={e => setForm({ ...form, height: e.target.value })} placeholder="เช่น 3 เมตร / M400" className={ic("")} />
-                  </FF>
-                  <FF label="เชื้อเพลิง *" error={errors.fuel}>
-                    <select value={form.fuel} onChange={e => setForm({ ...form, fuel: e.target.value })} className={sc(errors.fuel)}>
-                      <option value="">-- เลือกเชื้อเพลิง --</option>
-                      {fieldConfig.fuelTypes.map(f => <option key={f} value={f}>{f}</option>)}
-                    </select>
-                  </FF>
-                  <FF label="ประเภทคอนโทรล" error="">
-                    <select value={form.control_type} onChange={e => setForm({ ...form, control_type: e.target.value })} className={sc("")}>
-                      <option value="">-- เลือกประเภท --</option>
-                      {fieldConfig.controlTypes.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </FF>
-                  <FF label="ความยาวของงาน (Fork Length)" error="">
-                    <input value={form.fork_length} onChange={e => setForm({ ...form, fork_length: e.target.value })} placeholder="เช่น 1200 mm" className={ic("")} />
-                  </FF>
-                </div>
-              </Section>
-
-              <Section title="การรับรถและสั่งซื้อ">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FF label="สถานะสั่งซื้อ" error="">
-                    <select value={form.po_status} onChange={e => setForm({ ...form, po_status: e.target.value })} className={sc("")}>
-                      <option value="">-- เลือกสถานะ --</option>
-                      {fieldConfig.poStatuses.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
-                  </FF>
-                  <FF label="โลเคชั่น" error="">
-                    <select value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} className={sc("")}>
-                      <option value="">-- เลือกโลเคชั่น --</option>
-                      {fieldConfig.locations.map(l => <option key={l} value={l}>{l}</option>)}
-                    </select>
-                  </FF>
-                  <FF label="วันที่รับรถ" error="">
+                  <FF label="วันรับรถ" error="">
                     <input type="date" value={form.received_date} onChange={e => setForm({ ...form, received_date: e.target.value })} className={ic("")} />
                   </FF>
-                  <FF label="สถานะ Stock" error="">
+                  <FF label="สถานะ" error="">
                     <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} className={sc("")}>
                       {fieldConfig.stockStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </FF>
-                </div>
-              </Section>
-
-              <Section title="ราคาและการติดตั้ง">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FF label="ราคาทุน (บาท) *" error={errors.cost_price}>
-                    <input type="number" value={form.cost_price} onChange={e => setForm({ ...form, cost_price: e.target.value })} placeholder="420000" className={ic(errors.cost_price)} />
-                  </FF>
-                  <FF label="ราคาสต็อก (บาท) *" error={errors.stock_price}>
-                    <input type="number" value={form.stock_price} onChange={e => setForm({ ...form, stock_price: e.target.value })} placeholder="520000" className={ic(errors.stock_price)} />
-                  </FF>
-                  <FF label="วันที่ติดตั้ง" error="">
-                    <input type="date" value={form.install_date} onChange={e => setForm({ ...form, install_date: e.target.value })} className={ic("")} />
-                  </FF>
-                  <FF label="ค่าติดตั้ง (บาท)" error="">
-                    <input type="number" value={form.install_cost} onChange={e => setForm({ ...form, install_cost: e.target.value })} placeholder="0" className={ic("")} />
+                  <div className="sm:col-span-2">
+                    <FF label="รายละเอียด (ลูกค้า)" error="">
+                      <input value={form.detail_customer} onChange={e => setForm({ ...form, detail_customer: e.target.value })} placeholder="เช่น บ.ABC จำกัด (ชื่อเซลล์)" className={ic("")} />
+                    </FF>
+                  </div>
+                  <FF label="เลขที่ใบกำกับภาษี" error="">
+                    <input value={form.invoice_no} onChange={e => setForm({ ...form, invoice_no: e.target.value })} placeholder="เช่น Q-68121023" className={ic("")} />
                   </FF>
                   <div className="sm:col-span-2">
-                    <FF label="อุปกรณ์ติดตั้งเพิ่ม" error="">
-                      <textarea value={form.attachments} onChange={e => setForm({ ...form, attachments: e.target.value })}
-                        rows={2} placeholder="เช่น ตะขอ, โคมไฟ, กล้อง..."
+                    <FF label="รายละเอียด (หมายเหตุ)" error="">
+                      <textarea value={form.detail_note} onChange={e => setForm({ ...form, detail_note: e.target.value })}
+                        rows={2} placeholder="หมายเหตุเพิ่มเติม เช่น เทิร์นรถ, มี SIM CARD..."
                         className="w-full border border-slate-200 hover:border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-slate-800 placeholder:text-slate-400 resize-none transition-all" />
                     </FF>
                   </div>
