@@ -122,6 +122,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ref ข้อมูลล่าสุด — ใช้หา forklift/sale ตอนต้องอัปเดตสถานะรถผ่าน API
   const forkliftsRef = useRef<Forklift[]>(forklifts);
   const salesRef     = useRef<Sale[]>(sales);
+  const lastLocalEditRef = useRef(0); // เวลาที่แก้ข้อมูลในเครื่องล่าสุด — กัน auto-refresh ทับของที่เพิ่ง optimistic
   useEffect(() => { forkliftsRef.current = forklifts; }, [forklifts]);
   useEffect(() => { salesRef.current = sales; }, [sales]);
 
@@ -174,6 +175,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
+  // ── Auto-refresh (polling) — ดึงข้อมูลใหม่อัตโนมัติ ~25 วิ ให้ใกล้เรียลไทม์ ──
+  useEffect(() => {
+    if (!mounted || !api.apiEnabled) return;
+    const POLL_MS = 25_000;
+    const EDIT_GRACE_MS = 10_000; // เพิ่งแก้ในเครื่อง → ข้ามรอบนี้ กันของ optimistic หายชั่วขณะ
+
+    const refresh = async () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return; // แท็บไม่ได้เปิด
+      if (Date.now() - lastLocalEditRef.current < EDIT_GRACE_MS) return;                       // เพิ่งแก้ รอเขียนเสร็จ
+      try {
+        const data = await api.bootstrap();
+        setForklifts(data.forklifts ?? []);
+        setSales(data.sales ?? []);
+        setInspections((data.inspections ?? []) as InspectionRecord[]);
+        setDeletedInspections((data.deletedInspections ?? []) as DeletedInspectionRecord[]);
+        // ไม่อัปเดต fieldConfig จาก poll — กัน loop การเซฟกลับ (ตั้งค่าเปลี่ยนไม่บ่อย)
+      } catch (e) {
+        console.warn("auto-refresh", e);
+      }
+    };
+
+    const id = setInterval(refresh, POLL_MS);
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); }; // กลับมาที่แท็บ → รีเฟรชทันที
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
+  }, [mounted]);
+
   useEffect(() => { if (mounted) lsSave(LS_KEYS.forklifts, forklifts); }, [forklifts, mounted]);
   useEffect(() => { if (mounted) lsSave(LS_KEYS.sales, sales); }, [sales, mounted]);
   useEffect(() => {
@@ -200,16 +228,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // ── Forklift CRUD ─────────────────────────────────────────────────────────
   const addForklift = useCallback((f: Forklift) => {
+    lastLocalEditRef.current = Date.now();
     setForklifts(p => [f, ...p]);
     if (api.apiEnabled) api.addForkliftApi(f).catch(e => console.warn("addForklift", e));
   }, []);
   const deleteForklift = useCallback((id: string) => {
+    lastLocalEditRef.current = Date.now();
     setForklifts(p => p.filter(f => f.id !== id));
     if (api.apiEnabled) api.deleteForkliftApi(id).catch(e => console.warn("deleteForklift", e));
   }, []);
 
   // ── Sale CRUD ─────────────────────────────────────────────────────────────
   const addSale = useCallback((s: Sale) => {
+    lastLocalEditRef.current = Date.now();
     setSales(p => [s, ...p]);
     const nextStatus = s.sale_status === "จอง" || s.sale_status === "รอผ่านไฟแนนซ์" ? "จองแล้ว" : "ส่งมอบแล้ว";
     setForklifts(p => p.map(f => f.id === s.forklift_id ? { ...f, status: nextStatus } : f));
@@ -220,6 +251,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
   const deleteSale = useCallback((saleId: string) => {
+    lastLocalEditRef.current = Date.now();
     const sale = salesRef.current.find(s => s.id === saleId);
     setSales(prev => {
       if (sale) setForklifts(fls => fls.map(f => f.id === sale.forklift_id ? { ...f, status: "พร้อมขาย" } : f));
@@ -236,6 +268,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // ── Inspection CRUD ───────────────────────────────────────────────────────
   const addInspection = useCallback((r: InspectionRecord) => {
+    lastLocalEditRef.current = Date.now();
     setInspections(p => [r, ...p]); // optimistic — แสดงรูป base64 ทันที
     if (!api.apiEnabled) return;
     (async () => {
@@ -255,6 +288,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
   const deleteInspection = useCallback((id: string) => {
+    lastLocalEditRef.current = Date.now();
     setInspections(prev => {
       const item = prev.find(r => r.id === id);
       if (item) setDeletedInspections(d => [{ ...item, deletedAt: new Date().toISOString() }, ...d]);
@@ -263,6 +297,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (api.apiEnabled) api.deleteInspectionApi(id).catch(e => console.warn("deleteInspection", e));
   }, []);
   const restoreInspection = useCallback((id: string) => {
+    lastLocalEditRef.current = Date.now();
     setDeletedInspections(prev => {
       const item = prev.find(r => r.id === id);
       if (item) {
@@ -274,6 +309,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (api.apiEnabled) api.restoreInspectionApi(id).catch(e => console.warn("restoreInspection", e));
   }, []);
   const purgeInspection = useCallback((id: string) => {
+    lastLocalEditRef.current = Date.now();
     setDeletedInspections(p => p.filter(r => r.id !== id));
     if (api.apiEnabled) api.purgeInspectionApi(id).catch(e => console.warn("purgeInspection", e));
   }, []);
