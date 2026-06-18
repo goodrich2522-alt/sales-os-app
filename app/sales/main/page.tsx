@@ -9,11 +9,9 @@ import {
   SlidersHorizontal, ImageOff, ZoomIn, ChevronLeft, Plus, ClipboardList,
   Settings, ChevronDown, Type, ListOrdered, ArrowLeft, Bell, Eye, ChevronUp,
 } from "lucide-react";
-import { PROVINCES, CONTACT_SOURCES, SALE_TYPES } from "@/lib/mockData";
+import { PROVINCES, CONTACT_SOURCES } from "@/lib/mockData";
 import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, ContactSource, SaleType } from "@/lib/types";
 import { useApp } from "@/lib/AppContext";
-
-const PAYMENT_TYPES: PaymentType[] = ["เงินสด", "ไฟแนนซ์"];
 
 const STATUS_BADGE: Record<string, string> = {
   "พร้อมขาย":   "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -50,10 +48,12 @@ const emptyCheckout = {
 type SaleInlineStep = "name" | "type" | "options" | null;
 
 const SALE_FIELD_LABELS: Record<string, string> = {
+  saleTypes: "ประเภทการขาย",
+  paymentTypes: "ประเภทการชำระ",
   customerTypes: "ประเภทลูกค้า",
   financeCompanies: "บริษัทไฟแนนซ์",
 };
-type SaleDropdown = "customerTypes" | "financeCompanies";
+type SaleDropdown = "saleTypes" | "paymentTypes" | "customerTypes" | "financeCompanies";
 
 const HISTORY_TABS: { key: SaleStatus | "all"; label: string }[] = [
   { key: "all",           label: "ทั้งหมด" },
@@ -771,7 +771,7 @@ export default function SalesMain() {
                       <SField label="ประเภทการขาย" error="">
                         <select value={form.sale_type} onChange={e => setForm({ ...form, sale_type: e.target.value as SaleType })} className={ss("")}>
                           <option value="">-- เลือก --</option>
-                          {SALE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                          {fieldConfig.saleTypes.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </SField>
                     </div>
@@ -795,7 +795,7 @@ export default function SalesMain() {
                     <SField label="ประเภทการชำระ *" error={errors.payment_type}>
                       <select value={form.payment_type} onChange={e => setForm({ ...form, payment_type: e.target.value as PaymentType, finance_company: "" })} className={ss(errors.payment_type)}>
                         <option value="">-- เลือก --</option>
-                        {PAYMENT_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
+                        {fieldConfig.paymentTypes.map(p => <option key={p} value={p}>{p}</option>)}
                       </select>
                     </SField>
                     {form.payment_type === "ไฟแนนซ์" && (

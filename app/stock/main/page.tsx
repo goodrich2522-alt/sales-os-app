@@ -18,7 +18,8 @@ const STATUS_BADGE: Record<string, string> = {
   "รอตรวจสอบ": "bg-blue-100 text-blue-700 border-blue-200",
 };
 
-type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests">;
+// ฟิลด์ dropdown ฝั่งสต็อก — ไม่รวมประเภทการขาย/การชำระ (จัดการในหน้าฝ่ายขาย)
+type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "saleTypes" | "paymentTypes">;
 
 const FIELD_LABELS: Record<DropdownField, string> = {
   brands: "ยี่ห้อ",

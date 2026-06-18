@@ -7,7 +7,7 @@ import {
   BRANDS, FUEL_TYPES,
   DEFAULT_VEHICLE_GROUPS, DEFAULT_CONTROL_TYPES, DEFAULT_PO_STATUSES,
   DEFAULT_LOCATIONS, DEFAULT_STOCK_STATUSES,
-  DEFAULT_CUSTOMER_TYPES, FINANCE_COMPANIES,
+  DEFAULT_CUSTOMER_TYPES, FINANCE_COMPANIES, SALE_TYPES,
 } from "./mockData";
 import * as api from "./api";
 
@@ -24,6 +24,8 @@ export interface FieldConfig {
   // Sales form dropdowns
   customerTypes: string[];
   financeCompanies: string[];
+  saleTypes: string[];      // ประเภทการขาย
+  paymentTypes: string[];   // ประเภทการชำระ
   // Custom field definitions
   customFieldDefs: CustomFieldDef[];      // stock form custom fields
   saleExtraFieldDefs: CustomFieldDef[];   // checkout form custom fields
@@ -41,6 +43,8 @@ const DEFAULT_FIELD_CFG: FieldConfig = {
   stockStatuses: DEFAULT_STOCK_STATUSES,
   customerTypes: DEFAULT_CUSTOMER_TYPES,
   financeCompanies: FINANCE_COMPANIES,
+  saleTypes: [...SALE_TYPES],
+  paymentTypes: ["เงินสด", "ไฟแนนซ์"],
   customFieldDefs: [],
   saleExtraFieldDefs: [],
   salesFilterRequests: [],
