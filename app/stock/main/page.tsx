@@ -66,6 +66,9 @@ export default function StockMain() {
   const [errors, setErrors]         = useState<Record<string, string>>({});
   const [submitted, setSubmitted]   = useState(false);
   const [showList, setShowList]     = useState(false);
+  const [listSearch, setListSearch] = useState("");
+  const [listCat, setListCat]       = useState<"all" | "Forklift" | "Stacker" | "Handlift">("all");
+  const [listStatus, setListStatus] = useState("all");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showSettings, setShowSettings]   = useState(false);
 
@@ -135,6 +138,17 @@ export default function StockMain() {
   const available = forklifts.filter(f => f.status === "พร้อมขาย").length;
   const booked    = forklifts.filter(f => f.status === "จองแล้ว").length;
   const delivered = forklifts.filter(f => f.status === "ส่งมอบแล้ว").length;
+
+  // รายการสต็อกที่กรองแล้ว (สำหรับ modal) — ค้นหา + หมวด + สถานะ
+  const hs = (v: unknown) => (v == null ? "" : String(v)).toLowerCase();
+  const listFiltered = forklifts.filter(f => {
+    const q = listSearch.trim().toLowerCase();
+    const okQ = !q || hs(f.unit_no).includes(q) || hs(f.brand).includes(q) || hs(f.model).includes(q) || hs(f.pi_no).includes(q);
+    const okCat = listCat === "all" || (f.vehicle_category ?? "Forklift") === listCat;
+    const okStatus = listStatus === "all" || f.status === listStatus;
+    return okQ && okCat && okStatus;
+  });
+  const catCount = (c: string) => c === "all" ? forklifts.length : forklifts.filter(f => (f.vehicle_category ?? "Forklift") === c).length;
 
   // Settings — standard dropdown handlers
   const saveOption = () => {
@@ -447,18 +461,47 @@ export default function StockMain() {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setShowList(false)}>
           <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
-              <div>
-                <h3 className="text-base font-bold text-slate-800">รายการสต็อกทั้งหมด</h3>
-                <p className="text-xs text-slate-500 mt-0.5">{forklifts.length} คัน</p>
+            <div className="px-6 py-4 border-b border-slate-100 flex-shrink-0 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">รายการสต็อก</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">แสดง {listFiltered.length} จาก {forklifts.length} คัน</p>
+                </div>
+                <button onClick={() => setShowList(false)}
+                  className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <button onClick={() => setShowList(false)}
-                className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all">
-                <X className="w-5 h-5" />
-              </button>
+              {/* ค้นหา */}
+              <input value={listSearch} onChange={e => setListSearch(e.target.value)}
+                placeholder="ค้นหา SN / ยี่ห้อ / รุ่น / PI..."
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white text-slate-800 placeholder:text-slate-400" />
+              {/* แท็บหมวด + กรองสถานะ */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {([
+                  { key: "all", label: "ทั้งหมด", icon: "📋" },
+                  { key: "Forklift", label: "Forklift", icon: "🚜" },
+                  { key: "Stacker", label: "Stacker", icon: "📦" },
+                  { key: "Handlift", label: "Handlift", icon: "🔧" },
+                ] as { key: "all" | "Forklift" | "Stacker" | "Handlift"; label: string; icon: string }[]).map(({ key, label, icon }) => (
+                  <button key={key} onClick={() => setListCat(key)}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${listCat === key ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:border-emerald-300"}`}>
+                    <span>{icon}</span><span>{label}</span>
+                    <span className={`px-1.5 rounded-full ${listCat === key ? "bg-white/30" : "bg-slate-100 text-slate-500"}`}>{catCount(key)}</span>
+                  </button>
+                ))}
+                <select value={listStatus} onChange={e => setListStatus(e.target.value)}
+                  className="ml-auto border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                  <option value="all">ทุกสถานะ</option>
+                  {fieldConfig.stockStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
             </div>
             <div className="overflow-y-auto flex-1 min-h-0 p-4 flex flex-col gap-2">
-              {forklifts.map(item => (
+              {listFiltered.length === 0 && (
+                <div className="text-center py-12 text-slate-400 text-sm">ไม่พบรถตามเงื่อนไข</div>
+              )}
+              {listFiltered.map(item => (
                 <div key={item.id} className="flex items-center gap-3 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-xl p-3.5 transition-colors group">
                   <div className="bg-white border border-slate-200 rounded-xl p-2 flex-shrink-0 shadow-sm">
                     <Package className="w-4 h-4 text-emerald-600" />
