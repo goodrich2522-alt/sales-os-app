@@ -565,12 +565,18 @@ export default function SalesMain() {
                       {photos.length > 0 && <span className="flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full"><Camera className="w-3 h-3" />{photos.length} รูป</span>}
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-1.5 text-xs">
-                    <div className="bg-slate-50 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 text-slate-600"><span className="text-slate-400">⚖</span>{item.capacity}</div>
-                    <div className="bg-slate-50 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 text-slate-600">
-                      {item.fuel === "ไฟฟ้า" ? <Zap className="w-3 h-3 text-blue-500" /> : <Fuel className="w-3 h-3 text-orange-500" />}{item.fuel}
-                    </div>
-                  </div>
+                  {(() => {
+                    const code = [item.model, item.height, item.control_type, item.fork_length, item.attachments, item.capacity_kg, item.fuel]
+                      .map(v => (v == null ? "" : String(v)).trim())
+                      .filter(Boolean)
+                      .join(" / ");
+                    return (
+                      <div className="bg-slate-50 rounded-lg px-2.5 py-2 text-xs leading-snug">
+                        <span className="text-slate-400">รหัสสเปก</span>
+                        <p className="font-semibold text-slate-700 mt-0.5 break-words">{code || "— ไม่มีข้อมูลสเปก —"}</p>
+                      </div>
+                    );
+                  })()}
                   <div className="border-t border-slate-100 pt-3">
                     <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-2.5"><p className="text-xs text-indigo-500 font-medium">ราคาสต็อก</p><p className="font-bold text-indigo-700 text-sm">฿{fmt(item.stock_price)}</p></div>
                   </div>
