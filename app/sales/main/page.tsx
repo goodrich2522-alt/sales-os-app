@@ -157,24 +157,24 @@ export default function SalesMain() {
   const fuels      = [...new Set(available.map(f => f.fuel))].sort();
   const capacities = [...new Set(available.filter(f => (!fBrand || f.brand === fBrand) && (!fModel || f.model === fModel)).map(f => f.capacity).filter(Boolean))].sort();
   const heights    = [...new Set(available.filter(f => (!fBrand || f.brand === fBrand) && (!fModel || f.model === fModel)).map(f => f.height).filter(Boolean))].sort();
-  const hasFilter  = !!(fBrand || fModel || fFuel || fCapacity || fHeight || search || fSpecModel || fForkLength || fForkWidth || Object.values(extraFilterVals).some(Boolean));
+  const hasFilter  = !!(fFuel || fCapacity || fHeight || search || fSpecModel || fForkLength || fForkWidth);
+
+  // แปลงค่าใดๆ เป็น string ตัวพิมพ์เล็กอย่างปลอดภัย (กัน .toLowerCase บน undefined → จอเด้ง)
+  const hay = (v: unknown) => (v == null ? "" : String(v)).toLowerCase();
 
   const filtered = available.filter(f => {
-    const q = search.toLowerCase();
+    const q = search.trim().toLowerCase();
     const base =
-      (!q || f.unit_no.toLowerCase().includes(q) || f.brand.toLowerCase().includes(q) || f.model.toLowerCase().includes(q)) &&
-      (!fBrand || f.brand === fBrand) && (!fModel || f.model === fModel) &&
-      (!fFuel || f.fuel === fFuel) && (!fCapacity || f.capacity === fCapacity) && (!fHeight || f.height === fHeight);
-    const extra = Object.values(extraFilterVals).every((val) => {
-      if (!val.trim()) return true;
-      return Object.values(f).join(" ").toLowerCase().includes(val.toLowerCase());
-    });
+      (!q || hay(f.unit_no).includes(q) || hay(f.brand).includes(q) || hay(f.model).includes(q)) &&
+      (!fFuel     || hay(f.fuel).includes(fFuel.toLowerCase())) &&
+      (!fCapacity || (hay(f.capacity) + " " + hay(f.capacity_kg)).includes(fCapacity.toLowerCase())) &&
+      (!fHeight   || hay(f.height).includes(fHeight.toLowerCase()));
     const cat = activeCategory === "all" || (f.vehicle_category ?? "Forklift") === activeCategory;
     const spec =
-      (!fSpecModel   || f.model === fSpecModel) &&
-      (!fForkLength  || (f.fork_length ?? "").toLowerCase().includes(fForkLength.toLowerCase())) &&
-      (!fForkWidth   || Object.values(f).join(" ").toLowerCase().includes(fForkWidth.toLowerCase()));
-    return base && extra && cat && spec;
+      (!fSpecModel  || hay(f.model).includes(fSpecModel.toLowerCase())) &&
+      (!fForkLength || hay(f.fork_length).includes(fForkLength.toLowerCase())) &&
+      (!fForkWidth  || hay([f.fork_length, f.attachments, JSON.stringify(f.custom_fields ?? {})].join(" ")).includes(fForkWidth.toLowerCase()));
+    return base && cat && spec;
   });
 
   const clearFilters = () => {
@@ -236,6 +236,15 @@ export default function SalesMain() {
     fieldConfig.saleExtraFieldDefs.forEach(def => {
       if (saleCustomVals[def.id]?.trim()) customFields[def.name] = saleCustomVals[def.id].trim();
     });
+    // ข้อมูลรถจากสต็อก — เติมให้อัตโนมัติ ไม่ต้องให้เซลล์กรอกเอง
+    if (selected) {
+      const auto: Record<string, string> = {
+        PI: selected.pi_no ?? "", MODEL: selected.model ?? "",
+        Valve: selected.control_type ?? "", SN: selected.unit_no ?? "",
+        "วันรับรถ": selected.received_date ?? "",
+      };
+      Object.entries(auto).forEach(([k, v]) => { if (v) customFields[k] = String(v); });
+    }
     return {
       id: `sale_${Date.now()}`,
       forklift_id: selected!.id, forklift_unit_no: selected!.unit_no,
@@ -471,11 +480,6 @@ export default function SalesMain() {
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหา หมายเลข / ยี่ห้อ / รุ่น..."
               className="w-full pl-10 pr-4 py-2.5 border border-slate-200 hover:border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-slate-800 placeholder:text-slate-400 transition-all shadow-sm" />
           </div>
-          <button onClick={() => setShowFilter(!showFilter)}
-            className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold border transition-all shadow-sm ${showFilter || hasFilter ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-700 border-slate-200 hover:border-indigo-300 hover:text-indigo-700"}`}>
-            <SlidersHorizontal className="w-4 h-4" />ตัวกรองละเอียด
-            {hasFilter && <span className="bg-white/30 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">{[fBrand,fModel,fFuel,fCapacity,fHeight,...Object.values(extraFilterVals).filter(Boolean)].filter(Boolean).length}</span>}
-          </button>
           {hasFilter && (
             <button onClick={clearFilters}
               className="flex items-center gap-1 text-slate-500 hover:text-red-600 text-sm px-3 py-2.5 rounded-xl border border-slate-200 hover:border-red-200 hover:bg-red-50 transition-all bg-white shadow-sm">
@@ -483,78 +487,6 @@ export default function SalesMain() {
             </button>
           )}
         </div>
-
-        {/* Cascade filter panel */}
-        {showFilter && (
-          <div className="bg-white rounded-2xl border border-indigo-100 shadow-sm p-5 flex flex-col gap-4">
-            <div>
-              <p className="text-xs font-semibold text-indigo-700 mb-3 flex items-center gap-1.5"><Filter className="w-3.5 h-3.5" />ตัวกรองมาตรฐาน</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                {[
-                  { label: "ยี่ห้อ", val: fBrand, opts: brands, set: (v: string) => { setFBrand(v); setFModel(""); setFCapacity(""); setFHeight(""); } },
-                  { label: "รุ่น",   val: fModel, opts: models, set: (v: string) => { setFModel(v); setFCapacity(""); setFHeight(""); } },
-                  { label: "พิกัดยก", val: fCapacity, opts: capacities, set: setFCapacity },
-                  { label: "ความสูงยก", val: fHeight, opts: heights, set: setFHeight },
-                  { label: "เชื้อเพลิง", val: fFuel, opts: fuels, set: setFFuel },
-                ].map(({ label, val, opts, set }) => (
-                  <div key={label}>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">{label}</label>
-                    <select value={val} onChange={e => set(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                      <option value="">ทั้งหมด</option>
-                      {opts.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {(fieldConfig.salesFilterRequests.length > 0 || showAddFilter) && (
-              <div className="border-t border-indigo-50 pt-4">
-                <p className="text-xs font-semibold text-violet-700 mb-3 flex items-center gap-1.5">
-                  <ClipboardList className="w-3.5 h-3.5" />ตัวกรองที่ขอเพิ่ม
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {fieldConfig.salesFilterRequests.map(name => (
-                    <div key={name} className="relative group">
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">{name}</label>
-                      <div className="flex items-center gap-1">
-                        <input value={extraFilterVals[name] ?? ""} onChange={e => setExtraFilterVals(p => ({ ...p, [name]: e.target.value }))}
-                          placeholder={`กรอก${name}...`}
-                          className="flex-1 border border-violet-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white text-slate-800 placeholder:text-slate-400" />
-                        <button onClick={() => { removeSalesFilterRequest(name); setExtraFilterVals(p => { const n = {...p}; delete n[name]; return n; }); }}
-                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-all flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="border-t border-slate-100 pt-3">
-              {showAddFilter ? (
-                <div className="flex items-center gap-2">
-                  <Plus className="w-4 h-4 text-violet-400 flex-shrink-0" />
-                  <input autoFocus value={newFilterName} onChange={e => setNewFilterName(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter") confirmAddFilter(); if (e.key === "Escape") { setShowAddFilter(false); setNewFilterName(""); } }}
-                    placeholder="ชื่อตัวกรองที่ต้องการ เช่น โลเคชั่น, ปีผลิต..."
-                    className="flex-1 border border-dashed border-violet-300 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 placeholder:text-slate-400" />
-                  <button onClick={confirmAddFilter} disabled={!newFilterName.trim()}
-                    className="bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors flex items-center gap-1">
-                    <Check className="w-3.5 h-3.5" />บันทึก
-                  </button>
-                  <button onClick={() => { setShowAddFilter(false); setNewFilterName(""); }}
-                    className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-2 rounded-xl transition-all"><X className="w-4 h-4" /></button>
-                </div>
-              ) : (
-                <button onClick={() => setShowAddFilter(true)}
-                  className="flex items-center gap-1.5 text-violet-600 hover:text-violet-700 text-sm font-medium hover:bg-violet-50 px-3 py-1.5 rounded-lg transition-all border border-dashed border-violet-200 hover:border-violet-300">
-                  <Plus className="w-3.5 h-3.5" />เพิ่มตัวกรองที่ต้องการ
-                </button>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Vehicle Category Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-1">
@@ -585,59 +517,22 @@ export default function SalesMain() {
               <Filter className="w-3.5 h-3.5" />
               ตัวกรองสเปค {activeCategory === "Forklift" ? "🚜 Forklift" : activeCategory === "Stacker" ? "📦 Stacker" : "🔧 Handlift"}
             </p>
+            <p className="text-[11px] text-slate-400 -mt-1">พิมพ์คำที่ต้องการกรอง (เว้นว่าง = แสดงทั้งหมด)</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              {/* Model select — all categories */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">รุ่นรถ</label>
-                <select value={fSpecModel} onChange={e => setFSpecModel(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                  <option value="">ทั้งหมด</option>
-                  {[...new Set(available.filter(f => (f.vehicle_category ?? "Forklift") === activeCategory).map(f => f.model))].sort().map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </div>
-              {/* Fuel — Forklift only */}
-              {activeCategory === "Forklift" && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">ประเภทเชื้อเพลิง</label>
-                  <select value={fFuel} onChange={e => setFFuel(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                    <option value="">ทั้งหมด</option>
-                    {[...new Set(available.filter(f => (f.vehicle_category ?? "Forklift") === "Forklift").map(f => f.fuel))].sort().map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </div>
-              )}
-              {/* Capacity — all */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">น้ำหนักยก (ตัน)</label>
-                <select value={fCapacity} onChange={e => setFCapacity(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                  <option value="">ทั้งหมด</option>
-                  {[...new Set(available.filter(f => (f.vehicle_category ?? "Forklift") === activeCategory).map(f => f.capacity).filter(Boolean))].sort().map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-              {/* Height — all */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">ความสูงยก (ม.)</label>
-                <select value={fHeight} onChange={e => setFHeight(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                  <option value="">ทั้งหมด</option>
-                  {[...new Set(available.filter(f => (f.vehicle_category ?? "Forklift") === activeCategory).map(f => f.height).filter(Boolean))].sort().map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-              {/* Fork length — all */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">ความยาวงา (ม.)</label>
-                <input value={fForkLength} onChange={e => setFForkLength(e.target.value)} placeholder="เช่น 1.15..."
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-400" />
-              </div>
-              {/* Width — Stacker & Handlift */}
-              {(activeCategory === "Stacker" || activeCategory === "Handlift") && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">ความกว้างงา (มม.)</label>
-                  <input value={fForkWidth} onChange={e => setFForkWidth(e.target.value)} placeholder="เช่น 550..."
+              {[
+                { label: "รุ่นรถ", val: fSpecModel, set: setFSpecModel, ph: "เช่น CPCD30..." },
+                ...(activeCategory === "Forklift" ? [{ label: "ประเภทเชื้อเพลิง", val: fFuel, set: setFFuel, ph: "เช่น Diesel..." }] : []),
+                { label: "น้ำหนักยก", val: fCapacity, set: setFCapacity, ph: "เช่น 2500 / 3 ตัน..." },
+                { label: "ความสูงยก", val: fHeight, set: setFHeight, ph: "เช่น M400..." },
+                { label: "ความยาวงา", val: fForkLength, set: setFForkLength, ph: "เช่น 1150..." },
+                ...((activeCategory === "Stacker" || activeCategory === "Handlift") ? [{ label: "ความกว้างงา", val: fForkWidth, set: setFForkWidth, ph: "เช่น 550..." }] : []),
+              ].map(({ label, val, set, ph }) => (
+                <div key={label}>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">{label}</label>
+                  <input value={val} onChange={e => set(e.target.value)} placeholder={ph}
                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-400" />
                 </div>
-              )}
+              ))}
             </div>
           </div>
         )}
@@ -713,6 +608,25 @@ export default function SalesMain() {
                   <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3">
                     <p className="text-xs text-indigo-500 font-medium">ราคาสต็อก</p>
                     <p className="font-bold text-indigo-700">฿{fmt(selected.stock_price)}</p>
+                  </div>
+
+                  {/* ข้อมูลรถจากสต็อก (ดึงอัตโนมัติ ไม่ต้องกรอก) */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5">
+                    <p className="text-xs font-semibold text-slate-500 mb-2">ข้อมูลรถ (จากสต็อก)</p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                      {[
+                        { label: "PI", value: selected.pi_no },
+                        { label: "MODEL", value: selected.model },
+                        { label: "Valve", value: selected.control_type },
+                        { label: "SN", value: selected.unit_no },
+                        { label: "วันรับรถ", value: selected.received_date },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="min-w-0">
+                          <span className="text-[11px] text-slate-400 block">{label}</span>
+                          <span className="text-slate-800 font-medium break-words">{value || "—"}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
                   {/* Photos split by role */}
