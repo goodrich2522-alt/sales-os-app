@@ -14,6 +14,7 @@ import {
 } from "@/lib/mockData";
 import { buildStaffMonthly, buildStaffWeekly, buildAllMonthlyWeekly, MONTH_LABELS } from "@/components/charts/Charts";
 import { Sale } from "@/lib/types";
+import GoogleLoginButton, { type GoogleUser } from "@/components/GoogleLoginButton";
 
 const SalesRevenueChart = dynamic(
   () => import("@/components/charts/Charts").then((m) => ({ default: m.SalesRevenueChart })),
@@ -55,7 +56,6 @@ function ChartSkeleton() {
   return <div className="w-full h-full bg-slate-100 rounded-xl animate-pulse" />;
 }
 
-const DASHBOARD_PASSWORD = "admin2024";
 
 const REGION_COLORS: Record<string, { bg: string; border: string; text: string; dot: string }> = {
   "เหนือ":  { bg: "bg-blue-50",   border: "border-blue-200",   text: "text-blue-700",   dot: "#3B82F6" },
@@ -75,9 +75,6 @@ const CONTACT_SOURCE_COLORS: Record<string, string> = {
 
 export default function Dashboard() {
   const [dashAuth, setDashAuth] = useState(false);
-  const [passInput, setPassInput] = useState("");
-  const [passError, setPassError] = useState("");
-  const [showPass, setShowPass] = useState(false);
 
   const { sales, forklifts } = useApp();
   const staffNames = Array.from(
@@ -155,15 +152,10 @@ export default function Dashboard() {
       .map(([type, d]) => ({ type, count: d.count, revenue: d.revenue, color: COLORS[type] ?? "#64748B" }));
   }, [sales]);
 
-  const handleDashLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (passInput.trim() === DASHBOARD_PASSWORD) {
-      sessionStorage.setItem("dash_auth", "1");
-      setDashAuth(true);
-    } else {
-      setPassError("รหัสผ่านไม่ถูกต้อง");
-      setPassInput("");
-    }
+  const handleDashGoogle = (u: GoogleUser) => {
+    sessionStorage.setItem("dash_auth", "1");
+    sessionStorage.setItem("dash_user", JSON.stringify({ email: u.email, name: u.name }));
+    setDashAuth(true);
   };
 
   if (!dashAuth) {
@@ -178,32 +170,12 @@ export default function Dashboard() {
                   <BarChart3 className="w-10 h-10 text-white" />
                 </div>
                 <h1 className="text-2xl font-bold text-slate-800">แดชบอร์ด</h1>
-                <p className="text-slate-500 text-sm mt-1 text-center">ข้อมูลภายในบริษัท — กรุณายืนยันตัวตน</p>
-                <div className="mt-3 bg-violet-50 border border-violet-100 rounded-xl px-4 py-2 text-xs text-violet-700 font-medium">
-                  รหัสทดสอบ: admin2024
-                </div>
+                <p className="text-slate-500 text-sm mt-1 text-center">ข้อมูลภายในบริษัท — เข้าสู่ระบบด้วย Google</p>
               </div>
-              <form onSubmit={handleDashLogin} className="flex flex-col gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">รหัสผ่านแดชบอร์ด</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input type={showPass ? "text" : "password"} value={passInput}
-                      onChange={(e) => { setPassInput(e.target.value); setPassError(""); }}
-                      placeholder="กรอกรหัสผ่าน..."
-                      className={`w-full pl-10 pr-11 py-3 border rounded-xl text-slate-800 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all ${passError ? "border-red-300 bg-red-50" : "border-slate-200 hover:border-slate-300 bg-white"}`}
-                    />
-                    <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
-                      {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  {passError && <p className="text-red-500 text-xs mt-1.5">{passError}</p>}
-                </div>
-                <button type="submit"
-                  className="w-full bg-gradient-to-r from-violet-600 to-purple-700 hover:from-violet-500 hover:to-purple-600 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-sm">
-                  <Lock className="w-4 h-4" />เข้าดูแดชบอร์ด
-                </button>
-              </form>
+              <div className="flex flex-col items-center gap-3">
+                <GoogleLoginButton onSuccess={handleDashGoogle} />
+                <p className="text-xs text-slate-400 text-center">เข้าสู่ระบบด้วยบัญชี Google ของคุณ</p>
+              </div>
               <Link href="/" className="flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 mt-5 transition-colors">
                 <ArrowLeft className="w-3.5 h-3.5" />กลับหน้าหลัก
               </Link>
