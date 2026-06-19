@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRight, Package } from "lucide-react";
+import { Search, Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRight, ChevronLeft, Package, History, ImageOff } from "lucide-react";
 import { mockTransporterData } from "@/lib/mockData";
 import { useApp } from "@/lib/AppContext";
 
@@ -18,8 +18,11 @@ interface ForkliftInfo {
 
 export default function TransporterMain() {
   const router = useRouter();
-  const { addInspection, forklifts } = useApp();
+  const { addInspection, forklifts, inspections } = useApp();
   const [username, setUsername] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
+  const [histSearch, setHistSearch] = useState("");
+  const [lightbox, setLightbox] = useState<{ imgs: string[]; idx: number } | null>(null);
   const [role, setRole] = useState<TransporterRole>("ผู้รับรถ");
   const [unitNo, setUnitNo] = useState("");
   const [forkliftInfo, setForkliftInfo] = useState<ForkliftInfo | null>(null);
@@ -97,6 +100,14 @@ export default function TransporterMain() {
 
   const isReceiver = role === "ผู้รับรถ";
 
+  // ประวัติรับ-ส่งรถ (ทุกคน) — ใหม่สุดก่อน + ค้นหาตามหมายเลขรถ/ชื่อผู้ขนส่ง
+  const histFiltered = [...inspections]
+    .filter(r => {
+      const q = histSearch.trim().toLowerCase();
+      return !q || String(r.unit_no ?? "").toLowerCase().includes(q) || String(r.transporter_name ?? "").toLowerCase().includes(q);
+    })
+    .sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")) || String(b.id ?? "").localeCompare(String(a.id ?? "")));
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Navbar */}
@@ -111,10 +122,16 @@ export default function TransporterMain() {
               <p className="text-slate-500 text-xs">{username}</p>
             </div>
           </div>
-          <button onClick={handleLogout}
-            className="flex items-center gap-1.5 text-slate-500 hover:text-red-600 text-sm font-medium transition-colors duration-200 hover:bg-red-50 px-3 py-1.5 rounded-lg">
-            <LogOut className="w-4 h-4" />ออกจากระบบ
-          </button>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setShowHistory(true)}
+              className="flex items-center gap-1.5 text-slate-600 hover:text-amber-700 text-sm font-medium transition-colors duration-200 hover:bg-amber-50 px-3 py-1.5 rounded-lg">
+              <History className="w-4 h-4" /><span className="hidden sm:inline">ประวัติ</span> ({inspections.length})
+            </button>
+            <button onClick={handleLogout}
+              className="flex items-center gap-1.5 text-slate-500 hover:text-red-600 text-sm font-medium transition-colors duration-200 hover:bg-red-50 px-3 py-1.5 rounded-lg">
+              <LogOut className="w-4 h-4" /><span className="hidden sm:inline">ออกจากระบบ</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -287,6 +304,85 @@ export default function TransporterMain() {
           </div>
         )}
       </main>
+
+      {/* ── History Modal ── */}
+      {showHistory && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 flex items-end sm:items-center justify-center p-4"
+          onClick={e => e.target === e.currentTarget && setShowHistory(false)}>
+          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl">
+            <div className="px-6 py-4 border-b border-slate-100 flex flex-col gap-3 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">ประวัติรับ-ส่งรถ</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">{histFiltered.length} รายการ</p>
+                </div>
+                <button onClick={() => setShowHistory(false)}
+                  className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all"><X className="w-5 h-5" /></button>
+              </div>
+              <input value={histSearch} onChange={e => setHistSearch(e.target.value)}
+                placeholder="ค้นหา หมายเลขรถ / ชื่อผู้ขนส่ง..."
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white text-slate-800 placeholder:text-slate-400" />
+            </div>
+            <div className="overflow-y-auto flex-1 min-h-0 p-4 flex flex-col gap-2.5">
+              {histFiltered.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-14 text-slate-400">
+                  <History className="w-10 h-10 text-slate-300 mb-2" /><p className="text-sm">ยังไม่มีประวัติ</p>
+                </div>
+              )}
+              {histFiltered.map(rec => {
+                const receiver = (rec.role ?? "ผู้รับรถ") === "ผู้รับรถ";
+                return (
+                  <div key={rec.id} className="border border-slate-100 rounded-2xl p-3.5 bg-slate-50/60">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${receiver ? "bg-amber-100 text-amber-700" : "bg-indigo-100 text-indigo-700"}`}>
+                          {rec.role ?? "ผู้รับรถ"}
+                        </span>
+                        <span className="font-bold text-slate-800 text-sm truncate">{rec.unit_no}</span>
+                      </div>
+                      <span className="text-xs text-slate-400 flex-shrink-0">{rec.date}</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-2">โดย <span className="font-semibold text-slate-700">{rec.transporter_name || "—"}</span></p>
+                    {rec.images && rec.images.length > 0 ? (
+                      <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                        {rec.images.map((img, i) => (
+                          <button key={i} onClick={() => setLightbox({ imgs: rec.images, idx: i })}
+                            className="relative aspect-square rounded-lg overflow-hidden bg-slate-200 hover:ring-2 hover:ring-amber-400 transition-all">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={img} alt="" className="w-full h-full object-cover" />
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 flex items-center gap-1"><ImageOff className="w-3.5 h-3.5" />ไม่มีรูป</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Lightbox ── */}
+      {lightbox && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+          <button onClick={() => setLightbox(null)} className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2 transition-all"><X className="w-6 h-6" /></button>
+          {lightbox.imgs.length > 1 && (
+            <button onClick={e => { e.stopPropagation(); setLightbox(l => l ? { ...l, idx: (l.idx - 1 + l.imgs.length) % l.imgs.length } : l); }}
+              className="absolute left-3 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2 transition-all"><ChevronLeft className="w-6 h-6" /></button>
+          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightbox.imgs[lightbox.idx]} alt="" className="max-h-[85vh] max-w-full object-contain rounded-xl" onClick={e => e.stopPropagation()} />
+          {lightbox.imgs.length > 1 && (
+            <>
+              <button onClick={e => { e.stopPropagation(); setLightbox(l => l ? { ...l, idx: (l.idx + 1) % l.imgs.length } : l); }}
+                className="absolute right-3 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2 transition-all"><ChevronRight className="w-6 h-6" /></button>
+              <span className="absolute bottom-4 text-white/80 text-sm bg-white/10 px-3 py-1 rounded-full">{lightbox.idx + 1} / {lightbox.imgs.length}</span>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
