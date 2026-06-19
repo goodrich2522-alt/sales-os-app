@@ -146,7 +146,7 @@ export default function SalesMain() {
   const [sefOptInput, setSefOptInput] = useState("");
 
   useEffect(() => {
-    const u = sessionStorage.getItem("sales_user");
+    const u = localStorage.getItem("sales_user");
     if (!u) router.push("/sales/login");
     else setSalesUser(JSON.parse(u));
   }, [router]);
@@ -293,7 +293,7 @@ export default function SalesMain() {
     const n = Number(targetInput.replace(/,/g, ""));
     if (!isNaN(n) && n > 0 && salesUser) {
       const updated = { ...salesUser, target_monthly: n };
-      setSalesUser(updated); sessionStorage.setItem("sales_user", JSON.stringify(updated));
+      setSalesUser(updated); localStorage.setItem("sales_user", JSON.stringify(updated));
     }
     setEditingTarget(false);
   };
@@ -387,7 +387,7 @@ export default function SalesMain() {
               className="flex items-center gap-1.5 text-slate-600 hover:text-indigo-700 hover:bg-indigo-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-transparent hover:border-indigo-200">
               <History className="w-4 h-4" /><span className="hidden sm:inline">ประวัติ ({mySales.length})</span>
             </button>
-            <button onClick={() => { sessionStorage.removeItem("sales_user"); router.push("/sales/login"); }}
+            <button onClick={() => { localStorage.removeItem("sales_user"); router.push("/sales/login"); }}
               className="flex items-center gap-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all">
               <LogOut className="w-4 h-4" /><span className="hidden sm:inline">ออก</span>
             </button>

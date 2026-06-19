@@ -19,7 +19,7 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 // ฟิลด์ dropdown ฝั่งสต็อก — ไม่รวมประเภทการขาย/การชำระ (จัดการในหน้าฝ่ายขาย)
-type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "saleTypes" | "paymentTypes">;
+type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "saleTypes" | "paymentTypes" | "knownUsers">;
 
 const FIELD_LABELS: Record<DropdownField, string> = {
   brands: "ยี่ห้อ",
@@ -87,7 +87,7 @@ export default function StockMain() {
   const [inlineOptInput, setInlineOptInput] = useState("");
 
   useEffect(() => {
-    const u = sessionStorage.getItem("stock_user");
+    const u = localStorage.getItem("stock_user");
     if (!u) router.push("/stock/login");
     else setUsername(JSON.parse(u).name);
   }, [router]);
@@ -130,7 +130,7 @@ export default function StockMain() {
     setTimeout(() => setSubmitted(false), 3000);
   };
 
-  const handleLogout = () => { sessionStorage.removeItem("stock_user"); router.push("/stock/login"); };
+  const handleLogout = () => { localStorage.removeItem("stock_user"); router.push("/stock/login"); };
 
   const available = forklifts.filter(f => f.status === "พร้อมขาย").length;
   const booked    = forklifts.filter(f => f.status === "จองแล้ว").length;

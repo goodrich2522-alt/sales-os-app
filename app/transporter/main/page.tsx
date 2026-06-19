@@ -30,7 +30,7 @@ export default function TransporterMain() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const name = sessionStorage.getItem("transporter_name");
+    const name = localStorage.getItem("transporter_name");
     if (!name) router.push("/transporter/login");
     else setUsername(name);
   }, [router]);
@@ -93,7 +93,7 @@ export default function TransporterMain() {
     setTimeout(() => { setUnitNo(""); setForkliftInfo(null); setImages([]); setSubmitted(false); }, 3000);
   };
 
-  const handleLogout = () => { sessionStorage.removeItem("transporter_name"); router.push("/transporter/login"); };
+  const handleLogout = () => { localStorage.removeItem("transporter_name"); router.push("/transporter/login"); };
 
   const isReceiver = role === "ผู้รับรถ";
 

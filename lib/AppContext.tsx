@@ -31,6 +31,8 @@ export interface FieldConfig {
   saleExtraFieldDefs: CustomFieldDef[];   // checkout form custom fields
   // Sales filter requests
   salesFilterRequests: string[];
+  // จำผู้ใช้ที่ล็อกอินด้วย Google: อีเมล (ตัวพิมพ์เล็ก) → ชื่อ/บทบาท
+  knownUsers: Record<string, { name: string; role: string }>;
 }
 
 const DEFAULT_FIELD_CFG: FieldConfig = {
@@ -48,9 +50,10 @@ const DEFAULT_FIELD_CFG: FieldConfig = {
   customFieldDefs: [],
   saleExtraFieldDefs: [],
   salesFilterRequests: [],
+  knownUsers: {},
 };
 
-type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests">;
+type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "knownUsers">;
 
 // ── Context type ──────────────────────────────────────────────────────────────
 interface AppContextType {

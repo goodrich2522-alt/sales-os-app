@@ -86,7 +86,7 @@ export default function Dashboard() {
   const [regionModal, setRegionModal] = useState<string | null>(null);
 
   useEffect(() => {
-    if (sessionStorage.getItem("dash_auth") === "1") setDashAuth(true);
+    if (localStorage.getItem("dash_auth") === "1") setDashAuth(true);
   }, []);
 
   // ── All hooks must be called before any early return ──────────────────────────
@@ -153,8 +153,8 @@ export default function Dashboard() {
   }, [sales]);
 
   const handleDashGoogle = (u: GoogleUser) => {
-    sessionStorage.setItem("dash_auth", "1");
-    sessionStorage.setItem("dash_user", JSON.stringify({ email: u.email, name: u.name }));
+    localStorage.setItem("dash_auth", "1");
+    localStorage.setItem("dash_user", JSON.stringify({ email: u.email, name: u.name }));
     setDashAuth(true);
   };
 
