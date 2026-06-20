@@ -2,9 +2,18 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRight, ChevronLeft, Package, History, ImageOff, Hash, Calendar, User, FileText, Link2 } from "lucide-react";
+import { Search, Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRight, ChevronLeft, Package, History, ImageOff, Hash, Calendar, User, FileText, Link2, Clock, PackageCheck } from "lucide-react";
 import { mockTransporterData } from "@/lib/mockData";
 import { useApp } from "@/lib/AppContext";
+import { Forklift } from "@/lib/types";
+
+// วันที่ ISO (2026-01-07) → ข้อความไทย "7 ม.ค. 2569" — กัน Google Sheets แปลงเป็นวันที่ผิด + อ่านง่าย
+const TH_MON = ["", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+function thaiDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+  if (!m) return iso || "";
+  return `${+m[3]} ${TH_MON[+m[2]]} ${+m[1] + 543}`;
+}
 
 type TransporterRole = "ผู้รับรถ" | "ผู้ส่งมอบรถ";
 
@@ -37,6 +46,8 @@ export default function TransporterMain() {
   const [receivedDate, setReceivedDate] = useState("");
   const [receiverName, setReceiverName] = useState("");
   const [recvSubmitted, setRecvSubmitted] = useState(false);
+  // รถ "รอรับ" (สั่งมาแล้วยังไม่มี SN) — ผู้รับรถเลือกคันแล้วกรอก SN ตอนรับ
+  const [selectedWaiting, setSelectedWaiting] = useState<Forklift | null>(null);
 
   useEffect(() => {
     const name = localStorage.getItem("transporter_name");
@@ -94,9 +105,26 @@ export default function TransporterMain() {
   // จับคู่ SN กับรถในสต็อก (unit_no = ซีเรียลรถ)
   const findStock = (sn: string) => forklifts.find(f => String(f.unit_no).toUpperCase() === sn.trim().toUpperCase()) || null;
 
-  // ผู้รับรถพิมพ์ SN → จับคู่รถในสต็อกทันที (โชว์ข้อมูลรถ + ปลดล็อกถ่ายรูป)
+  // รายการรถ "รอรับ" (สั่งมาแล้วยังไม่มี SN)
+  const waitingList = forklifts.filter(f => String(f.status || "") === "รอรับ");
+
+  // เลือกรถรอรับ → เติม PI ให้ + โชว์ข้อมูลรถ + รอกรอก SN ใหม่
+  const selectWaiting = (w: Forklift) => {
+    setSelectedWaiting(w);
+    setPiNo(w.pi_no || "");
+    setUnitNo("");
+    setNotFound(false);
+    setForkliftInfo({ brand: w.brand, model: w.model, capacity: w.capacity, fuel: w.fuel, color: "" });
+  };
+  const clearWaiting = () => {
+    setSelectedWaiting(null);
+    setForkliftInfo(null); setUnitNo(""); setPiNo("");
+  };
+
+  // ผู้รับรถพิมพ์ SN → ถ้าเลือกรถรอรับอยู่ = SN ใหม่ (ไม่ต้องหาสต็อก) / ถ้าไม่ = หาในสต็อก
   const handleSnChange = (value: string) => {
     setUnitNo(value);
+    if (selectedWaiting) return; // โหมดรอรับ: SN คือซีเรียลใหม่ของรถคันที่เลือก
     setNotFound(false);
     const m = findStock(value);
     setForkliftInfo(m ? { brand: m.brand, model: m.model, capacity: m.capacity, fuel: m.fuel, color: "" } : null);
@@ -105,7 +133,7 @@ export default function TransporterMain() {
   const handleSubmit = () => {
     const snKey = unitNo.trim().toUpperCase();
     if (isReceiver) {
-      const matched = findStock(snKey);
+      const rd = thaiDate(receivedDate);
       addInspection({
         id: `ins_${Date.now()}`,
         unit_no: snKey,
@@ -114,18 +142,30 @@ export default function TransporterMain() {
         images: [...images],
         role,
       });
-      // เชื่อมไปหน้าปิดการขาย: เขียน PI + วันรับรถ กลับเข้ารถในสต็อก (หน้าเซลล์ดึงไปโชว์เอง)
-      if (matched) {
+      if (selectedWaiting) {
+        // รถรอรับ → ใส่ SN + เปลี่ยนเป็นพร้อมขาย → เด้งขึ้นหน้าเซลล์ทันที
         updateForklift({
-          ...matched,
-          pi_no: piNo.trim() || matched.pi_no,
-          received_date: receivedDate || matched.received_date,
+          ...selectedWaiting,
+          unit_no: snKey,
+          pi_no: piNo.trim() || selectedWaiting.pi_no,
+          received_date: rd || selectedWaiting.received_date,
+          status: "พร้อมขาย",
         });
+      } else {
+        // รถที่มีในสต็อกแล้ว → เติม PI + วันรับรถ (หน้าเซลล์ดึงไปโชว์เอง)
+        const matched = findStock(snKey);
+        if (matched) {
+          updateForklift({
+            ...matched,
+            pi_no: piNo.trim() || matched.pi_no,
+            received_date: rd || matched.received_date,
+          });
+        }
       }
       setSubmitted(true);
       setTimeout(() => {
         setUnitNo(""); setForkliftInfo(null); setImages([]); setSubmitted(false);
-        setPiNo(""); setReceivedDate(""); setReceiverName(username);
+        setPiNo(""); setReceivedDate(""); setReceiverName(username); setSelectedWaiting(null);
       }, 3000);
       return;
     }
@@ -148,10 +188,13 @@ export default function TransporterMain() {
   const switchRole = (r: TransporterRole) => {
     setRole(r);
     setUnitNo(""); setForkliftInfo(null); setNotFound(false); setImages([]);
-    setPiNo(""); setReceivedDate("");
+    setPiNo(""); setReceivedDate(""); setSelectedWaiting(null);
   };
 
-  const receiverValid = !!(piNo.trim() && receivedDate && receiverName.trim() && forkliftInfo);
+  // โหมดรอรับ: ต้องมี SN ใหม่ที่กรอกเอง / โหมดสต็อก: ต้องเจอรถในสต็อก (forkliftInfo)
+  const receiverValid = selectedWaiting
+    ? !!(piNo.trim() && receivedDate && receiverName.trim() && unitNo.trim())
+    : !!(piNo.trim() && receivedDate && receiverName.trim() && forkliftInfo);
 
   // ประวัติรับ-ส่งรถ (ทุกคน) — ใหม่สุดก่อน + ค้นหาตามหมายเลขรถ/ชื่อผู้ขนส่ง
   const histFiltered = [...inspections]
@@ -234,11 +277,49 @@ export default function TransporterMain() {
 
         {/* ── ผู้รับรถ: ฟอร์มกรอกข้อมูลตอนรับรถ ── */}
         {isReceiver ? (
+          <>
+          {/* รถรอรับ — สั่งมาแล้วยังไม่มี SN ให้เลือกคันที่กำลังรับ */}
+          {waitingList.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-sm border border-amber-100 p-6">
+              <h2 className="text-base font-bold text-slate-800 mb-1 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-500" />
+                รถรอรับ ({waitingList.length})
+              </h2>
+              <p className="text-xs text-slate-500 mb-4">กำลังไปรับรถที่สั่งมาใหม่? เลือกคันที่รับ แล้วกรอก SN ด้านล่าง — ยืนยันแล้วรถจะเข้าหน้าขายให้เลย</p>
+              <div className="flex flex-col gap-2">
+                {waitingList.map(w => {
+                  const sel = selectedWaiting?.id === w.id;
+                  const cust = w.custom_fields?.["รายละเอียด (ลูกค้า)"] || "";
+                  return (
+                    <button key={w.id} onClick={() => sel ? clearWaiting() : selectWaiting(w)}
+                      className={`text-left rounded-xl border-2 p-3 transition-all ${sel ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-slate-50 hover:border-amber-200 hover:bg-amber-50/40"}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-800 text-sm truncate">{w.model || "—"}</p>
+                          <p className="text-xs text-slate-500 truncate">PI {w.pi_no || "—"}{cust ? " · " + cust : ""}</p>
+                        </div>
+                        {sel
+                          ? <span className="text-xs bg-amber-500 text-white font-bold px-2.5 py-1 rounded-full flex items-center gap-1 flex-shrink-0"><CheckCircle className="w-3 h-3" />เลือกอยู่</span>
+                          : <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
             <h2 className="text-base font-bold text-slate-800 mb-1 flex items-center gap-2">
               <FileText className="w-4 h-4 text-amber-500" />
               ข้อมูลการรับรถ
             </h2>
+            {selectedWaiting && (
+              <div className="mt-2 mb-3 flex items-center gap-2 text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2.5">
+                <PackageCheck className="w-4 h-4 flex-shrink-0" />
+                <span className="text-xs font-medium">กำลังรับรถรอรับ: <span className="font-bold">{selectedWaiting.model}</span> — กรอก SN แล้วยืนยัน รถจะเปลี่ยนเป็น &quot;พร้อมขาย&quot; ขึ้นหน้าเซลล์ทันที</span>
+              </div>
+            )}
             <p className="text-xs text-slate-500 mb-4">กรอกข้อมูลตอนรับรถให้ครบ แล้วเลื่อนลงไปถ่ายรูป</p>
 
             <div className="flex flex-col gap-3.5">
@@ -269,7 +350,12 @@ export default function TransporterMain() {
                 <input value={unitNo} onChange={e => handleSnChange(e.target.value)} placeholder="เช่น 010503T1726"
                   className="w-full border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent transition-all" />
                 {unitNo.trim() && (
-                  forkliftInfo ? (
+                  selectedWaiting ? (
+                    <div className="mt-2 flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5">
+                      <PackageCheck className="w-4 h-4 flex-shrink-0" />
+                      <span className="text-xs font-medium">SN ใหม่ของ <span className="font-bold">{selectedWaiting.model}</span> — ยืนยันแล้วรถจะเปลี่ยนเป็น &quot;พร้อมขาย&quot; ขึ้นหน้าเซลล์ทันที</span>
+                    </div>
+                  ) : forkliftInfo ? (
                     <div className="mt-2 flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5">
                       <Link2 className="w-4 h-4 flex-shrink-0" />
                       <span className="text-xs font-medium">พบรถในสต็อก: <span className="font-bold">{forkliftInfo.brand} {forkliftInfo.model}</span> — PI กับวันรับรถจะเชื่อมไปหน้าปิดการขายให้อัตโนมัติ</span>
@@ -277,13 +363,14 @@ export default function TransporterMain() {
                   ) : (
                     <div className="mt-2 flex items-center gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2.5">
                       <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                      <span className="text-xs">ยังไม่พบ SN นี้ในสต็อก — ตรวจสอบเลขให้ตรงก่อน (ต้องตรงถึงจะเชื่อมหน้าขายได้)</span>
+                      <span className="text-xs">ยังไม่พบ SN นี้ในสต็อก — ถ้าเป็นรถสั่งใหม่ ให้เลือกจาก &quot;รถรอรับ&quot; ด้านบนก่อน</span>
                     </div>
                   )
                 )}
               </div>
             </div>
           </div>
+          </>
         ) : (
           /* ── ผู้ส่งมอบรถ: ค้นหาหมายเลขรถ (flow เดิม) ── */
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
