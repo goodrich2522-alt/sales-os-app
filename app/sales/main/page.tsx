@@ -12,6 +12,7 @@ import {
 import { PROVINCES, CONTACT_SOURCES } from "@/lib/mockData";
 import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, ContactSource, SaleType } from "@/lib/types";
 import { useApp } from "@/lib/AppContext";
+import AiAssistant from "@/components/AiAssistant";
 
 const STATUS_BADGE: Record<string, string> = {
   "พร้อมขาย":   "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -1348,6 +1349,9 @@ export default function SalesMain() {
           </div>
         </div>
       )}
+
+      {/* ── ผู้ช่วย AI พี่เก่ง (โครงไว้ก่อน — เติมความสามารถทีหลัง) ── */}
+      <AiAssistant salesUserName={salesUser?.name} />
     </div>
   );
 }
