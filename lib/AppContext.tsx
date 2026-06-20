@@ -63,6 +63,7 @@ interface AppContextType {
   deletedInspections: DeletedInspectionRecord[];
   fieldConfig: FieldConfig;
   addForklift: (f: Forklift) => void;
+  updateForklift: (f: Forklift) => void;
   deleteForklift: (id: string) => void;
   addSale: (s: Sale) => void;
   deleteSale: (saleId: string) => void;
@@ -238,6 +239,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     lastLocalEditRef.current = Date.now();
     setForklifts(p => [f, ...p]);
     if (api.apiEnabled) api.addForkliftApi(f).catch(e => console.warn("addForklift", e));
+  }, []);
+  const updateForklift = useCallback((f: Forklift) => {
+    lastLocalEditRef.current = Date.now();
+    setForklifts(p => p.map(x => x.id === f.id ? f : x));
+    if (api.apiEnabled) api.updateForkliftApi(f).catch(e => console.warn("updateForklift", e));
   }, []);
   const deleteForklift = useCallback((id: string) => {
     lastLocalEditRef.current = Date.now();
@@ -422,7 +428,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   return (
     <AppContext.Provider value={{
       forklifts, sales, inspections, deletedInspections, fieldConfig,
-      addForklift, deleteForklift,
+      addForklift, updateForklift, deleteForklift,
       addSale, deleteSale,
       addInspection, deleteInspection, restoreInspection, purgeInspection,
       updateFieldOptions,
