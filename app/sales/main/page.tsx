@@ -12,13 +12,21 @@ import {
 import { PROVINCES, CONTACT_SOURCES } from "@/lib/mockData";
 import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, ContactSource, SaleType } from "@/lib/types";
 import { useApp } from "@/lib/AppContext";
+import { driveImg } from "@/lib/img";
 import AiAssistant from "@/components/AiAssistant";
 
 const STATUS_BADGE: Record<string, string> = {
-  "พร้อมขาย":   "bg-emerald-100 text-emerald-700 border-emerald-200",
-  "จองแล้ว":    "bg-amber-100 text-amber-700 border-amber-200",
-  "ส่งมอบแล้ว": "bg-slate-100 text-slate-600 border-slate-200",
+  "พร้อมขาย":      "bg-emerald-100 text-emerald-700 border-emerald-200",
+  "จองแล้ว":       "bg-amber-100 text-amber-700 border-amber-200",
+  "จอง":           "bg-amber-100 text-amber-700 border-amber-200",
+  "ติดจอง":        "bg-amber-100 text-amber-700 border-amber-200",
+  "ติดจอง/รอส่ง":  "bg-orange-100 text-orange-700 border-orange-200",
+  "รอผ่านไฟแนนซ์": "bg-red-100 text-red-700 border-red-200",
+  "ส่งมอบแล้ว":    "bg-slate-100 text-slate-600 border-slate-200",
 };
+
+// สถานะที่ยังขึ้นให้เซลล์เห็น (พร้อมขาย + ที่ติดจองไว้) — ขายแล้ว/เช่า/รอรับ ไม่ขึ้น
+const SELLABLE_STATUSES = ["พร้อมขาย", "ติดจอง", "จองแล้ว", "จอง", "ติดจอง/รอส่ง", "รอผ่านไฟแนนซ์"];
 
 const SALE_STATUS_BADGE: Record<SaleStatus, string> = {
   "ขายแล้ว":        "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -152,7 +160,8 @@ export default function SalesMain() {
     else setSalesUser(JSON.parse(u));
   }, [router]);
 
-  const available = forklifts.filter(f => f.status === "พร้อมขาย");
+  const available = forklifts.filter(f => SELLABLE_STATUSES.includes(String(f.status).trim()));
+  const readyCount = available.filter(f => String(f.status).trim() === "พร้อมขาย").length;
   const brands     = [...new Set(available.map(f => f.brand))].sort();
   const models     = [...new Set(available.filter(f => !fBrand || f.brand === fBrand).map(f => f.model))].sort();
   const fuels      = [...new Set(available.map(f => f.fuel))].sort();
@@ -445,7 +454,10 @@ export default function SalesMain() {
               <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-3"><Package className="w-7 h-7 text-white" /></div>
               <div>
                 <p className="text-indigo-200 text-sm font-medium">สต็อกพร้อมขาย</p>
-                <p className="text-4xl font-bold leading-tight">{available.length} <span className="text-lg font-semibold text-indigo-300">คัน</span></p>
+                <p className="text-4xl font-bold leading-tight">{readyCount} <span className="text-lg font-semibold text-indigo-300">คัน</span></p>
+                {available.length - readyCount > 0 && (
+                  <p className="text-amber-300 text-xs font-medium mt-0.5">+ ติดจอง {available.length - readyCount} คัน</p>
+                )}
               </div>
             </div>
             <div className="text-right hidden sm:block">
@@ -649,7 +661,7 @@ export default function SalesMain() {
                               <button key={i} onClick={e => { e.stopPropagation(); setLightboxIdx(i); }}
                                 className="relative aspect-square rounded-xl overflow-hidden bg-amber-100 group hover:ring-2 hover:ring-amber-400 transition-all">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={img} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                <img src={driveImg(img)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center"><ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100" /></div>
                               </button>
                             ))}
@@ -666,7 +678,7 @@ export default function SalesMain() {
                               <button key={i} onClick={e => { e.stopPropagation(); setLightboxIdx(receiverPhotos.length + i); }}
                                 className="relative aspect-square rounded-xl overflow-hidden bg-indigo-100 group hover:ring-2 hover:ring-indigo-400 transition-all">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={img} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                <img src={driveImg(img)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center"><ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100" /></div>
                               </button>
                             ))}
@@ -866,7 +878,7 @@ export default function SalesMain() {
           {lightboxIdx > 0 && <button onClick={e => { e.stopPropagation(); setLightboxIdx(lightboxIdx - 1); }} className="absolute left-4 top-1/2 -translate-y-1/2 text-white bg-white/10 hover:bg-white/20 rounded-full p-3"><ChevronLeft className="w-6 h-6" /></button>}
           <div className="max-w-3xl max-h-[80vh]" onClick={e => e.stopPropagation()}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={selectedPhotos[lightboxIdx]} alt="" className="max-w-full max-h-[80vh] object-contain rounded-xl shadow-2xl" />
+            <img src={driveImg(selectedPhotos[lightboxIdx])} alt="" className="max-w-full max-h-[80vh] object-contain rounded-xl shadow-2xl" />
           </div>
           {lightboxIdx < selectedPhotos.length - 1 && <button onClick={e => { e.stopPropagation(); setLightboxIdx(lightboxIdx + 1); }} className="absolute right-4 top-1/2 -translate-y-1/2 text-white bg-white/10 hover:bg-white/20 rounded-full p-3"><ChevronRight className="w-6 h-6" /></button>}
           <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm">{lightboxIdx + 1} / {selectedPhotos.length}</p>
@@ -953,7 +965,7 @@ export default function SalesMain() {
                           <button key={i} onClick={() => setDetailLightboxIdx(i)}
                             className="relative aspect-square rounded-xl overflow-hidden bg-amber-50 group hover:ring-2 hover:ring-amber-400 transition-all">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={img} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            <img src={driveImg(img)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center">
                               <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100" />
                             </div>
@@ -970,7 +982,7 @@ export default function SalesMain() {
                           <button key={i} onClick={() => setDetailLightboxIdx(detailInspPhotos.receiver.length + i)}
                             className="relative aspect-square rounded-xl overflow-hidden bg-indigo-50 group hover:ring-2 hover:ring-indigo-400 transition-all">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={img} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            <img src={driveImg(img)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center">
                               <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100" />
                             </div>
@@ -995,7 +1007,7 @@ export default function SalesMain() {
           )}
           <div className="max-w-3xl max-h-[80vh]" onClick={e => e.stopPropagation()}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={detailInspPhotos.all[detailLightboxIdx]} alt="" className="max-w-full max-h-[80vh] object-contain rounded-xl shadow-2xl" />
+            <img src={driveImg(detailInspPhotos.all[detailLightboxIdx])} alt="" className="max-w-full max-h-[80vh] object-contain rounded-xl shadow-2xl" />
           </div>
           {detailLightboxIdx < detailInspPhotos.all.length - 1 && (
             <button onClick={e => { e.stopPropagation(); setDetailLightboxIdx(detailLightboxIdx + 1); }} className="absolute right-4 top-1/2 -translate-y-1/2 text-white bg-white/10 hover:bg-white/20 rounded-full p-3"><ChevronRight className="w-6 h-6" /></button>

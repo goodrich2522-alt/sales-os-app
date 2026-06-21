@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useApp } from "@/lib/AppContext";
+import { driveImg } from "@/lib/img";
 import { mockTransporterData } from "@/lib/mockData";
 import { InspectionRecord, DeletedInspectionRecord } from "@/lib/types";
 import {
@@ -215,7 +216,7 @@ export default function InspectionsPage() {
                         className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 group hover:ring-2 hover:ring-indigo-400 transition-all"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={img} alt={`รูป ${i + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        <img src={driveImg(img)} alt={`รูป ${i + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                           <ZoomIn className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
@@ -270,7 +271,7 @@ export default function InspectionsPage() {
           {/* image */}
           <div className="max-w-3xl max-h-[80vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={detail.images[lightboxIdx]} alt={`รูป ${lightboxIdx + 1}`} className="max-w-full max-h-[80vh] object-contain rounded-xl shadow-2xl" />
+            <img src={driveImg(detail.images[lightboxIdx])} alt={`รูป ${lightboxIdx + 1}`} className="max-w-full max-h-[80vh] object-contain rounded-xl shadow-2xl" />
           </div>
           {/* next */}
           {lightboxIdx < detail.images.length - 1 && (
@@ -310,7 +311,7 @@ function InspectionCard({
             {rec.images.slice(0, 3).map((img, i) => (
               <div key={i} className="relative overflow-hidden bg-slate-200">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={img} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                <img src={driveImg(img)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                 {i === 2 && rec.images.length > 3 && (
                   <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                     <span className="text-white text-sm font-bold">+{rec.images.length - 3}</span>

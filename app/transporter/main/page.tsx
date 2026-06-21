@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRight, ChevronLeft, Package, History, ImageOff, Hash, Calendar, User, FileText, PackageCheck, Clock, Search, RotateCcw, Building2, Briefcase } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
 import { Forklift, Sale } from "@/lib/types";
+import { driveImg } from "@/lib/img";
 
 type TransporterRole = "ผู้รับรถ" | "ผู้ส่งมอบรถ";
 
@@ -439,7 +440,7 @@ export default function TransporterMain() {
                           <button key={i} onClick={() => setLightbox({ imgs: rec.images, idx: i })}
                             className="relative aspect-square rounded-lg overflow-hidden bg-slate-200 hover:ring-2 hover:ring-amber-400 transition-all">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={img} alt="" className="w-full h-full object-cover" />
+                            <img src={driveImg(img)} alt="" className="w-full h-full object-cover" />
                           </button>
                         ))}
                       </div>
@@ -463,7 +464,7 @@ export default function TransporterMain() {
               className="absolute left-3 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2 transition-all"><ChevronLeft className="w-6 h-6" /></button>
           )}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lightbox.imgs[lightbox.idx]} alt="" className="max-h-[85vh] max-w-full object-contain rounded-xl" onClick={e => e.stopPropagation()} />
+          <img src={driveImg(lightbox.imgs[lightbox.idx])} alt="" className="max-h-[85vh] max-w-full object-contain rounded-xl" onClick={e => e.stopPropagation()} />
           {lightbox.imgs.length > 1 && (
             <>
               <button onClick={e => { e.stopPropagation(); setLightbox(l => l ? { ...l, idx: (l.idx + 1) % l.imgs.length } : l); }}
