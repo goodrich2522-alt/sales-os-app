@@ -35,7 +35,7 @@ export default function TransporterMain() {
   const [receivedDate, setReceivedDate] = useState("");
   const [receiverName, setReceiverName] = useState("");
   const [unitNo, setUnitNo] = useState("");           // SN
-  const [pickedWaitingId, setPickedWaitingId] = useState<string | null>(null); // เลือกรุ่นเมื่อ PI ซ้ำ
+  const [pickedModel, setPickedModel] = useState(""); // เลือก "รุ่น" เมื่อ PI มีหลายรุ่น
 
   // ── ฟอร์มผู้ส่งรถ ──
   const [delCustomer, setDelCustomer] = useState("");  // ค้นหาด้วยชื่อบริษัทลูกค้า
@@ -61,12 +61,14 @@ export default function TransporterMain() {
   const piKey = piNo.trim().toUpperCase();
   const stockMatch = snKey ? (forklifts.find(f => f.unit_no && String(f.unit_no).toUpperCase() === snKey) || null) : null;
   const waitingByPI = (!stockMatch && piKey) ? waitingList.filter(w => String(w.pi_no || "").trim().toUpperCase() === piKey) : [];
-  const needPick = waitingByPI.length > 1;
+  // จัดกลุ่มตามรุ่นภายใน PI — รุ่นเดียว = ใส่ SN ให้คันแรกเลย / หลายรุ่น = ให้เลือกรุ่นก่อน
+  const waitingModels = [...new Set(waitingByPI.map(w => String(w.model || "").trim()))];
+  const needPickModel = waitingModels.length > 1;
   const recvTarget: Forklift | null = stockMatch
     ? stockMatch
-    : waitingByPI.length === 1 ? waitingByPI[0]
-    : needPick ? (waitingByPI.find(w => w.id === pickedWaitingId) || null)
-    : null;
+    : waitingByPI.length === 0 ? null
+    : !needPickModel ? waitingByPI[0]                                              // รุ่นเดียว → คันแรก (FIFO)
+    : (waitingByPI.find(w => String(w.model || "").trim() === pickedModel) || null); // หลายรุ่น → คันแรกของรุ่นที่เลือก
   const recvMode: "stock" | "waiting" | null = stockMatch ? "stock" : (recvTarget ? "waiting" : null);
   const receiverValid = !!(piKey && receivedDate && receiverName.trim() && snKey && recvTarget);
 
@@ -136,7 +138,7 @@ export default function TransporterMain() {
 
   const resetForm = () => {
     setImages([]); setDone(null);
-    setPiNo(""); setReceivedDate(""); setUnitNo(""); setPickedWaitingId("");
+    setPiNo(""); setReceivedDate(""); setUnitNo(""); setPickedModel("");
     setReceiverName(username);
     setDelCustomer(""); setPickedSaleId(null); setSenderName(username); setDeliverDate(""); setSalesOwner("");
   };
@@ -241,7 +243,7 @@ export default function TransporterMain() {
               <div className="flex flex-col gap-3.5">
                 <div>
                   <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1.5"><Hash className="w-3.5 h-3.5 text-amber-500" />เลข PI</label>
-                  <input value={piNo} onChange={e => { setPiNo(e.target.value); setPickedWaitingId(""); }} placeholder="เช่น PI017" className={inp} />
+                  <input value={piNo} onChange={e => { setPiNo(e.target.value); setPickedModel(""); }} placeholder="เช่น PI017" className={inp} />
                 </div>
                 <div>
                   <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1.5"><Hash className="w-3.5 h-3.5 text-amber-500" />SN (ซีเรียลรถ)</label>
@@ -255,19 +257,23 @@ export default function TransporterMain() {
                       <PackageCheck className="w-4 h-4 flex-shrink-0" />
                       <span className="text-xs font-medium">พบรถในสต็อก: <span className="font-bold">{recvTarget!.brand} {recvTarget!.model}</span> — เติม PI/วันรับให้ และเชื่อมไปหน้าขาย</span>
                     </div>
-                  ) : needPick ? (
+                  ) : needPickModel ? (
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-                      <p className="text-xs font-semibold text-amber-700 mb-2 flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" />PI {piKey} มีหลายรุ่น — แตะเลือกคันที่รับ</p>
+                      <p className="text-xs font-semibold text-amber-700 mb-2 flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" />PI {piKey} มีหลายรุ่น — แตะเลือกรุ่นที่รับ</p>
                       <div className="flex flex-col gap-1.5">
-                        {waitingByPI.map(w => (
-                          <button key={w.id} onClick={() => setPickedWaitingId(w.id)}
-                            className={`text-left rounded-lg border-2 px-3 py-2 transition-all ${pickedWaitingId === w.id ? "border-amber-400 bg-white" : "border-slate-200 bg-white hover:border-amber-200"}`}>
-                            <span className="text-sm font-bold text-slate-800">{w.model || "—"}</span>
-                            {w.height ? <span className="text-xs text-slate-500"> · {w.height}</span> : null}
-                            {pickedWaitingId === w.id && <CheckCircle className="w-3.5 h-3.5 text-amber-500 inline ml-1.5" />}
-                          </button>
-                        ))}
+                        {waitingModels.map(m => {
+                          const cnt = waitingByPI.filter(w => String(w.model || "").trim() === m).length;
+                          const sel = pickedModel === m;
+                          return (
+                            <button key={m} onClick={() => setPickedModel(m)}
+                              className={`text-left rounded-lg border-2 px-3 py-2 transition-all flex items-center justify-between ${sel ? "border-amber-400 bg-white" : "border-slate-200 bg-white hover:border-amber-200"}`}>
+                              <span><span className="text-sm font-bold text-slate-800">{m || "—"}</span><span className="text-xs text-slate-500"> · รอรับ {cnt} คัน</span></span>
+                              {sel && <CheckCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />}
+                            </button>
+                          );
+                        })}
                       </div>
+                      {pickedModel && <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1"><PackageCheck className="w-3.5 h-3.5" />เลือก {pickedModel} — ยืนยันแล้วเข้าหน้าขายทันที</p>}
                     </div>
                   ) : recvMode === "waiting" ? (
                     <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5">
