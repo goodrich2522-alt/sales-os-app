@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRight, ChevronLeft, Package, History, ImageOff, Hash, Calendar, User, FileText, PackageCheck, Clock, Search, RotateCcw, Building2, Briefcase } from "lucide-react";
+import { Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRight, ChevronLeft, Package, History, ImageOff, Hash, Calendar, User, FileText, PackageCheck, Clock, Search, RotateCcw, Building2, Briefcase, Trash2 } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
 import { Forklift, Sale } from "@/lib/types";
 import { driveImg } from "@/lib/img";
@@ -26,6 +26,7 @@ export default function TransporterMain() {
   const [role, setRole] = useState<TransporterRole>("ผู้รับรถ");
   const [showHistory, setShowHistory] = useState(false);
   const [histSearch, setHistSearch] = useState("");
+  const [histDeleteId, setHistDeleteId] = useState<string | null>(null); // ยืนยันก่อนลบรายการประวัติ
   const [lightbox, setLightbox] = useState<{ imgs: string[]; idx: number } | null>(null);
   const [images, setImages] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -432,14 +433,24 @@ export default function TransporterMain() {
                 const receiver = (rec.role ?? "ผู้รับรถ") === "ผู้รับรถ";
                 return (
                   <div key={rec.id} className="border border-slate-100 rounded-2xl p-3.5 bg-slate-50/60">
-                    <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center justify-between mb-1.5 gap-2">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${receiver ? "bg-amber-100 text-amber-700" : "bg-indigo-100 text-indigo-700"}`}>{rec.role ?? "ผู้รับรถ"}</span>
                         <span className="font-bold text-slate-800 text-sm truncate">{rec.unit_no}</span>
                       </div>
-                      <span className="text-xs text-slate-400 flex-shrink-0">{rec.date}</span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-xs text-slate-400">{rec.date}</span>
+                        <button onClick={() => setHistDeleteId(rec.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-all" title="ลบรายการนี้"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
                     </div>
                     <p className="text-xs text-slate-500 mb-2">โดย <span className="font-semibold text-slate-700">{rec.transporter_name || "—"}</span></p>
+                    {histDeleteId === rec.id && (
+                      <div className="flex items-center gap-2 mb-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                        <span className="text-xs text-red-700 flex-1">ลบรายการนี้ถาวร? (รูปและข้อมูลทดลองจะหายไป)</span>
+                        <button onClick={() => { deleteInspection(rec.id); setHistDeleteId(null); }} className="text-xs font-bold bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg">ลบเลย</button>
+                        <button onClick={() => setHistDeleteId(null)} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1.5">ยกเลิก</button>
+                      </div>
+                    )}
                     {rec.images && rec.images.length > 0 ? (
                       <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
                         {rec.images.map((img, i) => (

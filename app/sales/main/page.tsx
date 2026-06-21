@@ -221,11 +221,14 @@ export default function SalesMain() {
   }, [mySales, testNotifActive]);
 
   const detailInspPhotos = useMemo(() => {
-    if (!detailSale) return { receiver: [] as string[], deliverer: [] as string[], all: [] as string[] };
+    if (!detailSale) return { receiver: [] as string[], deliverer: [] as string[], all: [] as string[], receiverNames: "", delivererNames: "" };
     const recs = inspections.filter(r => r.unit_no === detailSale.forklift_unit_no);
-    const receiver  = recs.filter(r => r.role === "ผู้รับรถ" || !r.role).flatMap(r => r.images);
-    const deliverer = recs.filter(r => r.role === "ผู้ส่งมอบรถ").flatMap(r => r.images);
-    return { receiver, deliverer, all: [...receiver, ...deliverer] };
+    const recvRecs = recs.filter(r => r.role === "ผู้รับรถ" || !r.role);
+    const delivRecs = recs.filter(r => r.role === "ผู้ส่งมอบรถ");
+    const receiver  = recvRecs.flatMap(r => r.images);
+    const deliverer = delivRecs.flatMap(r => r.images);
+    const names = (rs: typeof recs) => [...new Set(rs.map(r => r.transporter_name).filter(Boolean))].join(", ");
+    return { receiver, deliverer, all: [...receiver, ...deliverer], receiverNames: names(recvRecs), delivererNames: names(delivRecs) };
   }, [detailSale, inspections]);
 
   const validate = () => {
@@ -327,6 +330,8 @@ export default function SalesMain() {
   const selectedInspRecs = selected ? inspections.filter(r => r.unit_no === selected.unit_no) : [];
   const receiverPhotos   = selectedInspRecs.filter(r => r.role === "ผู้รับรถ" || !r.role).flatMap(r => r.images);
   const delivererPhotos  = selectedInspRecs.filter(r => r.role === "ผู้ส่งมอบรถ").flatMap(r => r.images);
+  const receiverNames    = [...new Set(selectedInspRecs.filter(r => r.role === "ผู้รับรถ" || !r.role).map(r => r.transporter_name).filter(Boolean))].join(", ");
+  const delivererNames   = [...new Set(selectedInspRecs.filter(r => r.role === "ผู้ส่งมอบรถ").map(r => r.transporter_name).filter(Boolean))].join(", ");
   const selectedPhotos   = [...receiverPhotos, ...delivererPhotos]; // combined for lightbox
 
   // Settings — standard dropdown handlers
@@ -653,8 +658,8 @@ export default function SalesMain() {
                     <div className="flex flex-col gap-3">
                       {receiverPhotos.length > 0 && (
                         <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
-                          <p className="text-xs font-semibold text-amber-700 mb-2.5 flex items-center gap-1.5">
-                            🚛 รูปจากผู้รับรถ ({receiverPhotos.length} รูป)
+                          <p className="text-xs font-semibold text-amber-700 mb-2.5 flex items-center gap-1.5 flex-wrap">
+                            🚛 รูปจากผู้รับรถ ({receiverPhotos.length} รูป){receiverNames && <span className="font-bold">— ผู้รับ: {receiverNames}</span>}
                           </p>
                           <div className="grid grid-cols-3 gap-2">
                             {receiverPhotos.map((img, i) => (
@@ -670,8 +675,8 @@ export default function SalesMain() {
                       )}
                       {delivererPhotos.length > 0 && (
                         <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
-                          <p className="text-xs font-semibold text-indigo-700 mb-2.5 flex items-center gap-1.5">
-                            📦 รูปจากผู้ส่งมอบรถ ({delivererPhotos.length} รูป)
+                          <p className="text-xs font-semibold text-indigo-700 mb-2.5 flex items-center gap-1.5 flex-wrap">
+                            📦 รูปจากผู้ส่งมอบรถ ({delivererPhotos.length} รูป){delivererNames && <span className="font-bold">— ผู้ส่ง: {delivererNames}</span>}
                           </p>
                           <div className="grid grid-cols-3 gap-2">
                             {delivererPhotos.map((img, i) => (
@@ -959,7 +964,7 @@ export default function SalesMain() {
                   </p>
                   {detailInspPhotos.receiver.length > 0 && (
                     <div className="mb-3">
-                      <p className="text-xs font-semibold text-amber-700 mb-2">🚛 รูปผู้รับรถ ({detailInspPhotos.receiver.length} รูป)</p>
+                      <p className="text-xs font-semibold text-amber-700 mb-2">🚛 รูปผู้รับรถ ({detailInspPhotos.receiver.length} รูป){detailInspPhotos.receiverNames && ` — ผู้รับ: ${detailInspPhotos.receiverNames}`}</p>
                       <div className="grid grid-cols-3 gap-2">
                         {detailInspPhotos.receiver.map((img, i) => (
                           <button key={i} onClick={() => setDetailLightboxIdx(i)}
@@ -976,7 +981,7 @@ export default function SalesMain() {
                   )}
                   {detailInspPhotos.deliverer.length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold text-indigo-700 mb-2">📦 รูปผู้ส่งมอบรถ ({detailInspPhotos.deliverer.length} รูป)</p>
+                      <p className="text-xs font-semibold text-indigo-700 mb-2">📦 รูปผู้ส่งมอบรถ ({detailInspPhotos.deliverer.length} รูป){detailInspPhotos.delivererNames && ` — ผู้ส่ง: ${detailInspPhotos.delivererNames}`}</p>
                       <div className="grid grid-cols-3 gap-2">
                         {detailInspPhotos.deliverer.map((img, i) => (
                           <button key={i} onClick={() => setDetailLightboxIdx(detailInspPhotos.receiver.length + i)}
