@@ -7,7 +7,7 @@ import {
   Search, Fuel, Zap, Filter, ChevronRight, Target,
   Package, Trash2, History, RotateCcw, Pencil, Check, Camera,
   SlidersHorizontal, ImageOff, ZoomIn, ChevronLeft, Plus, ClipboardList,
-  Settings, ChevronDown, Type, ListOrdered, ArrowLeft, Bell, Eye, ChevronUp,
+  Settings, ChevronDown, Type, ListOrdered, ArrowLeft, Bell, Eye, ChevronUp, RefreshCw,
 } from "lucide-react";
 import { PROVINCES, CONTACT_SOURCES } from "@/lib/mockData";
 import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, ContactSource, SaleType } from "@/lib/types";
@@ -80,7 +80,7 @@ function daysUntil(dateStr: string): number {
 export default function SalesMain() {
   const router = useRouter();
   const {
-    forklifts, sales, addSale, deleteSale, inspections, fieldConfig,
+    forklifts, sales, addSale, deleteSale, inspections, fieldConfig, refresh,
     updateFieldOptions,
     addSaleExtraFieldDef, removeSaleExtraFieldDef, renameSaleExtraFieldDef,
     addSaleExtraFieldOption, removeSaleExtraFieldOption, editSaleExtraFieldOption,
@@ -88,6 +88,8 @@ export default function SalesMain() {
   } = useApp();
 
   const [salesUser, setSalesUser] = useState<{ name: string; target_monthly: number } | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = async () => { setRefreshing(true); await refresh(); setTimeout(() => setRefreshing(false), 400); };
   const [search, setSearch]       = useState("");
   const [selected, setSelected]   = useState<Forklift | null>(null);
   const [form, setForm]           = useState(emptyCheckout);
@@ -390,6 +392,10 @@ export default function SalesMain() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={handleRefresh} title="รีเฟรชข้อมูลล่าสุด"
+              className="flex items-center gap-1.5 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-transparent hover:border-emerald-200">
+              <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin text-emerald-600" : ""}`} /><span className="hidden sm:inline">รีเฟรช</span>
+            </button>
             {notifications.length > 0 && (
               <button onClick={() => setShowNotif(!showNotif)}
                 className="relative flex items-center gap-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-amber-200">

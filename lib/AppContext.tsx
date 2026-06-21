@@ -71,6 +71,7 @@ interface AppContextType {
   deleteInspection: (id: string) => void;
   restoreInspection: (id: string) => void;
   purgeInspection: (id: string) => void;
+  refresh: () => Promise<void>;
   // Stock form field config
   updateFieldOptions: (field: DropdownField, options: string[]) => void;
   addCustomFieldDef: (name: string, type?: "text" | "select", options?: string[]) => void;
@@ -186,7 +187,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── Auto-refresh (polling) — ดึงข้อมูลใหม่อัตโนมัติ ~25 วิ ให้ใกล้เรียลไทม์ ──
   useEffect(() => {
     if (!mounted || !api.apiEnabled) return;
-    const POLL_MS = 25_000;
+    const POLL_MS = 15_000;
     const EDIT_GRACE_MS = 10_000; // เพิ่งแก้ในเครื่อง → ข้ามรอบนี้ กันของ optimistic หายชั่วขณะ
 
     const refresh = async () => {
@@ -425,12 +426,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setFieldConfig(prev => ({ ...prev, salesFilterRequests: prev.salesFilterRequests.filter(r => r !== name) }));
   }, []);
 
+  // ดึงข้อมูลใหม่จาก Google Sheets ทันที (ปุ่มรีเฟรชเอง)
+  const refresh = useCallback(async () => {
+    if (!api.apiEnabled) return;
+    try {
+      const data = await api.bootstrap();
+      setForklifts(data.forklifts ?? []);
+      setSales(data.sales ?? []);
+      setInspections((data.inspections ?? []) as InspectionRecord[]);
+      setDeletedInspections((data.deletedInspections ?? []) as DeletedInspectionRecord[]);
+    } catch (e) { console.warn("refresh", e); }
+  }, []);
+
   return (
     <AppContext.Provider value={{
       forklifts, sales, inspections, deletedInspections, fieldConfig,
       addForklift, updateForklift, deleteForklift,
       addSale, deleteSale,
       addInspection, deleteInspection, restoreInspection, purgeInspection,
+      refresh,
       updateFieldOptions,
       addCustomFieldDef, removeCustomFieldDef, renameCustomFieldDef,
       addCustomFieldOption, removeCustomFieldOption, editCustomFieldOption,

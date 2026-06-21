@@ -21,7 +21,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 export default function TransporterMain() {
   const router = useRouter();
-  const { addInspection, deleteInspection, updateForklift, forklifts, sales, inspections } = useApp();
+  const { addInspection, deleteInspection, updateForklift, deleteForklift, forklifts, sales, inspections } = useApp();
   const [username, setUsername] = useState("");
   const [role, setRole] = useState<TransporterRole>("ผู้รับรถ");
   const [showHistory, setShowHistory] = useState(false);
@@ -129,12 +129,25 @@ export default function TransporterMain() {
     setDone({ insId, before: null, label: `ส่งมอบ ${pickedSale.forklift_unit_no} แล้ว` });
   };
 
-  // ยกเลิกรายการล่าสุด — ลบ inspection + คืนสถานะรถ
+  // ยกเลิกรายการล่าสุด — ลบ inspection + เอารถออกจากสต็อก (รถรอรับที่เพิ่งรับ) / คืนค่าเดิม (รถสต็อกเดิม)
   const undoLast = () => {
     if (!done) return;
     deleteInspection(done.insId);
-    if (done.before) updateForklift(done.before);
+    if (done.before) {
+      if (String(done.before.status) === "รอรับ") deleteForklift(done.before.id); // รถที่เพิ่งรับเข้ามา → เอาออกจากสต็อกเลย
+      else updateForklift(done.before);                                            // รถสต็อกเดิม → คืน PI/วันรับเดิม
+    }
     resetForm();
+  };
+
+  // ลบรายการในประวัติ — ลบ inspection + (ถ้าเป็นรายการรับรถ) เอารถออกจากสต็อกด้วย
+  const deleteHistory = (rec: { id: string; unit_no: string; role?: string }) => {
+    deleteInspection(rec.id);
+    if ((rec.role ?? "ผู้รับรถ") === "ผู้รับรถ") {
+      const f = forklifts.find(x => String(x.unit_no).toUpperCase() === String(rec.unit_no).toUpperCase());
+      if (f) deleteForklift(f.id);
+    }
+    setHistDeleteId(null);
   };
 
   const resetForm = () => {
@@ -446,8 +459,8 @@ export default function TransporterMain() {
                     <p className="text-xs text-slate-500 mb-2">โดย <span className="font-semibold text-slate-700">{rec.transporter_name || "—"}</span></p>
                     {histDeleteId === rec.id && (
                       <div className="flex items-center gap-2 mb-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
-                        <span className="text-xs text-red-700 flex-1">ลบรายการนี้ถาวร? (รูปและข้อมูลทดลองจะหายไป)</span>
-                        <button onClick={() => { deleteInspection(rec.id); setHistDeleteId(null); }} className="text-xs font-bold bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg">ลบเลย</button>
+                        <span className="text-xs text-red-700 flex-1">ลบรายการนี้ถาวร?{receiver ? ` + เอารถ ${rec.unit_no} ออกจากสต็อกด้วย` : ""}</span>
+                        <button onClick={() => deleteHistory(rec)} className="text-xs font-bold bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg">ลบเลย</button>
                         <button onClick={() => setHistDeleteId(null)} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1.5">ยกเลิก</button>
                       </div>
                     )}

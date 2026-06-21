@@ -8,10 +8,7 @@ import {
   ChevronRight, User, Lock, Eye, EyeOff, X, Calendar, MapPin,
 } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
-import {
-  mockMonthlySales, mockSalesLeaderboard, mockBrandShare,
-  mockTopModels, mockPaymentTypes, getRegion,
-} from "@/lib/mockData";
+import { getRegion } from "@/lib/mockData";
 import { buildStaffMonthly, buildStaffWeekly, buildAllMonthlyWeekly, MONTH_LABELS } from "@/components/charts/Charts";
 import { Sale } from "@/lib/types";
 import GoogleLoginButton, { type GoogleUser } from "@/components/GoogleLoginButton";
@@ -45,9 +42,7 @@ const SaleTypeChart = dynamic(
   { ssr: false, loading: () => <ChartSkeleton /> }
 );
 
-const totalRevenue = mockMonthlySales.reduce((s, m) => s + m.revenue, 0);
-const totalUnits   = mockMonthlySales.reduce((s, m) => s + m.units, 0);
-const avgRevenue   = Math.round(totalRevenue / mockMonthlySales.length);
+const MONTHS_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 
 function fmt(n: number)  { return Number(n).toLocaleString("th-TH"); }
 function fmtM(n: number) { return (n / 1_000_000).toFixed(2) + " ล."; }
@@ -77,10 +72,11 @@ export default function Dashboard() {
   const [dashAuth, setDashAuth] = useState(false);
 
   const { sales, forklifts } = useApp();
-  const staffNames = Array.from(
-    new Set([...mockSalesLeaderboard.map((l) => l.name), ...sales.map((s) => s.sales_staff)])
-  );
-  const [selectedStaff, setSelectedStaff] = useState(mockSalesLeaderboard[0]?.name ?? "");
+  const staffNames = Array.from(new Set(sales.map((s) => s.sales_staff).filter(Boolean)));
+  const [selectedStaff, setSelectedStaff] = useState("");
+  useEffect(() => {
+    if (!selectedStaff) { const first = sales.find((s) => s.sales_staff)?.sales_staff; if (first) setSelectedStaff(first); }
+  }, [sales, selectedStaff]);
   const [drillMonth, setDrillMonth] = useState<string | null>(null);
   const [globalDrillMonth, setGlobalDrillMonth] = useState<string | null>(null);
   const [regionModal, setRegionModal] = useState<string | null>(null);
@@ -151,6 +147,35 @@ export default function Dashboard() {
       .sort((a, b) => b[1].count - a[1].count)
       .map(([type, d]) => ({ type, count: d.count, revenue: d.revenue, color: COLORS[type] ?? "#64748B" }));
   }, [sales]);
+
+  // ── สรุปจากข้อมูลจริง (sales) ────────────────────────────────────────────────
+  const realMonthly = useMemo(() => {
+    const m = MONTHS_TH.map((mn) => ({ month: mn, revenue: 0, units: 0 }));
+    sales.forEach((s) => { const d = new Date(s.created_at); if (!isNaN(d.getTime())) { const i = d.getMonth(); m[i].revenue += s.actual_sale || 0; m[i].units += 1; } });
+    return m;
+  }, [sales]);
+  const realPaymentMonthly = useMemo(() => {
+    const m = MONTHS_TH.map((mn) => ({ month: mn, cash: 0, finance: 0 }));
+    sales.forEach((s) => { const d = new Date(s.created_at); if (isNaN(d.getTime())) return; const i = d.getMonth(); if (s.payment_type === "ไฟแนนซ์") m[i].finance += 1; else m[i].cash += 1; });
+    return m;
+  }, [sales]);
+  const realLeaderboard = useMemo(() => {
+    const map: Record<string, { name: string; sales: number; revenue: number }> = {};
+    sales.forEach((s) => { const n = s.sales_staff || "ไม่ระบุ"; if (!map[n]) map[n] = { name: n, sales: 0, revenue: 0 }; map[n].sales += 1; map[n].revenue += s.actual_sale || 0; });
+    const badges = ["🥇", "🥈", "🥉"];
+    return Object.values(map).sort((a, b) => b.revenue - a.revenue).map((x, i) => ({ rank: i + 1, ...x, badge: badges[i] ?? "" }));
+  }, [sales]);
+  const realBrandShare = useMemo(() => {
+    const COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4", "#EC4899", "#64748B"];
+    const map: Record<string, number> = {};
+    sales.forEach((s) => { const b = s.forklift_brand || "อื่นๆ"; map[b] = (map[b] ?? 0) + 1; });
+    const total = sales.length || 1;
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([name, count], i) => ({ name, value: count, pct: Math.round((count / total) * 100), color: COLORS[i % COLORS.length] }));
+  }, [sales]);
+  const totalRevenue = sales.reduce((a, s) => a + (s.actual_sale || 0), 0);
+  const totalUnits = sales.length;
+  const monthsWithData = realMonthly.filter((m) => m.units > 0).length || 1;
+  const avgRevenue = Math.round(totalRevenue / monthsWithData);
 
   const handleDashGoogle = (u: GoogleUser) => {
     localStorage.setItem("dash_auth", "1");
@@ -247,9 +272,9 @@ export default function Dashboard() {
       <main className="max-w-7xl mx-auto px-4 py-6 flex flex-col gap-5">
         {/* KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard icon={<DollarSign className="w-5 h-5" />} label="รายได้รวม"    value={`฿${fmtM(totalRevenue)}`} sub="ปี 2024"       color="text-blue-700"    iconBg="bg-blue-600"    accent="border-l-blue-500" />
-          <KPICard icon={<Package className="w-5 h-5" />}    label="ขายได้"        value={`${totalUnits} คัน`}       sub="ทั้งปี"       color="text-emerald-700" iconBg="bg-emerald-500" accent="border-l-emerald-500" />
-          <KPICard icon={<TrendingUp className="w-5 h-5" />}  label="เฉลี่ย/เดือน" value={`฿${fmtM(avgRevenue)}`}   sub="avg monthly"   color="text-violet-700"  iconBg="bg-violet-600"  accent="border-l-violet-500" />
+          <KPICard icon={<DollarSign className="w-5 h-5" />} label="รายได้รวม"    value={`฿${fmtM(totalRevenue)}`} sub="จากดีลจริง"   color="text-blue-700"    iconBg="bg-blue-600"    accent="border-l-blue-500" />
+          <KPICard icon={<Package className="w-5 h-5" />}    label="ขายได้"        value={`${totalUnits} คัน`}       sub="ดีลทั้งหมด"   color="text-emerald-700" iconBg="bg-emerald-500" accent="border-l-emerald-500" />
+          <KPICard icon={<TrendingUp className="w-5 h-5" />}  label="เฉลี่ย/เดือน" value={`฿${fmtM(avgRevenue)}`}   sub="เฉพาะเดือนมียอด" color="text-violet-700"  iconBg="bg-violet-600"  accent="border-l-violet-500" />
           <KPICard icon={<Users className="w-5 h-5" />}       label="พนักงานขาย"   value={`${staffNames.length} คน`}  sub="active staff"  color="text-orange-700"  iconBg="bg-orange-500"  accent="border-l-orange-500" />
         </div>
 
@@ -266,7 +291,7 @@ export default function Dashboard() {
             </div>
             <div className="h-60 mt-5">
               <SalesRevenueChart
-                data={mockMonthlySales}
+                data={realMonthly}
                 onBarClick={(month) => setGlobalDrillMonth(globalDrillMonth === month ? null : month)}
                 activeMonth={globalDrillMonth ?? undefined}
               />
@@ -296,8 +321,9 @@ export default function Dashboard() {
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
             <SectionHeader icon={<Award className="w-4 h-4 text-amber-500" />} title="อันดับยอดขาย" sub="Top Sales Reps" iconBg="bg-amber-50" />
             <div className="flex flex-col gap-2 mt-5">
-              {mockSalesLeaderboard.map((s) => (
-                <div key={s.rank} className={`flex items-center gap-3 rounded-xl p-3 border ${s.rank <= 3 ? "bg-amber-50/60 border-amber-100" : "bg-slate-50 border-slate-100"}`}>
+              {realLeaderboard.length === 0 && <p className="text-xs text-slate-400 text-center py-4">ยังไม่มีข้อมูลการขาย</p>}
+              {realLeaderboard.slice(0, 8).map((s) => (
+                <div key={s.name} className={`flex items-center gap-3 rounded-xl p-3 border ${s.rank <= 3 ? "bg-amber-50/60 border-amber-100" : "bg-slate-50 border-slate-100"}`}>
                   <span className="text-base w-7 text-center flex-shrink-0">{s.badge || <span className="text-xs font-bold text-slate-400">#{s.rank}</span>}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-slate-800 truncate">{s.name}</p>
@@ -395,12 +421,12 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
             <SectionHeader icon={<Package className="w-4 h-4 text-indigo-600" />} title="สัดส่วนยี่ห้อ" sub="Brand Market Share" iconBg="bg-indigo-50" />
-            <div className="h-48 mt-2"><BrandShareChart data={mockBrandShare} /></div>
+            <div className="h-48 mt-2"><BrandShareChart data={realBrandShare} /></div>
             <div className="grid grid-cols-2 gap-1.5 mt-2">
-              {mockBrandShare.map((b) => (
+              {realBrandShare.map((b) => (
                 <div key={b.name} className="flex items-center gap-1.5 text-xs text-slate-600">
                   <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: b.color }} />
-                  <span className="truncate">{b.name} <span className="text-slate-400">{b.value}%</span></span>
+                  <span className="truncate">{b.name} <span className="text-slate-400">{b.value} คัน ({b.pct}%)</span></span>
                 </div>
               ))}
             </div>
@@ -408,7 +434,8 @@ export default function Dashboard() {
           <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
             <SectionHeader icon={<BarChart3 className="w-4 h-4 text-indigo-600" />} title="รุ่นขายดี" sub="Top Selling Models — คลิก % เพื่อดูสัดส่วน" iconBg="bg-indigo-50" />
             <div className="flex flex-col gap-3.5 mt-5">
-              {(liveTopModels.length > 0 ? liveTopModels : mockTopModels.map((m, i) => ({ model: m.model, count: m.sold, pct: Math.round(m.sold / mockTopModels.reduce((a, b) => a + b.sold, 0) * 100) }))).map((m, i) => (
+              {liveTopModels.length === 0 && <p className="text-xs text-slate-400 text-center py-4">ยังไม่มีข้อมูลการขาย</p>}
+              {liveTopModels.map((m, i) => (
                 <div key={m.model} className="flex items-center gap-3">
                   <span className={`text-xs font-bold w-6 text-center flex-shrink-0 ${i === 0 ? "text-amber-500" : "text-slate-400"}`}>#{i + 1}</span>
                   <div className="flex-1">
@@ -428,7 +455,7 @@ export default function Dashboard() {
               ))}
               <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                 <span className="text-xs text-slate-500">รวมทั้งหมด</span>
-                <span className="text-sm font-bold text-slate-700">{sales.length > 0 ? sales.length : mockTopModels.reduce((a, b) => a + b.sold, 0)} คัน</span>
+                <span className="text-sm font-bold text-slate-700">{sales.length} คัน</span>
               </div>
             </div>
           </div>
@@ -485,7 +512,7 @@ export default function Dashboard() {
           </div>
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
             <SectionHeader icon={<DollarSign className="w-4 h-4 text-orange-600" />} title="เปรียบเทียบประเภทชำระ" sub="Cash vs Finance" iconBg="bg-orange-50" />
-            <div className="h-52 mt-5"><PaymentTypeChart data={mockPaymentTypes} /></div>
+            <div className="h-52 mt-5"><PaymentTypeChart data={realPaymentMonthly} /></div>
           </div>
         </div>
 
