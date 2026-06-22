@@ -10,6 +10,7 @@ import {
   DEFAULT_CUSTOMER_TYPES, FINANCE_COMPANIES, SALE_TYPES,
 } from "./mockData";
 import * as api from "./api";
+import { supabase } from "./supabaseClient";
 
 // ── Field configuration ───────────────────────────────────────────────────────
 export interface FieldConfig {
@@ -184,31 +185,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
-  // ── Auto-refresh (polling) — ดึงข้อมูลใหม่อัตโนมัติ ~25 วิ ให้ใกล้เรียลไทม์ ──
+  // ── Realtime (Supabase) — เปลี่ยนที่ไหนเด้งทุกเครื่องทันที ──
   useEffect(() => {
     if (!mounted || !api.apiEnabled) return;
-    const POLL_MS = 15_000;
-    const EDIT_GRACE_MS = 10_000; // เพิ่งแก้ในเครื่อง → ข้ามรอบนี้ กันของ optimistic หายชั่วขณะ
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
-    const refresh = async () => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return; // แท็บไม่ได้เปิด
-      if (Date.now() - lastLocalEditRef.current < EDIT_GRACE_MS) return;                       // เพิ่งแก้ รอเขียนเสร็จ
+    const pull = async () => {
       try {
         const data = await api.bootstrap();
         setForklifts(data.forklifts ?? []);
         setSales(data.sales ?? []);
         setInspections((data.inspections ?? []) as InspectionRecord[]);
         setDeletedInspections((data.deletedInspections ?? []) as DeletedInspectionRecord[]);
-        // ไม่อัปเดต fieldConfig จาก poll — กัน loop การเซฟกลับ (ตั้งค่าเปลี่ยนไม่บ่อย)
-      } catch (e) {
-        console.warn("auto-refresh", e);
-      }
+        // ไม่อัปเดต fieldConfig จาก realtime — กัน loop การเซฟกลับ
+      } catch (e) { console.warn("realtime pull", e); }
     };
+    const onChange = () => { clearTimeout(timer); timer = setTimeout(pull, 300); }; // debounce รวมหลาย event
 
-    const id = setInterval(refresh, POLL_MS);
-    const onVisible = () => { if (document.visibilityState === "visible") refresh(); }; // กลับมาที่แท็บ → รีเฟรชทันที
+    const channel = supabase?.channel("salesos-db")
+      .on("postgres_changes", { event: "*", schema: "public", table: "forklifts" }, onChange)
+      .on("postgres_changes", { event: "*", schema: "public", table: "sales" }, onChange)
+      .on("postgres_changes", { event: "*", schema: "public", table: "inspections" }, onChange)
+      .subscribe();
+
+    // สำรอง: กลับมาที่แท็บ = ดึงสด + poll เบาๆ 60 วิ กัน realtime หลุด
+    const onVisible = () => { if (document.visibilityState === "visible") pull(); };
     document.addEventListener("visibilitychange", onVisible);
-    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
+    const id = setInterval(() => { if (document.visibilityState === "visible") pull(); }, 60_000);
+
+    return () => {
+      if (channel) supabase?.removeChannel(channel);
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(id); clearTimeout(timer);
+    };
   }, [mounted]);
 
   useEffect(() => { if (mounted) lsSave(LS_KEYS.forklifts, forklifts); }, [forklifts, mounted]);

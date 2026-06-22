@@ -32,8 +32,10 @@ jobs:
       - name: Build static site
         run: npm run build
         env:
-          # GAS URL ตั้งใน repo: Settings > Secrets and variables > Actions > Variables
-          NEXT_PUBLIC_GAS_URL: ${{ vars.NEXT_PUBLIC_GAS_URL }}
+          # ตั้งใน repo: Settings > Secrets and variables > Actions > Variables
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_GAS_URL: ${{ vars.NEXT_PUBLIC_GAS_URL }}  # ยังใช้สำหรับอัปโหลดรูป
           # basePath ฮาร์ดโค้ดให้ตรงชื่อ repo (sales-os-app.github.io) — ไม่ต้องพึ่ง variable
           NEXT_PUBLIC_BASE_PATH: /sales-os-app.github.io
 
