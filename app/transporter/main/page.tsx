@@ -114,12 +114,15 @@ export default function TransporterMain() {
     const rd = thaiDate(receivedDate);
     addInspection({ id: insId, unit_no: snKey, transporter_name: receiverName.trim() || username, date: receivedDate || today(), images: [...images], role: "ผู้รับรถ" });
     const before = { ...recvTarget };
-    if (recvMode === "waiting") {
-      updateForklift({ ...recvTarget, unit_no: snKey, pi_no: piNo.trim() || recvTarget.pi_no, received_date: rd || recvTarget.received_date, status: "พร้อมขาย" });
-    } else {
-      updateForklift({ ...recvTarget, pi_no: piNo.trim() || recvTarget.pi_no, received_date: rd || recvTarget.received_date });
-    }
-    setDone({ insId, before, label: `รับรถ ${snKey} แล้ว` + (recvMode === "waiting" ? " → เข้าหน้าขาย" : "") });
+    // รับรถ = รถมาถึงพร้อมขาย → ตั้ง "พร้อมขาย" เสมอ (ทั้งรถรอรับและรถสต็อก) → ขึ้นหน้าเซลล์
+    updateForklift({
+      ...recvTarget,
+      unit_no: recvMode === "waiting" ? snKey : recvTarget.unit_no,
+      pi_no: piNo.trim() || recvTarget.pi_no,
+      received_date: rd || recvTarget.received_date,
+      status: "พร้อมขาย",
+    });
+    setDone({ insId, before, label: `รับรถ ${snKey} แล้ว → เข้าหน้าขาย (พร้อมขาย)` });
   };
 
   const submitDeliverer = () => {
