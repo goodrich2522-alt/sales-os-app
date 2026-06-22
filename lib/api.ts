@@ -25,8 +25,9 @@ export interface BootstrapData {
 }
 
 async function apiGet<T>(action: string, params: Record<string, string> = {}): Promise<T> {
-  const qs = new URLSearchParams({ action, ...params }).toString();
-  const res = await fetch(`${GAS_URL}?${qs}`, { method: "GET", redirect: "follow" });
+  // _t = cache-buster กัน browser/CDN cache ข้อมูลเก่า (รีหน้าแล้วต้องได้ข้อมูลสด)
+  const qs = new URLSearchParams({ action, ...params, _t: String(Date.now()) }).toString();
+  const res = await fetch(`${GAS_URL}?${qs}`, { method: "GET", redirect: "follow", cache: "no-store" });
   const json = (await res.json()) as ApiResponse<T>;
   if (!json.ok) throw new Error(json.error || "API error");
   return json.data as T;
