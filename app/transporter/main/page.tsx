@@ -132,14 +132,11 @@ export default function TransporterMain() {
     setDone({ insId, before: null, label: `ส่งมอบ ${pickedSale.forklift_unit_no} แล้ว` });
   };
 
-  // ยกเลิกรายการล่าสุด — ลบ inspection + เอารถออกจากสต็อก (รถรอรับที่เพิ่งรับ) / คืนค่าเดิม (รถสต็อกเดิม)
+  // ยกเลิกรายการล่าสุด — ลบ inspection + คืนรถกลับสถานะก่อนรับ (รถรอรับ → กลับเป็น "รอรับ" ไม่ลบทิ้ง)
   const undoLast = () => {
     if (!done) return;
     deleteInspection(done.insId);
-    if (done.before) {
-      if (String(done.before.status) === "รอรับ") deleteForklift(done.before.id); // รถที่เพิ่งรับเข้ามา → เอาออกจากสต็อกเลย
-      else updateForklift(done.before);                                            // รถสต็อกเดิม → คืน PI/วันรับเดิม
-    }
+    if (done.before) updateForklift(done.before); // revert: รอรับ→รอรับ / สต็อกเดิม→ค่าเดิม
     resetForm();
   };
 
