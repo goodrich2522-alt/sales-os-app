@@ -133,6 +133,7 @@ export default function SalesMain() {
 
   // Category-specific spec filters (shown below category tabs)
   const [fSpecModel, setFSpecModel]   = useState("");
+  const [fSpecSN, setFSpecSN]         = useState("");
   const [fForkLength, setFForkLength] = useState("");
   const [fForkWidth, setFForkWidth]   = useState("");
 
@@ -169,7 +170,7 @@ export default function SalesMain() {
   const fuels      = [...new Set(available.map(f => f.fuel))].sort();
   const capacities = [...new Set(available.filter(f => (!fBrand || f.brand === fBrand) && (!fModel || f.model === fModel)).map(f => f.capacity).filter(Boolean))].sort();
   const heights    = [...new Set(available.filter(f => (!fBrand || f.brand === fBrand) && (!fModel || f.model === fModel)).map(f => f.height).filter(Boolean))].sort();
-  const hasFilter  = !!(fFuel || fCapacity || fHeight || search || fSpecModel || fForkLength || fForkWidth);
+  const hasFilter  = !!(fFuel || fCapacity || fHeight || search || fSpecModel || fSpecSN || fForkLength || fForkWidth);
 
   // แปลงค่าใดๆ เป็น string ตัวพิมพ์เล็กอย่างปลอดภัย (กัน .toLowerCase บน undefined → จอเด้ง)
   const hay = (v: unknown) => (v == null ? "" : String(v)).toLowerCase();
@@ -184,6 +185,7 @@ export default function SalesMain() {
     const cat = activeCategory === "all" || (f.vehicle_category ?? "Forklift") === activeCategory;
     const spec =
       (!fSpecModel  || hay(f.model).includes(fSpecModel.toLowerCase())) &&
+      (!fSpecSN     || hay(f.unit_no).includes(fSpecSN.toLowerCase())) &&
       (!fForkLength || hay(f.fork_length).includes(fForkLength.toLowerCase())) &&
       (!fForkWidth  || hay([f.fork_length, f.attachments, JSON.stringify(f.custom_fields ?? {})].join(" ")).includes(fForkWidth.toLowerCase()));
     return base && cat && spec;
@@ -192,7 +194,7 @@ export default function SalesMain() {
   const clearFilters = () => {
     setFBrand(""); setFModel(""); setFFuel(""); setFCapacity(""); setFHeight("");
     setSearch(""); setExtraFilterVals({});
-    setFSpecModel(""); setFForkLength(""); setFForkWidth("");
+    setFSpecModel(""); setFSpecSN(""); setFForkLength(""); setFForkWidth("");
   };
   const mySales = salesUser ? sales.filter(s => s.sales_staff === salesUser.name) : [];
 
@@ -524,7 +526,7 @@ export default function SalesMain() {
               ? available.length
               : available.filter(f => (f.vehicle_category ?? "Forklift") === key).length;
             return (
-              <button key={key} onClick={() => { setActiveCategory(key); setFSpecModel(""); setFForkLength(""); setFForkWidth(""); setFFuel(""); setFCapacity(""); setFHeight(""); }}
+              <button key={key} onClick={() => { setActiveCategory(key); setFSpecModel(""); setFSpecSN(""); setFForkLength(""); setFForkWidth(""); setFFuel(""); setFCapacity(""); setFHeight(""); }}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold border transition-all flex-shrink-0 shadow-sm ${activeCategory === key ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-700"}`}>
                 <span>{icon}</span>
                 <span>{label}</span>
@@ -545,6 +547,7 @@ export default function SalesMain() {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {[
                 { label: "รุ่นรถ", val: fSpecModel, set: setFSpecModel, ph: "เช่น CPCD30..." },
+                { label: "SN (ซีเรียลรถ)", val: fSpecSN, set: setFSpecSN, ph: "เช่น 010253N9305..." },
                 ...(activeCategory === "Forklift" ? [{ label: "ประเภทเชื้อเพลิง", val: fFuel, set: setFFuel, ph: "เช่น Diesel..." }] : []),
                 { label: "น้ำหนักยก", val: fCapacity, set: setFCapacity, ph: "เช่น 2500 / 3 ตัน..." },
                 { label: "ความสูงยก", val: fHeight, set: setFHeight, ph: "เช่น M400..." },
