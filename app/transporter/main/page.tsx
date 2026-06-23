@@ -38,9 +38,8 @@ export default function TransporterMain() {
   const [unitNo, setUnitNo] = useState("");           // SN
   const [pickedModel, setPickedModel] = useState(""); // เลือก "รุ่น" เมื่อ PI มีหลายรุ่น
 
-  // ── ฟอร์มผู้ส่งรถ ──
-  const [delCustomer, setDelCustomer] = useState("");  // ค้นหาด้วยชื่อบริษัทลูกค้า
-  const [pickedSaleId, setPickedSaleId] = useState<string | null>(null);
+  // ── ฟอร์มผู้ส่งรถ (กรอก SN → โชว์รายละเอียดรถให้ตรวจก่อนส่ง) ──
+  const [delSN, setDelSN] = useState("");
   const [senderName, setSenderName] = useState("");
   const [deliverDate, setDeliverDate] = useState("");
   const [salesOwner, setSalesOwner] = useState("");
@@ -73,14 +72,28 @@ export default function TransporterMain() {
   const recvMode: "stock" | "waiting" | null = stockMatch ? "stock" : (recvTarget ? "waiting" : null);
   const receiverValid = !!(piKey && receivedDate && receiverName.trim() && snKey && recvTarget);
 
-  // ===== ผู้ส่งรถ: ค้นหาดีลที่ขายแล้ว =====
-  const matchingSales: Sale[] = delCustomer.trim()
-    ? sales.filter(s => String(s.customer_name || "").toLowerCase().includes(delCustomer.trim().toLowerCase())).slice(0, 12)
-    : [];
-  const pickedSale = pickedSaleId ? sales.find(s => s.id === pickedSaleId) || null : null;
-  const delValid = !!(pickedSale && senderName.trim() && deliverDate);
+  // ===== ผู้ส่งรถ: กรอก SN → หา รถ + ดีล =====
+  const delKey = delSN.trim().toUpperCase();
+  const delFork = delKey ? (forklifts.find(f => f.unit_no && String(f.unit_no).toUpperCase() === delKey) || null) : null;
+  const delSale: Sale | null = delKey
+    ? (sales.filter(s => String(s.forklift_unit_no || "").toUpperCase() === delKey)
+        .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))[0] || null)
+    : null;
+  const delValid = !!(delFork && senderName.trim() && deliverDate);
+  const targetReady = isReceiver ? !!recvTarget : !!delFork;
 
-  const targetReady = isReceiver ? !!recvTarget : !!pickedSale;
+  // รหัสสเปกรถ (รุ่น/เสา/วาล์ว/งา/อุปกรณ์/พิกัด/เชื้อเพลิง)
+  const specCode = (f: Forklift) => [f.model, f.height, f.control_type, f.fork_length, f.attachments, f.capacity_kg, f.fuel]
+    .map(v => (v == null ? "" : String(v)).trim()).filter(Boolean).join(" / ");
+
+  // กรอก SN ผู้ส่ง → เติมชื่อเซลล์จากดีลให้อัตโนมัติ
+  const handleDelSnChange = (v: string) => {
+    setDelSN(v);
+    const k = v.trim().toUpperCase();
+    const sale = sales.filter(s => String(s.forklift_unit_no || "").toUpperCase() === k)
+      .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))[0];
+    setSalesOwner(sale?.sales_staff || "");
+  };
 
   // ===== รูป =====
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -126,10 +139,10 @@ export default function TransporterMain() {
   };
 
   const submitDeliverer = () => {
-    if (!pickedSale) return;
+    if (!delFork) return;
     const insId = `ins_${Date.now()}`;
-    addInspection({ id: insId, unit_no: pickedSale.forklift_unit_no, transporter_name: senderName.trim() || username, date: deliverDate || today(), images: [...images], role: "ผู้ส่งมอบรถ" });
-    setDone({ insId, before: null, label: `ส่งมอบ ${pickedSale.forklift_unit_no} แล้ว` });
+    addInspection({ id: insId, unit_no: delFork.unit_no, transporter_name: senderName.trim() || username, date: deliverDate || today(), images: [...images], role: "ผู้ส่งมอบรถ" });
+    setDone({ insId, before: null, label: `ส่งมอบ ${delFork.unit_no} แล้ว` });
   };
 
   // ยกเลิกรายการล่าสุด — ลบ inspection + คืนรถกลับสถานะก่อนรับ (รถรอรับ → กลับเป็น "รอรับ" ไม่ลบทิ้ง)
@@ -154,7 +167,7 @@ export default function TransporterMain() {
     setImages([]); setDone(null);
     setPiNo(""); setReceivedDate(""); setUnitNo(""); setPickedModel("");
     setReceiverName(username);
-    setDelCustomer(""); setPickedSaleId(null); setSenderName(username); setDeliverDate(""); setSalesOwner("");
+    setDelSN(""); setSenderName(username); setDeliverDate(""); setSalesOwner("");
   };
 
   const switchRole = (r: TransporterRole) => { setRole(r); resetForm(); };
@@ -317,37 +330,34 @@ export default function TransporterMain() {
           /* ============ ผู้ส่งมอบรถ ============ */
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
             <h2 className="text-base font-bold text-slate-800 mb-1 flex items-center gap-2"><FileText className="w-4 h-4 text-indigo-500" />ข้อมูลการส่งมอบรถ</h2>
-            <p className="text-xs text-slate-500 mb-4">พิมพ์ชื่อลูกค้าเพื่อหาดีลที่จะไปส่ง เลือกคัน แล้วกรอกข้อมูล + ถ่ายรูป</p>
+            <p className="text-xs text-slate-500 mb-4">กรอก SN ของรถที่จะส่ง ระบบจะขึ้นรายละเอียดให้ตรวจเช็คก่อนส่ง ถ้าไม่ถูกกดยกเลิกได้</p>
             <div className="flex flex-col gap-3.5">
               <div>
-                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1.5"><Building2 className="w-3.5 h-3.5 text-indigo-500" />ชื่อบริษัทลูกค้าที่ไปส่ง</label>
-                <div className="relative">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input value={delCustomer} onChange={e => { setDelCustomer(e.target.value); setPickedSaleId(null); }} placeholder="พิมพ์ชื่อลูกค้า..."
-                    className="w-full pl-10 pr-4 py-3 border border-slate-200 hover:border-slate-300 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all" />
-                </div>
-                {/* ผลค้นหาดีล */}
-                {delCustomer.trim() && !pickedSale && (
-                  <div className="mt-2 flex flex-col gap-1.5 max-h-56 overflow-y-auto">
-                    {matchingSales.length === 0 && <p className="text-xs text-slate-400 px-1 py-2">ไม่พบดีลของลูกค้านี้</p>}
-                    {matchingSales.map(s => (
-                      <button key={s.id} onClick={() => { setPickedSaleId(s.id); setSalesOwner(s.sales_staff || ""); }}
-                        className="text-left rounded-xl border-2 border-slate-200 bg-slate-50 hover:border-indigo-300 hover:bg-indigo-50/40 px-3 py-2.5 transition-all">
-                        <p className="text-sm font-bold text-slate-800 truncate">{s.customer_name}</p>
-                        <p className="text-xs text-slate-500 truncate">{s.forklift_brand} {s.forklift_model} ({s.forklift_unit_no}) · เซลล์ {s.sales_staff || "—"}</p>
-                      </button>
-                    ))}
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1.5"><Hash className="w-3.5 h-3.5 text-indigo-500" />SN (ซีเรียลรถ)</label>
+                <input value={delSN} onChange={e => handleDelSnChange(e.target.value)} placeholder="เช่น 010503T1726"
+                  className="w-full border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all" />
+                {delKey && (delFork ? (
+                  <div className="mt-2 bg-indigo-50 border border-indigo-200 rounded-xl p-3.5">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-bold text-indigo-700 flex items-center gap-1.5"><PackageCheck className="w-3.5 h-3.5" />ตรวจเช็ครถก่อนส่ง</p>
+                      <button onClick={() => { setDelSN(""); setSalesOwner(""); }} className="text-indigo-400 hover:text-red-500" title="ยกเลิก"><X className="w-4 h-4" /></button>
+                    </div>
+                    <div className="flex flex-col gap-1 text-sm">
+                      <p className="font-bold text-slate-800">{delFork.brand} {delFork.model}</p>
+                      <p className="text-xs text-slate-600"><span className="text-slate-400">รหัสสเปก:</span> {specCode(delFork) || "—"}</p>
+                      <p className="text-xs text-slate-600"><span className="text-slate-400">ลูกค้า:</span> {delSale?.customer_name || "—"} · <span className="text-slate-400">เซลล์:</span> {delSale?.sales_staff || "—"}</p>
+                      <p className="text-xs text-slate-600"><span className="text-slate-400">สถานะ:</span> {delFork.status || "—"}</p>
+                    </div>
                   </div>
-                )}
-                {pickedSale && (
-                  <div className="mt-2 flex items-center justify-between gap-2 text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-xl px-3.5 py-2.5">
-                    <span className="text-xs font-medium min-w-0 truncate">เลือกแล้ว: <span className="font-bold">{pickedSale.customer_name}</span> · {pickedSale.forklift_model} ({pickedSale.forklift_unit_no})</span>
-                    <button onClick={() => { setPickedSaleId(null); }} className="text-indigo-400 hover:text-red-500 flex-shrink-0"><X className="w-4 h-4" /></button>
+                ) : (
+                  <div className="mt-2 flex items-center gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2.5">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <span className="text-xs">ไม่พบรถ SN นี้ในระบบ — เช็คเลขให้ตรง</span>
                   </div>
-                )}
+                ))}
               </div>
 
-              {pickedSale && (
+              {delFork && (
                 <>
                   <div>
                     <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1.5"><User className="w-3.5 h-3.5 text-indigo-500" />ผู้ส่งรถ</label>

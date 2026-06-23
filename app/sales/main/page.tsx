@@ -657,6 +657,12 @@ export default function SalesMain() {
                         </div>
                       ))}
                     </div>
+                    <div className="mt-2.5 pt-2.5 border-t border-slate-200">
+                      <span className="text-[11px] text-slate-400 block">รหัสสเปก</span>
+                      <span className="text-slate-800 font-medium break-words text-sm">
+                        {[selected.model, selected.height, selected.control_type, selected.fork_length, selected.attachments, selected.capacity_kg, selected.fuel].map(v => (v == null ? "" : String(v)).trim()).filter(Boolean).join(" / ") || "—"}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Photos split by role */}
