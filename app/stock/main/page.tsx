@@ -24,20 +24,35 @@ type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraField
 const FIELD_LABELS: Record<DropdownField, string> = {
   brands: "ยี่ห้อ",
   vehicleGroups: "กลุ่มรถ",
-  fuelTypes: "เชื้อเพลิง",
+  fuelTypes: "พลังงาน",
   controlTypes: "ประเภทคอนโทรล",
   poStatuses: "สถานะสั่งซื้อ",
   locations: "โลเคชั่น",
   stockStatuses: "สถานะ Stock",
   customerTypes: "ประเภทลูกค้า",
   financeCompanies: "บริษัทไฟแนนซ์",
+  capacityOptions: "น้ำหนักยก (กก.)",
+  heightOptions: "ยกสูง (เมตร)",
 };
 
-// ช่องกรอกตามไฟล์ Excel STOCK (11 ช่อง)
+// หมวดรถ 3 ไลน์ — สเปกกรอกเหมือนกันทุกไลน์
+const VEHICLE_CATS = [
+  { key: "Forklift", label: "โฟล์คลิฟท์", icon: "🚜" },
+  { key: "Stacker",  label: "สแตกเกอร์",  icon: "📦" },
+  { key: "Handlift", label: "แฮนด์ลิฟท์", icon: "🔧" },
+] as const;
+
+// แสดงน้ำหนักยก: ≥1000 กก. โชว์เป็นตัน อ่านง่ายกว่า
+const fmtCap = (v: string) => {
+  const n = Number(v);
+  return n >= 1000 ? `${n / 1000} ตัน` : `${v} กก.`;
+};
+
+// ช่องกรอกตามไฟล์ Excel STOCK (11 ช่อง) + สเปกรถที่เซลล์ใช้ค้นหา
 const emptyForm = {
   sale_contract: "",    // 1 SALE CONTRACT
   model: "",            // 2 MODEL
-  mast: "",             // 3 MAST
+  mast: "",             // 3 MAST (รหัสเสา — เก็บใน custom_fields)
   valve: "",            // 4 Valve
   unit_no: "",          // 5 SN
   cost_price: "",       // 6 PRICE(ทุน)
@@ -46,6 +61,13 @@ const emptyForm = {
   detail_customer: "",  // 9 รายละเอียด (ลูกค้า)
   invoice_no: "",       // 10 เลขที่ใบกำกับภาษี
   detail_note: "",      // 11 รายละเอียด (หมายเหตุ)
+  // ── สเปกรถ (เซลล์กรองด้วยค่าพวกนี้) ──
+  vehicle_category: "Forklift" as "Forklift" | "Stacker" | "Handlift",
+  brand: "HELI",        // ยี่ห้อ
+  capacity_kg: "",      // น้ำหนักยก (กก.)
+  height_m: "",         // ยกสูง (เมตร)
+  fork_length: "",      // ความยาวงา (มม.)
+  fuel: "",             // พลังงาน
 };
 
 // Inline add step machine
@@ -99,6 +121,10 @@ export default function StockMain() {
     const e: Record<string, string> = {};
     if (!form.unit_no.trim()) e.unit_no = "กรุณากรอก SN";
     if (!form.model.trim()) e.model = "กรุณากรอกรุ่น";
+    // สเปกที่เซลล์ใช้ค้นหา — ถ้าไม่กรอก เซลล์จะหารถคันนี้ไม่เจอ
+    if (!form.capacity_kg) e.capacity_kg = "เลือกน้ำหนักยก — เซลล์ใช้ค้นหา";
+    if (!form.fuel) e.fuel = "เลือกพลังงาน — เซลล์ใช้ค้นหา";
+    if (!form.height_m && form.vehicle_category !== "Handlift") e.height_m = "เลือกยกสูง — เซลล์ใช้ค้นหา";
     return e;
   };
 
@@ -107,17 +133,21 @@ export default function StockMain() {
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     const cf: Record<string, string> = { ...customValues };
+    if (form.mast.trim())            cf["MAST"] = form.mast.trim(); // รหัสเสา — เก็บอ้างอิง
     if (form.detail_customer.trim()) cf["รายละเอียด (ลูกค้า)"] = form.detail_customer.trim();
     if (form.invoice_no.trim())      cf["เลขที่ใบกำกับภาษี"] = form.invoice_no.trim();
     if (form.detail_note.trim())     cf["รายละเอียด (หมายเหตุ)"] = form.detail_note.trim();
     const newItem: Forklift = {
       id: String(Date.now()),
       unit_no: form.unit_no.toUpperCase(),
-      brand: "",
+      brand: form.brand,
       model: form.model,
       capacity: "",
-      height: form.mast,                          // MAST
-      fuel: "",
+      capacity_kg: form.capacity_kg,              // น้ำหนักยก (กก.)
+      height: form.height_m,                      // ยกสูง (เมตร)
+      fork_length: form.fork_length || undefined, // ความยาวงา (มม.)
+      fuel: form.fuel,                            // พลังงาน
+      vehicle_category: form.vehicle_category,    // หมวดรถ (Forklift/Stacker/Handlift)
       control_type: form.valve || undefined,      // Valve
       pi_no: form.sale_contract || undefined,     // SALE CONTRACT
       received_date: form.received_date || undefined,
@@ -238,6 +268,54 @@ export default function StockMain() {
             )}
             <form onSubmit={handleSubmit} className="flex flex-col gap-6">
 
+              {/* ── สเปกรถ — เซลล์กรองหารถด้วยค่าพวกนี้ กรอกให้ครบ ── */}
+              <Section title="สเปกรถ (เซลล์ใช้ค้นหา)">
+                <div className="flex flex-col gap-4">
+                  {/* หมวดรถ */}
+                  <FF label="ไลน์สินค้า *" error="">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {VEHICLE_CATS.map(({ key, label, icon }) => (
+                        <button key={key} type="button"
+                          onClick={() => setForm({ ...form, vehicle_category: key })}
+                          className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${form.vehicle_category === key ? "bg-emerald-600 text-white border-emerald-600 shadow-sm" : "bg-white text-slate-600 border-slate-200 hover:border-emerald-300"}`}>
+                          <span>{icon}</span>{label}
+                        </button>
+                      ))}
+                    </div>
+                  </FF>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FF label="ยี่ห้อ *" error="">
+                      <select value={form.brand} onChange={e => setForm({ ...form, brand: e.target.value })} className={sc("")}>
+                        {fieldConfig.brands.map(b => <option key={b} value={b}>{b}</option>)}
+                      </select>
+                    </FF>
+                    <FF label="ความยาวงา (มม.)" error="">
+                      <input type="number" value={form.fork_length} onChange={e => setForm({ ...form, fork_length: e.target.value })}
+                        placeholder="เช่น 1070 / 1220" className={ic("")} />
+                    </FF>
+                  </div>
+
+                  {/* พลังงาน — ปุ่มเลือก */}
+                  <FF label="พลังงาน *" error={errors.fuel}>
+                    <ChipGroup options={fieldConfig.fuelTypes} value={form.fuel}
+                      onChange={v => setForm({ ...form, fuel: v })} error={errors.fuel} />
+                  </FF>
+
+                  {/* น้ำหนักยก — ปุ่มเลือก */}
+                  <FF label="ยกน้ำหนักได้ *" error={errors.capacity_kg}>
+                    <ChipGroup options={fieldConfig.capacityOptions} value={form.capacity_kg}
+                      onChange={v => setForm({ ...form, capacity_kg: v })} fmt={fmtCap} error={errors.capacity_kg} />
+                  </FF>
+
+                  {/* ยกสูง — ปุ่มเลือก (แฮนด์ลิฟท์ไม่บังคับ) */}
+                  <FF label={`ยกสูง${form.vehicle_category === "Handlift" ? " (แฮนด์ลิฟท์ไม่ต้องเลือกก็ได้)" : " *"}`} error={errors.height_m}>
+                    <ChipGroup options={fieldConfig.heightOptions} value={form.height_m}
+                      onChange={v => setForm({ ...form, height_m: v })} fmt={v => `${v} ม.`} error={errors.height_m} />
+                  </FF>
+                </div>
+              </Section>
+
               <Section title="ข้อมูลรถ (ตามไฟล์ STOCK)">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <FF label="SALE CONTRACT" error="">
@@ -246,8 +324,8 @@ export default function StockMain() {
                   <FF label="MODEL (รุ่น) *" error={errors.model}>
                     <input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder="เช่น CPCD30-Q22K2" className={ic(errors.model)} />
                   </FF>
-                  <FF label="MAST (ความสูง)" error="">
-                    <input value={form.mast} onChange={e => setForm({ ...form, mast: e.target.value })} placeholder="เช่น M400 / 3000MM" className={ic("")} />
+                  <FF label="MAST (รหัสเสา — ถ้ามี)" error="">
+                    <input value={form.mast} onChange={e => setForm({ ...form, mast: e.target.value })} placeholder="เช่น M400 / ZSM600" className={ic("")} />
                   </FF>
                   <FF label="Valve (คอนโทรล)" error="">
                     <input value={form.valve} onChange={e => setForm({ ...form, valve: e.target.value })} placeholder="เช่น 2 / 3" className={ic("")} />
@@ -723,6 +801,26 @@ function StatCard({ label, value, icon, color, bg, iconBg }: {
       <div className={`${iconBg} rounded-lg p-1.5 w-fit`}>{icon}</div>
       <p className={`text-2xl font-bold ${color}`}>{value}</p>
       <p className="text-xs text-slate-600 font-medium">{label}</p>
+    </div>
+  );
+}
+
+// ปุ่มเลือกค่าสเปก — กดเลือก / กดซ้ำเพื่อยกเลิก
+function ChipGroup({ options, value, onChange, fmt, error }: {
+  options: string[]; value: string; onChange: (v: string) => void;
+  fmt?: (v: string) => string; error?: string;
+}) {
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      {options.map(opt => (
+        <button key={opt} type="button"
+          onClick={() => onChange(value === opt ? "" : opt)}
+          className={`px-3.5 py-2 rounded-xl text-sm font-semibold border-2 transition-all ${value === opt
+            ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+            : `bg-white text-slate-600 hover:border-emerald-300 ${error ? "border-red-200" : "border-slate-200"}`}`}>
+          {fmt ? fmt(opt) : opt}
+        </button>
+      ))}
     </div>
   );
 }

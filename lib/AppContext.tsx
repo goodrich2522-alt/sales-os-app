@@ -8,6 +8,7 @@ import {
   DEFAULT_VEHICLE_GROUPS, DEFAULT_CONTROL_TYPES, DEFAULT_PO_STATUSES,
   DEFAULT_LOCATIONS, DEFAULT_STOCK_STATUSES,
   DEFAULT_CUSTOMER_TYPES, FINANCE_COMPANIES, SALE_TYPES,
+  DEFAULT_CAPACITY_OPTIONS, DEFAULT_HEIGHT_OPTIONS,
 } from "./mockData";
 import * as api from "./api";
 import { supabase } from "./supabaseClient";
@@ -22,6 +23,9 @@ export interface FieldConfig {
   poStatuses: string[];
   locations: string[];
   stockStatuses: string[];
+  // ปุ่มสเปก (สต๊อกกรอก + เซลล์กรอง ใช้ชุดเดียวกัน)
+  capacityOptions: string[]; // น้ำหนักยก (กก.)
+  heightOptions: string[];   // ยกสูง (เมตร)
   // Sales form dropdowns
   customerTypes: string[];
   financeCompanies: string[];
@@ -44,6 +48,8 @@ const DEFAULT_FIELD_CFG: FieldConfig = {
   poStatuses: DEFAULT_PO_STATUSES,
   locations: DEFAULT_LOCATIONS,
   stockStatuses: DEFAULT_STOCK_STATUSES,
+  capacityOptions: DEFAULT_CAPACITY_OPTIONS,
+  heightOptions: DEFAULT_HEIGHT_OPTIONS,
   customerTypes: DEFAULT_CUSTOMER_TYPES,
   financeCompanies: FINANCE_COMPANIES,
   saleTypes: [...SALE_TYPES],

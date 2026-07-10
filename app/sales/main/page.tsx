@@ -175,13 +175,24 @@ export default function SalesMain() {
   // แปลงค่าใดๆ เป็น string ตัวพิมพ์เล็กอย่างปลอดภัย (กัน .toLowerCase บน undefined → จอเด้ง)
   const hay = (v: unknown) => (v == null ? "" : String(v)).toLowerCase();
 
+  // แปลงความสูงเป็น "เมตร" — รับได้ทั้ง "4" (เมตร) และ "3000 MM" (มม.) · รหัสเสา (M400) ไม่เดา ให้สต๊อกกรอกจริง
+  const toMeters = (v: unknown): number | null => {
+    const s = (v == null ? "" : String(v)).trim().toLowerCase();
+    const m = s.match(/^([0-9]+(?:\.[0-9]+)?)\s*(mm|ม)?/);
+    if (!m || !m[1]) return null;
+    let n = Number(m[1]);
+    if (!isFinite(n) || n <= 0) return null;
+    if (m[2] === "mm" || n > 100) n = n / 1000; // ตัวเลขใหญ่ = มม.
+    return n;
+  };
+
   const filtered = available.filter(f => {
     const q = search.trim().toLowerCase();
     const base =
       (!q || hay(f.unit_no).includes(q) || hay(f.brand).includes(q) || hay(f.model).includes(q)) &&
-      (!fFuel     || hay(f.fuel).includes(fFuel.toLowerCase())) &&
-      (!fCapacity || (hay(f.capacity) + " " + hay(f.capacity_kg)).includes(fCapacity.toLowerCase())) &&
-      (!fHeight   || hay(f.height).includes(fHeight.toLowerCase()));
+      (!fFuel     || hay(f.fuel) === fFuel.toLowerCase()) &&
+      (!fCapacity || Number(f.capacity_kg) === Number(fCapacity)) &&
+      (!fHeight   || toMeters(f.height) === Number(fHeight));
     const cat = activeCategory === "all" || (f.vehicle_category ?? "Forklift") === activeCategory;
     const spec =
       (!fSpecModel  || hay(f.model).includes(fSpecModel.toLowerCase())) &&
@@ -543,15 +554,21 @@ export default function SalesMain() {
               <Filter className="w-3.5 h-3.5" />
               ตัวกรองสเปค {activeCategory === "Forklift" ? "🚜 Forklift" : activeCategory === "Stacker" ? "📦 Stacker" : "🔧 Handlift"}
             </p>
-            <p className="text-[11px] text-slate-400 -mt-1">พิมพ์คำที่ต้องการกรอง (เว้นว่าง = แสดงทั้งหมด)</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <p className="text-[11px] text-slate-400 -mt-1">กดปุ่มเลือกสเปกที่ลูกค้าต้องการ — กดซ้ำเพื่อยกเลิก (เว้นว่าง = แสดงทั้งหมด)</p>
+
+            {/* ปุ่มสเปก — ชุดเดียวกับที่สต๊อกกรอก กดแล้วเจอชัวร์ */}
+            <FilterChipRow label="⚡ พลังงาน" options={fieldConfig.fuelTypes} value={fFuel} onChange={setFFuel} />
+            <FilterChipRow label="🏋️ ยกน้ำหนัก" options={fieldConfig.capacityOptions} value={fCapacity} onChange={setFCapacity}
+              fmt={v => Number(v) >= 1000 ? `${Number(v) / 1000} ตัน` : `${v} กก.`} />
+            <FilterChipRow label="📏 ยกสูง" options={fieldConfig.heightOptions} value={fHeight} onChange={setFHeight}
+              fmt={v => `${v} ม.`} />
+
+            {/* ช่องพิมพ์ — สำหรับค่าที่เจาะจง */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1 border-t border-slate-100">
               {[
                 { label: "รุ่นรถ", val: fSpecModel, set: setFSpecModel, ph: "เช่น CPCD30..." },
                 { label: "SN (ซีเรียลรถ)", val: fSpecSN, set: setFSpecSN, ph: "เช่น 010253N9305..." },
-                ...(activeCategory === "Forklift" ? [{ label: "ประเภทเชื้อเพลิง", val: fFuel, set: setFFuel, ph: "เช่น Diesel..." }] : []),
-                { label: "น้ำหนักยก", val: fCapacity, set: setFCapacity, ph: "เช่น 2500 / 3 ตัน..." },
-                { label: "ความสูงยก", val: fHeight, set: setFHeight, ph: "เช่น M400..." },
-                { label: "ความยาวงา", val: fForkLength, set: setFForkLength, ph: "เช่น 1150..." },
+                { label: "ความยาวงา (มม.)", val: fForkLength, set: setFForkLength, ph: "เช่น 1070..." },
                 ...((activeCategory === "Stacker" || activeCategory === "Handlift") ? [{ label: "ความกว้างงา", val: fForkWidth, set: setFForkWidth, ph: "เช่น 550..." }] : []),
               ].map(({ label, val, set, ph }) => (
                 <div key={label}>
@@ -1384,6 +1401,29 @@ export default function SalesMain() {
 
       {/* ── ผู้ช่วย AI พี่เก่ง (โครงไว้ก่อน — เติมความสามารถทีหลัง) ── */}
       <AiAssistant salesUserName={salesUser?.name} />
+    </div>
+  );
+}
+
+// แถวปุ่มกรองสเปก — ชุดค่าเดียวกับที่ฝ่ายสต๊อกกรอก กดเลือก/กดซ้ำยกเลิก
+function FilterChipRow({ label, options, value, onChange, fmt }: {
+  label: string; options: string[]; value: string;
+  onChange: (v: string) => void; fmt?: (v: string) => string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs font-semibold text-slate-600">{label}</span>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {options.map(opt => (
+          <button key={opt} type="button"
+            onClick={() => onChange(value === opt ? "" : opt)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${value === opt
+              ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+              : "bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-700"}`}>
+            {fmt ? fmt(opt) : opt}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
