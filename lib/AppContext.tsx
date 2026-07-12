@@ -271,7 +271,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const addSale = useCallback((s: Sale) => {
     lastLocalEditRef.current = Date.now();
     setSales(p => [s, ...p]);
-    const nextStatus = s.sale_status === "จอง" || s.sale_status === "รอผ่านไฟแนนซ์" ? "จองแล้ว" : "ส่งมอบแล้ว";
+    // สถานะรถต้องตรงกับที่เซลล์เลือกตอนปิดการขาย — จอง→จอง / รอผ่านไฟแนนซ์→รอผ่านไฟแนนซ์ / ปิดการขาย→ปิดการขายแล้ว
+    const nextStatus =
+      s.sale_status === "จอง"            ? "จอง" :
+      s.sale_status === "รอผ่านไฟแนนซ์"  ? "รอผ่านไฟแนนซ์" :
+      "ปิดการขายแล้ว";
     setForklifts(p => p.map(f => f.id === s.forklift_id ? { ...f, status: nextStatus } : f));
     if (api.apiEnabled) {
       api.addSaleApi(s).catch(e => console.warn("addSale", e));

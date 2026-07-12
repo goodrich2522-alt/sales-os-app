@@ -49,7 +49,7 @@ export const DEFAULT_VEHICLE_GROUPS = ["รถยก 4 ล้อ", "รถยก
 export const DEFAULT_CONTROL_TYPES = ["แมนนวล", "เซมิออโต", "ออโต", "AC Drive", "IC Engine"];
 export const DEFAULT_PO_STATUSES = ["รอ PO", "PO ออกแล้ว", "รอชำระ", "ชำระแล้ว", "ยกเลิก"];
 export const DEFAULT_LOCATIONS = ["คลังกรุงเทพ", "คลังชลบุรี", "คลังระยอง", "โรงงาน", "ที่ลูกค้า"];
-export const DEFAULT_STOCK_STATUSES = ["พร้อมขาย", "จองแล้ว", "ส่งมอบแล้ว", "ซ่อมบำรุง", "รอตรวจสอบ"];
+export const DEFAULT_STOCK_STATUSES = ["พร้อมขาย", "จอง", "รอผ่านไฟแนนซ์", "ปิดการขายแล้ว", "ซ่อมบำรุง", "รอตรวจสอบ"];
 export const CONTACT_SOURCES = ["Line", "Facebook", "TikTok", "โทร", "Google", "คนอื่นบอกต่อ"] as const;
 export const SALE_TYPES = ["รถเช่า", "รถขายเต็มคัน", "รถมือสอง", "งานซ่อม"] as const;
 

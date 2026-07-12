@@ -11,11 +11,14 @@ import { Forklift } from "@/lib/types";
 import { useApp, FieldConfig } from "@/lib/AppContext";
 
 const STATUS_BADGE: Record<string, string> = {
-  "พร้อมขาย":   "bg-emerald-100 text-emerald-700 border-emerald-200",
-  "จองแล้ว":    "bg-amber-100 text-amber-700 border-amber-200",
-  "ส่งมอบแล้ว": "bg-slate-100 text-slate-600 border-slate-200",
-  "ซ่อมบำรุง":  "bg-red-100 text-red-700 border-red-200",
-  "รอตรวจสอบ": "bg-blue-100 text-blue-700 border-blue-200",
+  "พร้อมขาย":       "bg-emerald-100 text-emerald-700 border-emerald-200",
+  "จอง":            "bg-amber-100 text-amber-700 border-amber-200",
+  "จองแล้ว":        "bg-amber-100 text-amber-700 border-amber-200",
+  "รอผ่านไฟแนนซ์":  "bg-red-100 text-red-700 border-red-200",
+  "ปิดการขายแล้ว":  "bg-indigo-100 text-indigo-700 border-indigo-200",
+  "ส่งมอบแล้ว":     "bg-slate-100 text-slate-600 border-slate-200",
+  "ซ่อมบำรุง":      "bg-red-100 text-red-700 border-red-200",
+  "รอตรวจสอบ":     "bg-blue-100 text-blue-700 border-blue-200",
 };
 
 // ฟิลด์ dropdown ฝั่งสต็อก — ไม่รวมประเภทการขาย/การชำระ (จัดการในหน้าฝ่ายขาย)
@@ -180,8 +183,8 @@ export default function StockMain() {
   const handleLogout = () => { localStorage.removeItem("stock_user"); router.push("/stock/login"); };
 
   const available = forklifts.filter(f => f.status === "พร้อมขาย").length;
-  const booked    = forklifts.filter(f => f.status === "จองแล้ว").length;
-  const delivered = forklifts.filter(f => f.status === "ส่งมอบแล้ว").length;
+  const booked    = forklifts.filter(f => ["จอง", "จองแล้ว", "รอผ่านไฟแนนซ์"].includes(String(f.status))).length;
+  const delivered = forklifts.filter(f => ["ปิดการขายแล้ว", "ส่งมอบแล้ว", "ขายแล้ว"].includes(String(f.status))).length;
 
   // รายการสต็อกที่กรองแล้ว (สำหรับ modal) — ค้นหา + หมวด + สถานะ
   const hs = (v: unknown) => (v == null ? "" : String(v)).toLowerCase();
@@ -262,9 +265,9 @@ export default function StockMain() {
       <main className="max-w-4xl mx-auto px-4 py-6 flex flex-col gap-5">
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3">
-          <StatCard label="พร้อมขาย"   value={available} icon={<TrendingUp className="w-4 h-4" />} color="text-emerald-700" bg="bg-emerald-50 border-emerald-100" iconBg="bg-emerald-100 text-emerald-600" />
-          <StatCard label="จองแล้ว"    value={booked}    icon={<Boxes className="w-4 h-4" />}       color="text-amber-700"   bg="bg-amber-50 border-amber-100"   iconBg="bg-amber-100 text-amber-600" />
-          <StatCard label="ส่งมอบแล้ว" value={delivered}  icon={<CheckCircle className="w-4 h-4" />} color="text-slate-700"   bg="bg-slate-100 border-slate-200" iconBg="bg-slate-200 text-slate-500" />
+          <StatCard label="พร้อมขาย"       value={available} icon={<TrendingUp className="w-4 h-4" />} color="text-emerald-700" bg="bg-emerald-50 border-emerald-100" iconBg="bg-emerald-100 text-emerald-600" />
+          <StatCard label="ติดจอง/รอไฟแนนซ์" value={booked}    icon={<Boxes className="w-4 h-4" />}       color="text-amber-700"   bg="bg-amber-50 border-amber-100"   iconBg="bg-amber-100 text-amber-600" />
+          <StatCard label="ปิดการขายแล้ว"  value={delivered}  icon={<CheckCircle className="w-4 h-4" />} color="text-indigo-700"  bg="bg-indigo-50 border-indigo-100" iconBg="bg-indigo-100 text-indigo-600" />
         </div>
 
         {/* Add Form */}

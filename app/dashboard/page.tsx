@@ -225,10 +225,10 @@ export default function Dashboard() {
   const staffModels = Object.entries(staffModelMap).sort((a, b) => b[1] - a[1]);
 
   const liveStockStatus = [
-    { name: "พร้อมขาย",        value: forklifts.filter((f) => f.status === "พร้อมขาย").length,        color: "#10B981" },
-    { name: "จองแล้ว",         value: forklifts.filter((f) => f.status === "จองแล้ว").length,         color: "#F59E0B" },
-    { name: "รอผ่านไฟแนนซ์",  value: sales.filter((s) => s.sale_status === "รอผ่านไฟแนนซ์").length,  color: "#EF4444" },
-    { name: "ส่งมอบแล้ว",     value: forklifts.filter((f) => f.status === "ส่งมอบแล้ว").length,      color: "#6366F1" },
+    { name: "พร้อมขาย",        value: forklifts.filter((f) => f.status === "พร้อมขาย").length,                                 color: "#10B981" },
+    { name: "จอง",            value: forklifts.filter((f) => f.status === "จอง" || f.status === "จองแล้ว").length,             color: "#F59E0B" },
+    { name: "รอผ่านไฟแนนซ์",  value: forklifts.filter((f) => f.status === "รอผ่านไฟแนนซ์").length,                            color: "#EF4444" },
+    { name: "ปิดการขายแล้ว",  value: forklifts.filter((f) => ["ปิดการขายแล้ว", "ส่งมอบแล้ว", "ขายแล้ว"].includes(String(f.status))).length, color: "#6366F1" },
   ];
 
   // Drill-down data for staff
