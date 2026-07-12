@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Package, Plus, LogOut, CheckCircle, AlertCircle, List, X,
   TrendingUp, Boxes, Trash2, Settings, Pencil, Check, ChevronDown,
-  Type, ListOrdered, ArrowLeft
+  Type, ListOrdered, ArrowLeft, Clock
 } from "lucide-react";
 import { Forklift } from "@/lib/types";
 import { useApp, FieldConfig } from "@/lib/AppContext";
@@ -47,6 +47,20 @@ const fmtCap = (v: string) => {
   const n = Number(v);
   return n >= 1000 ? `${n / 1000} ตัน` : `${v} กก.`;
 };
+
+// แปลงเวลาเติม → "10 ก.ค. 69 · 14:30 น." (พ.ศ. + เวลา) · ถ้าเป็นแค่วันที่ (ของเก่า) ไม่โชว์เวลา
+const TH_MON = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+function fmtAdded(iso?: string) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  const date = `${d.getDate()} ${TH_MON[d.getMonth()]} ${(d.getFullYear() + 543) % 100}`;
+  const hasTime = /T\d\d:/.test(iso);
+  if (!hasTime) return date;
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${date} · ${hh}:${mm} น.`;
+}
 
 // ช่องกรอกตามไฟล์ Excel STOCK (11 ช่อง) + สเปกรถที่เซลล์ใช้ค้นหา
 const emptyForm = {
@@ -154,7 +168,7 @@ export default function StockMain() {
       cost_price: form.cost_price ? Number(form.cost_price) : 0,
       stock_price: 0,
       status: form.status,
-      created_at: new Date().toISOString().slice(0, 10),
+      created_at: new Date().toISOString(), // เก็บเวลาเต็ม — เรียงหาคันที่เติมล่าสุดได้
       custom_fields: Object.keys(cf).length > 0 ? cf : undefined,
     };
     addForklift(newItem);
@@ -177,7 +191,7 @@ export default function StockMain() {
     const okCat = listCat === "all" || (f.vehicle_category ?? "Forklift") === listCat;
     const okStatus = listStatus === "all" || f.status === listStatus;
     return okQ && okCat && okStatus;
-  });
+  }).sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || ""))); // เติมล่าสุดอยู่บนสุด
   const catCount = (c: string) => c === "all" ? forklifts.length : forklifts.filter(f => (f.vehicle_category ?? "Forklift") === c).length;
 
   // Settings — standard dropdown handlers
@@ -579,14 +593,20 @@ export default function StockMain() {
               {listFiltered.length === 0 && (
                 <div className="text-center py-12 text-slate-400 text-sm">ไม่พบรถตามเงื่อนไข</div>
               )}
-              {listFiltered.map(item => (
-                <div key={item.id} className="flex items-center gap-3 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-xl p-3.5 transition-colors group">
+              {listFiltered.map((item, idx) => (
+                <div key={item.id} className={`flex items-center gap-3 border rounded-xl p-3.5 transition-colors group ${idx === 0 ? "bg-emerald-50/70 border-emerald-200" : "bg-slate-50 hover:bg-slate-100 border-slate-100"}`}>
                   <div className="bg-white border border-slate-200 rounded-xl p-2 flex-shrink-0 shadow-sm">
                     <Package className="w-4 h-4 text-emerald-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-slate-800 text-sm">{item.unit_no} — {item.brand} {item.model}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-slate-800 text-sm">{item.unit_no} — {item.brand} {item.model}</p>
+                      {idx === 0 && <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded-full flex-shrink-0">ล่าสุด</span>}
+                    </div>
                     <p className="text-xs text-slate-500">{item.capacity}{item.capacity_kg ? ` / ${item.capacity_kg} kg` : ""} · {item.fuel}{item.location ? ` · ${item.location}` : ""}</p>
+                    {fmtAdded(item.created_at) && (
+                      <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1"><Clock className="w-3 h-3 flex-shrink-0" />เติมเมื่อ {fmtAdded(item.created_at)}</p>
+                    )}
                   </div>
                   <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border flex-shrink-0 ${STATUS_BADGE[item.status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>
                     {item.status}
