@@ -1,0 +1,996 @@
+{
+ "backed_up_at": "2026-07-13",
+ "total": 165,
+ "rows": [
+  {
+   "id": "FK-010253N9305",
+   "unit_no": "010253N9305",
+   "old_status": "ขายแล้ว/ไฟแนนซ์",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253N9306",
+   "unit_no": "010253N9306",
+   "old_status": "ขายแล้ว/ไฟแนนซ์",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253N9307",
+   "unit_no": "010253N9307",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253R3917",
+   "unit_no": "010253R3917",
+   "old_status": "ขายแล้ว/ไฟแนนซ์",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253R3918",
+   "unit_no": "010253R3918",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253R3919",
+   "unit_no": "010253R3919",
+   "old_status": "พร้อมขาย",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253R3927",
+   "unit_no": "010253R3927",
+   "old_status": "ขายแล้ว/ไฟแนนซ์",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253R3928",
+   "unit_no": "010253R3928",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253R5260",
+   "unit_no": "010253R5260",
+   "old_status": "ขายแล้ว/ไฟแนนซ์",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253R5263",
+   "unit_no": "010253R5263",
+   "old_status": "ขายแล้ว/ไฟแนนซ์",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253R5264",
+   "unit_no": "010253R5264",
+   "old_status": "ขายแล้ว/ไฟแนนซ์",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253R5265",
+   "unit_no": "010253R5265",
+   "old_status": "ขายแล้ว/ไฟแนนซ์",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253R5266",
+   "unit_no": "010253R5266",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253R6796",
+   "unit_no": "010253R6796",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253R6798",
+   "unit_no": "010253R6798",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253R6799",
+   "unit_no": "010253R6799",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S1646",
+   "unit_no": "010253S1646",
+   "old_status": "ขายแล้ว/ไฟแนนท์",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S1647",
+   "unit_no": "010253S1647",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S2103",
+   "unit_no": "010253S2103",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S2104",
+   "unit_no": "010253S2104",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S2953",
+   "unit_no": "010253S2953",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S2954",
+   "unit_no": "010253S2954",
+   "old_status": "ขายแล้วเงินสด",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S2955",
+   "unit_no": "010253S2955",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S3209",
+   "unit_no": "010253S3209",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S4307",
+   "unit_no": "010253S4307",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S4308",
+   "unit_no": "010253S4308",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S4309",
+   "unit_no": "010253S4309",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S4312",
+   "unit_no": "010253S4312",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S4314",
+   "unit_no": "010253S4314",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S4332",
+   "unit_no": "010253S4332",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S4333",
+   "unit_no": "010253S4333",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S4334",
+   "unit_no": "010253S4334",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S4337",
+   "unit_no": "010253S4337",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S6149",
+   "unit_no": "010253S6149",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253S6150",
+   "unit_no": "010253S6150",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010253T0935",
+   "unit_no": "010253T0935",
+   "old_status": "ดรีม",
+   "new_status": "จอง"
+  },
+  {
+   "id": "FK-010303P1751",
+   "unit_no": "010303P1751",
+   "old_status": "ขายแล้ว/ไฟแนนซ์",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303P1752",
+   "unit_no": "010303P1752",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303P1753",
+   "unit_no": "010303P1753",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303P1754",
+   "unit_no": "010303P1754",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303P1756",
+   "unit_no": "010303P1756",
+   "old_status": "ขายแล้ว/ไฟแนนซ์",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303P4620",
+   "unit_no": "010303P4620",
+   "old_status": "รถเช่า",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303P4622",
+   "unit_no": "010303P4622",
+   "old_status": "ขายแล้ว/ไฟแนนซ์",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303P4632",
+   "unit_no": "010303P4632",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303R0989",
+   "unit_no": "010303R0989",
+   "old_status": "ติดจอง",
+   "new_status": "จอง"
+  },
+  {
+   "id": "FK-010303R0990",
+   "unit_no": "010303R0990",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303R3262",
+   "unit_no": "010303R3262",
+   "old_status": "ขายแล้ว/ไฟแนนซ์",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303R3263",
+   "unit_no": "010303R3263",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303R6523",
+   "unit_no": "010303R6523",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303R6524",
+   "unit_no": "010303R6524",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303R6525",
+   "unit_no": "010303R6525",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303R6735",
+   "unit_no": "010303R6735",
+   "old_status": "รถเช่า",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303R7797",
+   "unit_no": "010303R7797",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303R8252",
+   "unit_no": "010303R8252",
+   "old_status": "ขายแล้วเงินสด",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303R8261",
+   "unit_no": "010303R8261",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303R8262",
+   "unit_no": "010303R8262",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303S2059",
+   "unit_no": "010303S2059",
+   "old_status": "ขายแล้ว ไฟแนนท์",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303S2060",
+   "unit_no": "010303S2060",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303S2061",
+   "unit_no": "010303S2061",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303S3179",
+   "unit_no": "010303S3179",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303S4284",
+   "unit_no": "010303S4284",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010303S5863",
+   "unit_no": "010303S5863",
+   "old_status": "จองแล้ว",
+   "new_status": "จอง"
+  },
+  {
+   "id": "FK-010303S9224",
+   "unit_no": "010303S9224",
+   "old_status": "รถเช่า GR-197",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010353N6726",
+   "unit_no": "010353N6726",
+   "old_status": "ขายแล้ว/ไฟแนนซ์",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010354Z3784",
+   "unit_no": "010354Z3784",
+   "old_status": "แก้วจอง",
+   "new_status": "จอง"
+  },
+  {
+   "id": "FK-010503R5309",
+   "unit_no": "010503R5309",
+   "old_status": "ขายแล้ว/ไฟแนนซ์",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-010703R2226",
+   "unit_no": "010703R2226",
+   "old_status": "รอเข้าไปรับ",
+   "new_status": "รอรับ"
+  },
+  {
+   "id": "FK-05015DS7940",
+   "unit_no": "05015DS7940",
+   "old_status": "รถเช่า",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-05015DT9641",
+   "unit_no": "05015DT9641",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-05020DT3707",
+   "unit_no": "05020DT3707",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-05025DT0415",
+   "unit_no": "05025DT0415",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-05025DT7251",
+   "unit_no": "05025DT7251",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-05025DU0450",
+   "unit_no": "05025DU0450",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-05025DU1396",
+   "unit_no": "05025DU1396",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-05030DS0320",
+   "unit_no": "05030DS0320",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-05030DT3160",
+   "unit_no": "05030DT3160",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-05030DT3168",
+   "unit_no": "05030DT3168",
+   "old_status": "รถเช่า",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-05030DT5355",
+   "unit_no": "05030DT5355",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-05030DT5357",
+   "unit_no": "05030DT5357",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-05030DU1981",
+   "unit_no": "05030DU1981",
+   "old_status": "ขายแล้ว /ไฟแนนซ์",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-05035DP1216",
+   "unit_no": "05035DP1216",
+   "old_status": "ติดจอง/รอส่ง",
+   "new_status": "จอง"
+  },
+  {
+   "id": "FK-05035DU1885",
+   "unit_no": "05035DU1885",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-05035DU1886",
+   "unit_no": "05035DU1886",
+   "old_status": "สั่งผลิต 03/02/69",
+   "new_status": "รอรับ"
+  },
+  {
+   "id": "FK-08012JET206",
+   "unit_no": "08012JET206",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JPK850",
+   "unit_no": "08015JPK850",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JPK852",
+   "unit_no": "08015JPK852",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JPK856",
+   "unit_no": "08015JPK856",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JPK857",
+   "unit_no": "08015JPK857",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JPK858",
+   "unit_no": "08015JPK858",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JPK859",
+   "unit_no": "08015JPK859",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JPK915",
+   "unit_no": "08015JPK915",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JPK919",
+   "unit_no": "08015JPK919",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JPK924",
+   "unit_no": "08015JPK924",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JRK352",
+   "unit_no": "08015JRK352",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JRK364",
+   "unit_no": "08015JRK364",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JRK365",
+   "unit_no": "08015JRK365",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JRK367",
+   "unit_no": "08015JRK367",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JRK368",
+   "unit_no": "08015JRK368",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JTW257",
+   "unit_no": "08015JTW257",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JTY732",
+   "unit_no": "08015JTY732",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JTY733",
+   "unit_no": "08015JTY733",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JUF285",
+   "unit_no": "08015JUF285",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JUF286",
+   "unit_no": "08015JUF286",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JUF288",
+   "unit_no": "08015JUF288",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JUF290",
+   "unit_no": "08015JUF290",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JUF291",
+   "unit_no": "08015JUF291",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JUH938",
+   "unit_no": "08015JUH938",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JUH939",
+   "unit_no": "08015JUH939",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08015JUH943",
+   "unit_no": "08015JUH943",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08020JLM388",
+   "unit_no": "08020JLM388",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08020JLP035",
+   "unit_no": "08020JLP035",
+   "old_status": "1969-12-01T17:00:00.000Z",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08020JNX704",
+   "unit_no": "08020JNX704",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08020JNX705",
+   "unit_no": "08020JNX705",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08020JNX710",
+   "unit_no": "08020JNX710",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08020JNX711",
+   "unit_no": "08020JNX711",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08020JNX713",
+   "unit_no": "08020JNX713",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08020JPK942",
+   "unit_no": "08020JPK942",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08020JPK944",
+   "unit_no": "08020JPK944",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08020JTW900",
+   "unit_no": "08020JTW900",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08020JTW901",
+   "unit_no": "08020JTW901",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08020JUM930",
+   "unit_no": "08020JUM930",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-08020JUM935",
+   "unit_no": "08020JUM935",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-15BC04570",
+   "unit_no": "15BC04570",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-188D06165",
+   "unit_no": "188D06165",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-66061-1",
+   "unit_no": "66061-1",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-66061-2",
+   "unit_no": "66061-2",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-66062-1",
+   "unit_no": "66062-1",
+   "old_status": "พร้อมขาย",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-66062-1-2",
+   "unit_no": "66062-1",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-66062-2",
+   "unit_no": "66062-2",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-66063-2",
+   "unit_no": "66063-2",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-66064-1",
+   "unit_no": "66064-1",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-66064-2",
+   "unit_no": "66064-2",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-66064-3",
+   "unit_no": "66064-3",
+   "old_status": "พร้อมขาย",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-66064-4",
+   "unit_no": "66064-4",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-66066-2",
+   "unit_no": "66066-2",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-66074-47",
+   "unit_no": "66074-47",
+   "old_status": "เช่า",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-DGB1500-0001",
+   "unit_no": "DGB1500-0001",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-DGB1500-0003",
+   "unit_no": "DGB1500-0003",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BES02515",
+   "unit_no": "M1BES02515",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BES02519",
+   "unit_no": "M1BES02519",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BES04886",
+   "unit_no": "M1BES04886",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BES04887",
+   "unit_no": "M1BES04887",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BES04889",
+   "unit_no": "M1BES04889",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BES04890",
+   "unit_no": "M1BES04890",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BES04894",
+   "unit_no": "M1BES04894",
+   "old_status": "รถเช่า",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BES05812",
+   "unit_no": "M1BES05812",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BES15024",
+   "unit_no": "M1BES15024",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BES15025",
+   "unit_no": "M1BES15025",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BES15028",
+   "unit_no": "M1BES15028",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BES15046",
+   "unit_no": "M1BES15046",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BES15048",
+   "unit_no": "M1BES15048",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BFS009588",
+   "unit_no": "M1BFS009588",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BFS02012",
+   "unit_no": "M1BFS02012",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BFS02014",
+   "unit_no": "M1BFS02014",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BFS02020",
+   "unit_no": "M1BFS02020",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BFS02045",
+   "unit_no": "M1BFS02045",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-M1BFS02046",
+   "unit_no": "M1BFS02046",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-PJ4170-0002",
+   "unit_no": "PJ4170-0002",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-PTS150-0007",
+   "unit_no": "PTS150-0007",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-SDA-S1525-0011",
+   "unit_no": "SDA-S1525-0011",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-SDA1020-0004",
+   "unit_no": "SDA1020-0004",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-SDA1025-0001",
+   "unit_no": "SDA1025-0001",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-SDA1530-0004",
+   "unit_no": "SDA1530-0004",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-SDA2016-0009",
+   "unit_no": "SDA2016-0009",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  },
+  {
+   "id": "FK-SDA2016-0010",
+   "unit_no": "SDA2016-0010",
+   "old_status": "ขายแล้ว",
+   "new_status": "ปิดการขายแล้ว"
+  }
+ ]
+}

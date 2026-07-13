@@ -27,14 +27,15 @@ const STATUS_BADGE: Record<string, string> = {
 // ฟิลด์ dropdown ฝั่งสต็อก — ไม่รวมประเภทการขาย/การชำระ (จัดการในหน้าฝ่ายขาย)
 type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "saleTypes" | "paymentTypes" | "knownUsers" | "adminEmails">;
 
-const FIELD_LABELS: Record<DropdownField, string> = {
+// หมายเหตุ: ไม่รวม stockStatuses — สถานะรถถูกล็อกเป็นชุดมาตรฐาน 5 ค่า แก้ไม่ได้
+// (รอรับ/พร้อมขาย/จอง/รอผ่านไฟแนนซ์/ปิดการขายแล้ว) ผูกกับปุ่มในการ์ดปิดการขาย
+const FIELD_LABELS: Record<Exclude<DropdownField, "stockStatuses">, string> = {
   brands: "ยี่ห้อ",
   vehicleGroups: "กลุ่มรถ",
   fuelTypes: "พลังงาน",
   controlTypes: "ประเภทคอนโทรล",
   poStatuses: "สถานะสั่งซื้อ",
   locations: "โลเคชั่น",
-  stockStatuses: "สถานะ Stock",
   customerTypes: "ประเภทลูกค้า",
   financeCompanies: "บริษัทไฟแนนซ์",
   capacityOptions: "น้ำหนักยก (กก.)",
@@ -691,7 +692,7 @@ export default function StockMain() {
             <div className="p-5 flex flex-col gap-4">
 
               {/* Standard dropdown fields */}
-              {(Object.keys(FIELD_LABELS) as DropdownField[]).map(field => (
+              {(Object.keys(FIELD_LABELS) as Exclude<DropdownField, "stockStatuses">[]).map(field => (
                 <div key={field} className="border border-slate-100 rounded-2xl overflow-hidden">
                   <button onClick={() => setEditingField(editingField === field ? null : field)}
                     className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors">
