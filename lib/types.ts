@@ -76,12 +76,26 @@ export interface Sale {
   sale_type?: SaleType;
 }
 
+// ── รูปตรวจรถ 6 ช่องบังคับ (ผู้รับรถ/ผู้ส่งมอบรถ ต้องถ่ายครบทุกช่อง) ──
+export const INSPECTION_SLOTS = [
+  { key: "name_plate", label: "Name Plate",  icon: "🏷️" },
+  { key: "pi_doc",     label: "เอกสาร PI",   icon: "📄" },
+  { key: "front",      label: "รถด้านหน้า",  icon: "🚛" },
+  { key: "back",       label: "รถด้านหลัง",  icon: "🔙" },
+  { key: "left",       label: "รถด้านซ้าย",  icon: "◀️" },
+  { key: "right",      label: "รถด้านขวา",   icon: "▶️" },
+] as const;
+export type InspectionSlotKey = (typeof INSPECTION_SLOTS)[number]["key"];
+export const SLOT_LABELS: Record<string, string> =
+  Object.fromEntries(INSPECTION_SLOTS.map(s => [s.key, s.label]));
+
 export interface InspectionRecord {
   id: string;
   unit_no: string;
   transporter_name: string;
   date: string;
-  images: string[];
+  images: string[]; // รูปทั้งหมดรวมกัน (6 ช่อง + รูปเพิ่มเติม) — หน้าเก่าอ่านช่องนี้
+  image_slots?: Partial<Record<InspectionSlotKey, string>>; // รูปแยกช่อง → โชว์ป้ายกำกับ
   role?: "ผู้รับรถ" | "ผู้ส่งมอบรถ";
 }
 

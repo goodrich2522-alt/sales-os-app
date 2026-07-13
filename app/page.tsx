@@ -96,7 +96,13 @@ export default function LandingPage() {
         </div>
       </Link>
 
-      <p className="text-slate-600 text-xs mt-10 relative z-10">© 2024 SalesOS — Forklift Sales &amp; Inventory Management</p>
+      <div className="flex items-center gap-3 mt-10 relative z-10">
+        <p className="text-slate-600 text-xs">© 2024 SalesOS — Forklift Sales &amp; Inventory Management</p>
+        <span className="text-slate-700 text-xs">·</span>
+        <Link href="/admin/users" className="text-slate-500 hover:text-violet-300 text-xs font-medium transition-colors">
+          🛡️ จัดการสิทธิ์ผู้ใช้ (แอดมิน)
+        </Link>
+      </div>
     </div>
   );
 }

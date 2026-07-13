@@ -36,8 +36,10 @@ export interface FieldConfig {
   saleExtraFieldDefs: CustomFieldDef[];   // checkout form custom fields
   // Sales filter requests
   salesFilterRequests: string[];
-  // จำผู้ใช้ที่ล็อกอินด้วย Google: อีเมล (ตัวพิมพ์เล็ก) → ชื่อ/บทบาท
-  knownUsers: Record<string, { name: string; role: string }>;
+  // จำผู้ใช้ที่ล็อกอินด้วย Google: อีเมล (ตัวพิมพ์เล็ก) → ชื่อ/บทบาท/สถานะอนุมัติ
+  knownUsers: Record<string, { name: string; role: string; status?: "approved" | "pending" | "blocked" }>;
+  // อีเมลแอดมิน (จัดการสิทธิ์ที่ /admin/users)
+  adminEmails: string[];
 }
 
 const DEFAULT_FIELD_CFG: FieldConfig = {
@@ -58,9 +60,10 @@ const DEFAULT_FIELD_CFG: FieldConfig = {
   saleExtraFieldDefs: [],
   salesFilterRequests: [],
   knownUsers: {},
+  adminEmails: ["goodrichforklift@gmail.com"], // แอดมินเริ่มต้น — แก้ได้ที่ /admin/users
 };
 
-type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "knownUsers">;
+type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "knownUsers" | "adminEmails">;
 
 // ── Context type ──────────────────────────────────────────────────────────────
 interface AppContextType {
@@ -307,12 +310,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         // อัปโหลดรูป base64 → Google Drive แล้วเก็บเป็น URL แทน
+        // จำ mapping base64→URL ไว้ เพื่ออัปเดต image_slots (รูปแยกช่อง) ให้ชี้ URL เดียวกัน
+        const urlMap = new Map<string, string>();
         const urls = await Promise.all((r.images || []).map(async (img) => {
           if (!img.startsWith("data:")) return img; // เป็น URL อยู่แล้ว
           const mime = /^data:(.*?);base64,/.exec(img)?.[1] || "image/jpeg";
-          return (await api.uploadImageApi(img, mime, `${r.unit_no}_${r.id}`)).url;
+          const url = (await api.uploadImageApi(img, mime, `${r.unit_no}_${r.id}`)).url;
+          urlMap.set(img, url);
+          return url;
         }));
-        const record: InspectionRecord = { ...r, images: urls };
+        const slots = r.image_slots
+          ? Object.fromEntries(Object.entries(r.image_slots).map(([k, v]) => [k, (v && urlMap.get(v)) ?? v]))
+          : undefined;
+        const record: InspectionRecord = { ...r, images: urls, image_slots: slots as InspectionRecord["image_slots"] };
         await api.addInspectionApi(record);
         setInspections(p => p.map(x => x.id === r.id ? record : x)); // เปลี่ยน base64 → URL
       } catch (e) {

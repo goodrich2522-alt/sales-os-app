@@ -9,6 +9,9 @@ import {
 } from "lucide-react";
 import { Forklift } from "@/lib/types";
 import { useApp, FieldConfig } from "@/lib/AppContext";
+import { generateProductId, isProductId } from "@/lib/productId";
+import { hasActiveSession, signOutSupabase } from "@/lib/auth";
+import { apiEnabled } from "@/lib/api";
 
 const STATUS_BADGE: Record<string, string> = {
   "พร้อมขาย":       "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -22,7 +25,7 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 // ฟิลด์ dropdown ฝั่งสต็อก — ไม่รวมประเภทการขาย/การชำระ (จัดการในหน้าฝ่ายขาย)
-type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "saleTypes" | "paymentTypes" | "knownUsers">;
+type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "saleTypes" | "paymentTypes" | "knownUsers" | "adminEmails">;
 
 const FIELD_LABELS: Record<DropdownField, string> = {
   brands: "ยี่ห้อ",
@@ -104,6 +107,7 @@ export default function StockMain() {
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [errors, setErrors]         = useState<Record<string, string>>({});
   const [submitted, setSubmitted]   = useState(false);
+  const [lastProductId, setLastProductId] = useState(""); // รหัสสินค้าที่เพิ่งสร้าง — โชว์ในแบนเนอร์สำเร็จ
   const [showList, setShowList]     = useState(false);
   const [listSearch, setListSearch] = useState("");
   const [listCat, setListCat]       = useState<"all" | "Forklift" | "Stacker" | "Handlift">("all");
@@ -130,8 +134,15 @@ export default function StockMain() {
 
   useEffect(() => {
     const u = localStorage.getItem("stock_user");
-    if (!u) router.push("/stock/login");
-    else setUsername(JSON.parse(u).name);
+    if (!u) { router.push("/stock/login"); return; }
+    setUsername(JSON.parse(u).name);
+    // มีข้อมูลค้างแต่ session Supabase หมดอายุ/ไม่มี → บังคับล็อกอินใหม่ (กันเซฟไม่เข้าแบบเงียบๆ)
+    (async () => {
+      if (apiEnabled && !(await hasActiveSession())) {
+        localStorage.removeItem("stock_user");
+        router.push("/stock/login");
+      }
+    })();
   }, [router]);
 
   const validate = () => {
@@ -154,8 +165,10 @@ export default function StockMain() {
     if (form.detail_customer.trim()) cf["รายละเอียด (ลูกค้า)"] = form.detail_customer.trim();
     if (form.invoice_no.trim())      cf["เลขที่ใบกำกับภาษี"] = form.invoice_no.trim();
     if (form.detail_note.trim())     cf["รายละเอียด (หมายเหตุ)"] = form.detail_note.trim();
+    // รหัสสินค้าอัตโนมัติ (FK-0001 / ST-0001 / HL-0001) — ใช้เป็น id หลักคุมทั้งระบบ
+    const productId = generateProductId(form.vehicle_category, forklifts);
     const newItem: Forklift = {
-      id: String(Date.now()),
+      id: productId,
       unit_no: form.unit_no.toUpperCase(),
       brand: form.brand,
       model: form.model,
@@ -175,12 +188,13 @@ export default function StockMain() {
       custom_fields: Object.keys(cf).length > 0 ? cf : undefined,
     };
     addForklift(newItem);
+    setLastProductId(productId);
     setForm(emptyForm); setCustomValues({}); setErrors({});
     setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 3000);
+    setTimeout(() => setSubmitted(false), 5000);
   };
 
-  const handleLogout = () => { localStorage.removeItem("stock_user"); router.push("/stock/login"); };
+  const handleLogout = () => { void signOutSupabase(); localStorage.removeItem("stock_user"); router.push("/stock/login"); };
 
   const available = forklifts.filter(f => f.status === "พร้อมขาย").length;
   const booked    = forklifts.filter(f => ["จอง", "จองแล้ว", "รอผ่านไฟแนนซ์"].includes(String(f.status))).length;
@@ -190,7 +204,7 @@ export default function StockMain() {
   const hs = (v: unknown) => (v == null ? "" : String(v)).toLowerCase();
   const listFiltered = forklifts.filter(f => {
     const q = listSearch.trim().toLowerCase();
-    const okQ = !q || hs(f.unit_no).includes(q) || hs(f.brand).includes(q) || hs(f.model).includes(q) || hs(f.pi_no).includes(q);
+    const okQ = !q || hs(f.id).includes(q) || hs(f.unit_no).includes(q) || hs(f.brand).includes(q) || hs(f.model).includes(q) || hs(f.pi_no).includes(q);
     const okCat = listCat === "all" || (f.vehicle_category ?? "Forklift") === listCat;
     const okStatus = listStatus === "all" || f.status === listStatus;
     return okQ && okCat && okStatus;
@@ -275,12 +289,23 @@ export default function StockMain() {
           <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
             <div className="bg-emerald-100 rounded-lg p-1.5"><Plus className="w-4 h-4 text-emerald-600" /></div>
             <h2 className="text-base font-bold text-slate-800">เพิ่มรถใหม่เข้าสต็อก</h2>
+            {/* รหัสสินค้าที่ระบบจะออกให้อัตโนมัติ — เปลี่ยนตามไลน์สินค้าที่เลือก */}
+            <span className="ml-auto text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+              รหัสถัดไป: {generateProductId(form.vehicle_category, forklifts)}
+            </span>
           </div>
           <div className="p-6">
             {submitted && (
               <div className="mb-5 bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex items-center gap-3">
                 <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-                <p className="text-emerald-800 text-sm font-semibold">เพิ่มรถเข้าสต็อกเรียบร้อยแล้ว!</p>
+                <div>
+                  <p className="text-emerald-800 text-sm font-semibold">เพิ่มรถเข้าสต็อกเรียบร้อยแล้ว!</p>
+                  {lastProductId && (
+                    <p className="text-emerald-700 text-xs mt-0.5">
+                      รหัสสินค้า: <span className="font-bold bg-white border border-emerald-200 px-2 py-0.5 rounded-md">{lastProductId}</span> — ใช้รหัสนี้อ้างอิงรถคันนี้ได้ทุกจุดในระบบ
+                    </p>
+                  )}
+                </div>
               </div>
             )}
             <form onSubmit={handleSubmit} className="flex flex-col gap-6">
@@ -569,7 +594,7 @@ export default function StockMain() {
               </div>
               {/* ค้นหา */}
               <input value={listSearch} onChange={e => setListSearch(e.target.value)}
-                placeholder="ค้นหา SN / ยี่ห้อ / รุ่น / PI..."
+                placeholder="ค้นหา รหัสสินค้า / SN / ยี่ห้อ / รุ่น / PI..."
                 className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white text-slate-800 placeholder:text-slate-400" />
               {/* แท็บหมวด + กรองสถานะ */}
               <div className="flex items-center gap-2 flex-wrap">
@@ -603,7 +628,10 @@ export default function StockMain() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-slate-800 text-sm">{item.unit_no} — {item.brand} {item.model}</p>
+                      {isProductId(item.id) && (
+                        <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-md flex-shrink-0">{item.id}</span>
+                      )}
+                      <p className="font-semibold text-slate-800 text-sm">{item.unit_no ? `${item.unit_no} — ` : ""}{item.brand} {item.model}</p>
                       {idx === 0 && <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded-full flex-shrink-0">ล่าสุด</span>}
                     </div>
                     <p className="text-xs text-slate-500">{item.capacity}{item.capacity_kg ? ` / ${item.capacity_kg} kg` : ""} · {item.fuel}{item.location ? ` · ${item.location}` : ""}</p>

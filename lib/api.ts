@@ -49,7 +49,8 @@ export async function bootstrap(): Promise<BootstrapData> {
 
 // ── Forklift ────────────────────────────────────────────────────────────────
 export const addForkliftApi    = async (f: Forklift) => { const { error } = await sb().from("forklifts").upsert(f); if (error) throw error; return { id: f.id }; };
-export const updateForkliftApi = async (f: Forklift) => { const { error } = await sb().from("forklifts").upsert(f); if (error) throw error; };
+// ใช้ update ตรง (ไม่ใช่ upsert) — ใต้ RLS เซลล์/ผู้ขนส่งมีสิทธิ์แค่ UPDATE ไม่มี INSERT
+export const updateForkliftApi = async (f: Forklift) => { const { id, ...rest } = f; const { error } = await sb().from("forklifts").update(rest).eq("id", id); if (error) throw error; };
 export const deleteForkliftApi = async (id: string)  => { const { error } = await sb().from("forklifts").delete().eq("id", id); if (error) throw error; };
 
 // ── Sale ──────────────────────────────────────────────────────────────────--
@@ -57,14 +58,41 @@ export const addSaleApi    = async (s: Sale)    => { const { error } = await sb(
 export const deleteSaleApi = async (id: string) => { const { error } = await sb().from("sales").delete().eq("id", id); if (error) throw error; };
 
 // ── Inspection (soft delete = ตั้ง deleted_at) ─────────────────────────────--
-export const addInspectionApi     = async (r: InspectionRecord) => { const { error } = await sb().from("inspections").upsert({ ...r, deleted_at: null }); if (error) throw error; return { id: r.id }; };
+export const addInspectionApi = async (r: InspectionRecord) => {
+  const { error } = await sb().from("inspections").upsert({ ...r, deleted_at: null });
+  if (error) {
+    // ยังไม่ได้รัน supabase-migration-2026-07-13.sql (ไม่มีคอลัมน์ image_slots)
+    // → เซฟแบบไม่มีช่องแยกไปก่อน กันข้อมูลหาย แล้วเตือนใน console
+    const { image_slots: _slots, ...noSlots } = r;
+    const retry = await sb().from("inspections").upsert({ ...noSlots, deleted_at: null });
+    if (retry.error) throw error;
+    console.warn("inspections.image_slots ยังไม่มีใน DB — รัน supabase-migration-2026-07-13.sql เพื่อเก็บรูปแยกช่อง");
+  }
+  return { id: r.id };
+};
 export const deleteInspectionApi  = async (id: string) => { const { error } = await sb().from("inspections").update({ deleted_at: new Date().toISOString() }).eq("id", id); if (error) throw error; };
 export const restoreInspectionApi = async (id: string) => { const { error } = await sb().from("inspections").update({ deleted_at: null }).eq("id", id); if (error) throw error; };
 export const purgeInspectionApi   = async (id: string) => { const { error } = await sb().from("inspections").delete().eq("id", id); if (error) throw error; };
 
-// ── FieldConfig (เก็บทั้งก้อนใน app_config id=1) ────────────────────────────--
+// ── FieldConfig (เก็บใน app_config id=1) ────────────────────────────────────--
 export const getFieldConfigApi  = async () => { const { data } = await sb().from("app_config").select("data").eq("id", 1).maybeSingle(); return ((data as { data?: Record<string, unknown> } | null)?.data) ?? {}; };
-export const saveFieldConfigApi = async (cfg: unknown) => { const { error } = await sb().from("app_config").upsert({ id: 1, data: cfg }); if (error) throw error; };
+// เซฟผ่าน RPC merge_field_config — merge เฉพาะ key ที่ส่ง + DB ตัด knownUsers/adminEmails ทิ้งเสมอ
+// (สิทธิ์ผู้ใช้แก้ได้ทาง admin_update_access เท่านั้น กันเครื่องที่ config เก่าทับสิทธิ์ที่แอดมินเพิ่งแก้)
+export const saveFieldConfigApi = async (cfg: unknown) => {
+  const { knownUsers: _ku, adminEmails: _ae, ...clean } = (cfg ?? {}) as Record<string, unknown>;
+  const { error } = await sb().rpc("merge_field_config", { cfg: clean });
+  if (error) {
+    // fallback (ยังไม่รัน SQL เฟส 1): upsert ทั้งก้อนแบบเดิม
+    const { error: e2 } = await sb().from("app_config").upsert({ id: 1, data: cfg });
+    if (e2) throw e2;
+  }
+};
+// เขียน config ทั้งก้อนตรงๆ (รวม knownUsers/adminEmails) — ใช้เฉพาะ fallback ของระบบสิทธิ์
+// ช่วงที่ยังไม่รัน SQL เฟส 1 เท่านั้น · เมื่อเปิด RLS แล้วเส้นทางนี้จะถูก DB ปฏิเสธเอง
+export const saveFullConfigApi = async (cfg: unknown) => {
+  const { error } = await sb().from("app_config").upsert({ id: 1, data: cfg });
+  if (error) throw error;
+};
 
 // ── อัปโหลดรูป inspection → ยังใช้ GAS→Drive เดิม ───────────────────────────
 export const uploadImageApi = async (base64: string, mimeType: string, fileName: string) => {

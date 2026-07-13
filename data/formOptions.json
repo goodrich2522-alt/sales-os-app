@@ -1,0 +1,119 @@
+{
+  "brands": [
+    "HELI",
+    "TOYOTA",
+    "MITSUBISHI",
+    "KOMATSU",
+    "LINDE",
+    "CROWN",
+    "HYSTER",
+    "YALE",
+    "DOOSAN",
+    "CLARK"
+  ],
+  "vehicleGroups": [
+    "รถยก 4 ล้อ",
+    "รถยก 3 ล้อ",
+    "Reach Truck",
+    "Order Picker",
+    "Pallet Truck",
+    "Stacker"
+  ],
+  "fuelTypes": [
+    "ดีเซล",
+    "ไฟฟ้า",
+    "แก๊ส LPG",
+    "แก๊ส CNG"
+  ],
+  "controlTypes": [
+    "แมนนวล",
+    "เซมิออโต",
+    "ออโต",
+    "AC Drive",
+    "IC Engine"
+  ],
+  "poStatuses": [
+    "รอ PO",
+    "PO ออกแล้ว",
+    "รอชำระ",
+    "ชำระแล้ว",
+    "ยกเลิก"
+  ],
+  "locations": [
+    "คลังกรุงเทพ",
+    "คลังชลบุรี",
+    "คลังระยอง",
+    "โรงงาน",
+    "ที่ลูกค้า"
+  ],
+  "stockStatuses": [
+    "พร้อมขาย",
+    "จองแล้ว",
+    "ส่งมอบแล้ว",
+    "ซ่อมบำรุง",
+    "รอตรวจสอบ"
+  ],
+  "customerTypes": [
+    "บุคคลทั่วไป",
+    "นิติบุคคล",
+    "หจก."
+  ],
+  "financeCompanies": [
+    "กรุงศรี ออโต้",
+    "ธ.กสิกรไทย",
+    "ธ.ไทยพาณิชย์",
+    "ธ.กรุงเทพ",
+    "ลีสซิ่งไทย",
+    "อยุธยา แคปปิตอล",
+    "เมืองไทย ลีสซิ่ง"
+  ],
+  "customFieldDefs": [],
+  "saleExtraFieldDefs": [
+    {
+      "id": "sef_1780911939107",
+      "name": "โลเคชั่นหน้างาน",
+      "type": "text"
+    },
+    {
+      "id": "sef_1780911967343",
+      "name": "ลิ้งก์โลเคชั่น",
+      "type": "text"
+    },
+    {
+      "id": "sef_1780911976446",
+      "name": "เซลล์เจ้าของงาน",
+      "type": "text"
+    },
+    {
+      "id": "sef_1780911985796",
+      "name": "PI",
+      "type": "text"
+    },
+    {
+      "id": "sef_1780911999104",
+      "name": "MODEL",
+      "type": "text"
+    },
+    {
+      "id": "sef_1780912012569",
+      "name": "Valve",
+      "type": "text"
+    },
+    {
+      "id": "sef_1780912017769",
+      "name": "SN",
+      "type": "text"
+    },
+    {
+      "id": "sef_1780912029751",
+      "name": "วันที่รับรถ",
+      "type": "text"
+    },
+    {
+      "id": "sef_1780912050124",
+      "name": "เซอร์วิสและของแถม",
+      "type": "text"
+    }
+  ],
+  "salesFilterRequests": []
+}

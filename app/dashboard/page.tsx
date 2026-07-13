@@ -12,6 +12,8 @@ import { getRegion } from "@/lib/mockData";
 import { buildStaffMonthly, buildStaffWeekly, buildAllMonthlyWeekly, MONTH_LABELS } from "@/components/charts/Charts";
 import { Sale } from "@/lib/types";
 import GoogleLoginButton, { type GoogleUser } from "@/components/GoogleLoginButton";
+import { checkAccess, hasActiveSession } from "@/lib/auth";
+import { apiEnabled } from "@/lib/api";
 
 const SalesRevenueChart = dynamic(
   () => import("@/components/charts/Charts").then((m) => ({ default: m.SalesRevenueChart })),
@@ -70,6 +72,8 @@ const CONTACT_SOURCE_COLORS: Record<string, string> = {
 
 export default function Dashboard() {
   const [dashAuth, setDashAuth] = useState(false);
+  const [dashChecking, setDashChecking] = useState(false);
+  const [dashNotice, setDashNotice] = useState(""); // แจ้งเหตุที่เข้าไม่ได้ (รออนุมัติ/ถูกระงับ/ยังไม่ลงทะเบียน)
 
   const { sales, forklifts } = useApp();
   const staffNames = Array.from(new Set(sales.map((s) => s.sales_staff).filter(Boolean)));
@@ -82,7 +86,15 @@ export default function Dashboard() {
   const [regionModal, setRegionModal] = useState<string | null>(null);
 
   useEffect(() => {
-    if (localStorage.getItem("dash_auth") === "1") setDashAuth(true);
+    // เข้าค้างไว้ได้เฉพาะเมื่อ session Supabase ยังไม่หมดอายุ — ไม่งั้นให้ล็อกอินใหม่
+    (async () => {
+      if (localStorage.getItem("dash_auth") !== "1") return;
+      if (apiEnabled && !(await hasActiveSession())) {
+        localStorage.removeItem("dash_auth");
+        return;
+      }
+      setDashAuth(true);
+    })();
   }, []);
 
   // ── All hooks must be called before any early return ──────────────────────────
@@ -177,7 +189,19 @@ export default function Dashboard() {
   const monthsWithData = realMonthly.filter((m) => m.units > 0).length || 1;
   const avgRevenue = Math.round(totalRevenue / monthsWithData);
 
-  const handleDashGoogle = (u: GoogleUser) => {
+  // แดชบอร์ดเห็นข้อมูลรวมทั้งบริษัท — เข้าได้เฉพาะผู้ใช้ที่แอดมินอนุมัติแล้ว (role ไหนก็ได้) หรือแอดมิน
+  const handleDashGoogle = async (u: GoogleUser) => {
+    setDashChecking(true); setDashNotice("");
+    const access = await checkAccess(u.email);
+    setDashChecking(false);
+    if (!access.ok) {
+      setDashNotice(
+        access.reason === "blocked" ? "บัญชีนี้ถูกระงับการใช้งาน — ติดต่อแอดมิน"
+        : access.reason === "pending" ? "บัญชีของคุณรอแอดมินอนุมัติอยู่ — ยังเข้าแดชบอร์ดไม่ได้"
+        : "บัญชีนี้ยังไม่ได้ลงทะเบียนในระบบ — ลงทะเบียนผ่านหน้าทีมขาย/ฝ่ายสต็อก แล้วรอแอดมินอนุมัติ"
+      );
+      return;
+    }
     localStorage.setItem("dash_auth", "1");
     localStorage.setItem("dash_user", JSON.stringify({ email: u.email, name: u.name }));
     setDashAuth(true);
@@ -198,8 +222,17 @@ export default function Dashboard() {
                 <p className="text-slate-500 text-sm mt-1 text-center">ข้อมูลภายในบริษัท — เข้าสู่ระบบด้วย Google</p>
               </div>
               <div className="flex flex-col items-center gap-3">
-                <GoogleLoginButton onSuccess={handleDashGoogle} />
-                <p className="text-xs text-slate-400 text-center">เข้าสู่ระบบด้วยบัญชี Google ของคุณ</p>
+                {dashNotice && (
+                  <div className="w-full bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 leading-relaxed">
+                    {dashNotice}
+                  </div>
+                )}
+                {dashChecking ? (
+                  <div className="flex items-center gap-2 text-slate-500 text-sm py-2">กำลังตรวจสอบสิทธิ์...</div>
+                ) : (
+                  <GoogleLoginButton onSuccess={handleDashGoogle} onError={setDashNotice} />
+                )}
+                <p className="text-xs text-slate-400 text-center">เฉพาะผู้ใช้ที่แอดมินอนุมัติแล้วเท่านั้น</p>
               </div>
               <Link href="/" className="flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 mt-5 transition-colors">
                 <ArrowLeft className="w-3.5 h-3.5" />กลับหน้าหลัก

@@ -4,8 +4,10 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRight, ChevronLeft, Package, History, ImageOff, Hash, Calendar, User, FileText, PackageCheck, Clock, Search, RotateCcw, Building2, Briefcase, Trash2 } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
-import { Forklift, Sale } from "@/lib/types";
+import { Forklift, Sale, INSPECTION_SLOTS, InspectionSlotKey, SLOT_LABELS } from "@/lib/types";
 import { driveImg } from "@/lib/img";
+import { hasActiveSession, signOutSupabase } from "@/lib/auth";
+import { apiEnabled } from "@/lib/api";
 
 type TransporterRole = "ผู้รับรถ" | "ผู้ส่งมอบรถ";
 
@@ -21,14 +23,18 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 export default function TransporterMain() {
   const router = useRouter();
-  const { addInspection, deleteInspection, updateForklift, deleteForklift, forklifts, sales, inspections } = useApp();
+  const { addInspection, deleteInspection, updateForklift, forklifts, sales, inspections } = useApp();
   const [username, setUsername] = useState("");
   const [role, setRole] = useState<TransporterRole>("ผู้รับรถ");
   const [showHistory, setShowHistory] = useState(false);
   const [histSearch, setHistSearch] = useState("");
   const [histDeleteId, setHistDeleteId] = useState<string | null>(null); // ยืนยันก่อนลบรายการประวัติ
   const [lightbox, setLightbox] = useState<{ imgs: string[]; idx: number } | null>(null);
-  const [images, setImages] = useState<string[]>([]);
+  // รูปบังคับ 6 ช่อง (name plate / เอกสาร PI / รถ 4 มุม) + รูปเพิ่มเติมไม่บังคับ
+  const [slotImages, setSlotImages] = useState<Partial<Record<InspectionSlotKey, string>>>({});
+  const [extraImages, setExtraImages] = useState<string[]>([]);
+  const [activeSlot, setActiveSlot] = useState<InspectionSlotKey | null>(null); // ช่องที่กำลังจะถ่าย
+  const slotInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── ฟอร์มผู้รับรถ ──
@@ -51,6 +57,13 @@ export default function TransporterMain() {
     const name = localStorage.getItem("transporter_name");
     if (!name) { router.push("/transporter/login"); return; }
     setUsername(name); setReceiverName(name); setSenderName(name);
+    // มีชื่อค้างแต่ session Supabase หมดอายุ/ไม่มี → บังคับล็อกอินใหม่ (กันสถานะ "เหมือนใช้ได้แต่เซฟไม่เข้า")
+    (async () => {
+      if (apiEnabled && !(await hasActiveSession())) {
+        localStorage.removeItem("transporter_name");
+        router.push("/transporter/login");
+      }
+    })();
   }, [router]);
 
   const isReceiver = role === "ผู้รับรถ";
@@ -59,7 +72,13 @@ export default function TransporterMain() {
   const waitingList = forklifts.filter(f => String(f.status || "") === "รอรับ");
   const snKey = unitNo.trim().toUpperCase();
   const piKey = piNo.trim().toUpperCase();
-  const stockMatch = snKey ? (forklifts.find(f => f.unit_no && String(f.unit_no).toUpperCase() === snKey) || null) : null;
+  // หาได้ทั้งจาก SN และรหัสสินค้า (FK-0001 ฯลฯ) — รหัสสินค้าคือ id หลักของรถในระบบ
+  const stockMatch = snKey
+    ? (forklifts.find(f =>
+        (f.unit_no && String(f.unit_no).toUpperCase() === snKey) ||
+        String(f.id ?? "").toUpperCase() === snKey
+      ) || null)
+    : null;
   const waitingByPI = (!stockMatch && piKey) ? waitingList.filter(w => String(w.pi_no || "").trim().toUpperCase() === piKey) : [];
   // จัดกลุ่มตามรุ่นภายใน PI — รุ่นเดียว = ใส่ SN ให้คันแรกเลย / หลายรุ่น = ให้เลือกรุ่นก่อน
   const waitingModels = [...new Set(waitingByPI.map(w => String(w.model || "").trim()))];
@@ -70,7 +89,13 @@ export default function TransporterMain() {
     : !needPickModel ? waitingByPI[0]                                              // รุ่นเดียว → คันแรก (FIFO)
     : (waitingByPI.find(w => String(w.model || "").trim() === pickedModel) || null); // หลายรุ่น → คันแรกของรุ่นที่เลือก
   const recvMode: "stock" | "waiting" | null = stockMatch ? "stock" : (recvTarget ? "waiting" : null);
-  const receiverValid = !!(piKey && receivedDate && receiverName.trim() && snKey && recvTarget);
+
+  // ── รูปบังคับ: ต้องครบ 6 ช่องก่อนถึงจะยืนยันได้ (ทั้งผู้รับและผู้ส่ง) ──
+  const filledSlots = INSPECTION_SLOTS.filter(s => !!slotImages[s.key]);
+  const allSlotsFilled = filledSlots.length === INSPECTION_SLOTS.length;
+  const missingSlotLabels = INSPECTION_SLOTS.filter(s => !slotImages[s.key]).map(s => s.label);
+
+  const receiverValid = !!(piKey && receivedDate && receiverName.trim() && snKey && recvTarget) && allSlotsFilled;
 
   // ===== ผู้ส่งรถ: กรอก SN → หา รถ + ดีล =====
   const delKey = delSN.trim().toUpperCase();
@@ -79,7 +104,7 @@ export default function TransporterMain() {
     ? (sales.filter(s => String(s.forklift_unit_no || "").toUpperCase() === delKey)
         .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))[0] || null)
     : null;
-  const delValid = !!(delFork && senderName.trim() && deliverDate);
+  const delValid = !!(delFork && senderName.trim() && deliverDate) && allSlotsFilled;
   const targetReady = isReceiver ? !!recvTarget : !!delFork;
 
   // รหัสสเปกรถ (รุ่น/เสา/วาล์ว/งา/อุปกรณ์/พิกัด/เชื้อเพลิง)
@@ -96,13 +121,12 @@ export default function TransporterMain() {
   };
 
   // ===== รูป =====
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-    Array.from(files).forEach((file) => {
+  // ย่อรูปเป็น dataURL (ยาวสุด 800px, jpeg 72%) — ใช้ร่วมทั้งรูปช่องบังคับและรูปเพิ่มเติม
+  const fileToResizedDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (ev) => {
-        if (!ev.target?.result) return;
+        if (!ev.target?.result) { reject(new Error("read fail")); return; }
         const img = new Image();
         img.onload = () => {
           const MAX = 800;
@@ -111,21 +135,50 @@ export default function TransporterMain() {
           canvas.width = Math.round(img.width * ratio);
           canvas.height = Math.round(img.height * ratio);
           canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-          setImages((prev) => [...prev, canvas.toDataURL("image/jpeg", 0.72)]);
+          resolve(canvas.toDataURL("image/jpeg", 0.72));
         };
         img.src = ev.target.result as string;
       };
       reader.readAsDataURL(file);
     });
+
+  // ถ่ายรูปลงช่องบังคับ (ทีละช่อง — แตะการ์ดช่องก่อนแล้วเลือกรูป)
+  const handleSlotUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // ให้เลือกไฟล์เดิมซ้ำได้ (กรณีถ่ายใหม่)
+    if (!file || !activeSlot) return;
+    const url = await fileToResizedDataUrl(file);
+    setSlotImages(p => ({ ...p, [activeSlot]: url }));
+    setActiveSlot(null);
   };
-  const removeImage = (idx: number) => setImages((prev) => prev.filter((_, i) => i !== idx));
+  const retakeSlot = (key: InspectionSlotKey) =>
+    setSlotImages(p => { const n = { ...p }; delete n[key]; return n; });
+
+  // รูปเพิ่มเติม (ไม่บังคับ หลายรูปได้)
+  const handleExtraUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    Array.from(files).forEach(async (file) => {
+      const url = await fileToResizedDataUrl(file);
+      setExtraImages(prev => [...prev, url]);
+    });
+    e.target.value = "";
+  };
+  const removeExtraImage = (idx: number) => setExtraImages(prev => prev.filter((_, i) => i !== idx));
+
+  // รวมรูปส่งเข้า inspection: 6 ช่องเรียงตามลำดับ + รูปเพิ่มเติมต่อท้าย
+  const buildImagePayload = () => {
+    const slots: Partial<Record<InspectionSlotKey, string>> = { ...slotImages };
+    const ordered = INSPECTION_SLOTS.map(s => slotImages[s.key]).filter(Boolean) as string[];
+    return { images: [...ordered, ...extraImages], image_slots: slots };
+  };
 
   // ===== บันทึก =====
   const submitReceiver = () => {
     if (!recvTarget) return;
     const insId = `ins_${Date.now()}`;
     const rd = thaiDate(receivedDate);
-    addInspection({ id: insId, unit_no: snKey, transporter_name: receiverName.trim() || username, date: receivedDate || today(), images: [...images], role: "ผู้รับรถ" });
+    addInspection({ id: insId, unit_no: snKey, transporter_name: receiverName.trim() || username, date: receivedDate || today(), ...buildImagePayload(), role: "ผู้รับรถ" });
     const before = { ...recvTarget };
     // รับรถ = รถมาถึงพร้อมขาย → ตั้ง "พร้อมขาย" เสมอ (ทั้งรถรอรับและรถสต็อก) → ขึ้นหน้าเซลล์
     updateForklift({
@@ -141,7 +194,7 @@ export default function TransporterMain() {
   const submitDeliverer = () => {
     if (!delFork) return;
     const insId = `ins_${Date.now()}`;
-    addInspection({ id: insId, unit_no: delFork.unit_no, transporter_name: senderName.trim() || username, date: deliverDate || today(), images: [...images], role: "ผู้ส่งมอบรถ" });
+    addInspection({ id: insId, unit_no: delFork.unit_no, transporter_name: senderName.trim() || username, date: deliverDate || today(), ...buildImagePayload(), role: "ผู้ส่งมอบรถ" });
     setDone({ insId, before: null, label: `ส่งมอบ ${delFork.unit_no} แล้ว` });
   };
 
@@ -153,25 +206,22 @@ export default function TransporterMain() {
     resetForm();
   };
 
-  // ลบรายการในประวัติ — ลบ inspection + (ถ้าเป็นรายการรับรถ) เอารถออกจากสต็อกด้วย
+  // ลบรายการในประวัติ — ลบเฉพาะ inspection (การเอารถออกจากสต็อกเป็นสิทธิ์ของฝ่ายสต็อกเท่านั้น
+  // — เดิมหน้านี้ลบรถถาวรได้ ซึ่งเสี่ยงเกินไปสำหรับ role ผู้ขนส่ง · ดู DEV-PLAN ข้อ 2.3)
   const deleteHistory = (rec: { id: string; unit_no: string; role?: string }) => {
     deleteInspection(rec.id);
-    if ((rec.role ?? "ผู้รับรถ") === "ผู้รับรถ") {
-      const f = forklifts.find(x => String(x.unit_no).toUpperCase() === String(rec.unit_no).toUpperCase());
-      if (f) deleteForklift(f.id);
-    }
     setHistDeleteId(null);
   };
 
   const resetForm = () => {
-    setImages([]); setDone(null);
+    setSlotImages({}); setExtraImages([]); setActiveSlot(null); setDone(null);
     setPiNo(""); setReceivedDate(""); setUnitNo(""); setPickedModel("");
     setReceiverName(username);
     setDelSN(""); setSenderName(username); setDeliverDate(""); setSalesOwner("");
   };
 
   const switchRole = (r: TransporterRole) => { setRole(r); resetForm(); };
-  const handleLogout = () => { localStorage.removeItem("transporter_name"); router.push("/transporter/login"); };
+  const handleLogout = () => { void signOutSupabase(); localStorage.removeItem("transporter_name"); router.push("/transporter/login"); };
 
   const histFiltered = [...inspections]
     .filter(r => {
@@ -380,38 +430,85 @@ export default function TransporterMain() {
           </div>
         )}
 
-        {/* ============ ถ่ายรูป (ทั้ง 2 โหมด เมื่อหาคันเจอแล้ว) ============ */}
+        {/* ============ ถ่ายรูปบังคับ 6 ช่อง (ทั้ง 2 โหมด เมื่อหาคันเจอแล้ว) ============ */}
         {!done && targetReady && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                <Camera className={`w-4 h-4 ${isReceiver ? "text-amber-500" : "text-indigo-500"}`} />ถ่ายรูปสภาพรถ
+                <Camera className={`w-4 h-4 ${isReceiver ? "text-amber-500" : "text-indigo-500"}`} />ถ่ายรูปสภาพรถ (บังคับ 6 รูป)
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${isReceiver ? "bg-amber-100 text-amber-700" : "bg-indigo-100 text-indigo-700"}`}>{role}</span>
               </h3>
-              {images.length > 0 && <span className="text-xs bg-indigo-100 text-indigo-700 font-semibold px-2.5 py-1 rounded-full">{images.length} รูป</span>}
+              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${allSlotsFilled ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                {filledSlots.length}/{INSPECTION_SLOTS.length} รูป
+              </span>
             </div>
-            <p className="text-xs text-slate-500 mb-4">{isReceiver ? "ถ่ายรูปสภาพรถทุกมุมก่อนรับมอบ" : "ถ่ายรูปสภาพรถทุกมุมก่อนส่งมอบให้ลูกค้า"} — รูปจะโชว์ในประวัติการขายของรถคันนี้</p>
-            <button onClick={() => fileInputRef.current?.click()}
-              className="w-full border-2 border-dashed border-slate-200 hover:border-indigo-400 bg-slate-50 hover:bg-indigo-50/50 rounded-xl p-6 flex flex-col items-center gap-2 transition-all duration-200 cursor-pointer group">
-              <div className="bg-white border border-slate-200 group-hover:border-indigo-200 rounded-xl p-2.5 shadow-sm group-hover:shadow-md transition-all duration-200">
-                <Upload className="w-6 h-6 text-slate-400 group-hover:text-indigo-500 transition-colors" />
-              </div>
-              <span className="text-sm text-slate-600 group-hover:text-indigo-600 font-medium transition-colors">แตะเพื่อเลือกรูป</span>
-              <span className="text-xs text-slate-400">รองรับ JPG, PNG, HEIC</span>
-            </button>
-            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} />
-            {images.length > 0 && (
-              <div className="grid grid-cols-3 gap-2 mt-4">
-                {images.map((img, idx) => (
-                  <div key={idx} className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 group">
+            <p className="text-xs text-slate-500 mb-4">
+              แตะช่องแล้วถ่าย/เลือกรูปให้ครบทุกช่อง — รูปทั้งหมดจะส่งเข้าหน้าเซลล์ให้ตรวจสอบพร้อมป้ายกำกับ
+            </p>
+
+            {/* ── 6 ช่องบังคับ ── */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              {INSPECTION_SLOTS.map(slot => {
+                const img = slotImages[slot.key];
+                return img ? (
+                  <div key={slot.key} className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 border-2 border-emerald-300 group">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={img} alt={`รูปที่ ${idx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                    <button onClick={() => removeImage(idx)} className="absolute top-1.5 right-1.5 bg-slate-900/70 hover:bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center transition-colors duration-200 opacity-0 group-hover:opacity-100"><X className="w-3 h-3" /></button>
-                    <div className={`absolute bottom-1 left-1 text-xs rounded px-1.5 py-0.5 font-semibold ${isReceiver ? "bg-amber-500/90 text-white" : "bg-indigo-500/90 text-white"}`}>{idx + 1}</div>
+                    <img src={img} alt={slot.label} className="w-full h-full object-cover" />
+                    <span className="absolute bottom-0 inset-x-0 bg-emerald-600/90 text-white text-[11px] font-bold px-1.5 py-1 text-center truncate">
+                      ✓ {slot.label}
+                    </span>
+                    <button onClick={() => retakeSlot(slot.key)} title="ถ่ายใหม่"
+                      className="absolute top-1.5 right-1.5 bg-slate-900/70 hover:bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center transition-colors">
+                      <X className="w-3 h-3" />
+                    </button>
                   </div>
-                ))}
-              </div>
+                ) : (
+                  <button key={slot.key} onClick={() => { setActiveSlot(slot.key); slotInputRef.current?.click(); }}
+                    className={`aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all ${isReceiver ? "border-amber-200 hover:border-amber-400 bg-amber-50/40 hover:bg-amber-50" : "border-indigo-200 hover:border-indigo-400 bg-indigo-50/40 hover:bg-indigo-50"}`}>
+                    <span className="text-2xl">{slot.icon}</span>
+                    <span className="text-xs font-bold text-slate-700 px-1 text-center leading-tight">{slot.label}</span>
+                    <span className={`flex items-center gap-1 text-[10px] font-semibold ${isReceiver ? "text-amber-600" : "text-indigo-600"}`}>
+                      <Camera className="w-3 h-3" />แตะเพื่อถ่าย
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {/* input ช่องบังคับ — ทีละรูป (capture เปิดกล้องบนมือถือ) */}
+            <input ref={slotInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleSlotUpload} />
+
+            {!allSlotsFilled && (
+              <p className="mt-3 text-xs text-amber-600 flex items-start gap-1">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+                ยังขาด: {missingSlotLabels.join(" · ")}
+              </p>
             )}
+
+            {/* ── รูปเพิ่มเติม (ไม่บังคับ) ── */}
+            <div className="mt-5 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-between mb-2.5">
+                <p className="text-xs font-semibold text-slate-600">รูปเพิ่มเติม (ไม่บังคับ) เช่น จุดที่มีตำหนิ</p>
+                {extraImages.length > 0 && <span className="text-xs bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded-full">{extraImages.length} รูป</span>}
+              </div>
+              <button onClick={() => fileInputRef.current?.click()}
+                className="w-full border-2 border-dashed border-slate-200 hover:border-indigo-400 bg-slate-50 hover:bg-indigo-50/50 rounded-xl p-4 flex items-center justify-center gap-2 transition-all cursor-pointer group">
+                <Upload className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors" />
+                <span className="text-sm text-slate-600 group-hover:text-indigo-600 font-medium transition-colors">แตะเพื่อเพิ่มรูป</span>
+              </button>
+              <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleExtraUpload} />
+              {extraImages.length > 0 && (
+                <div className="grid grid-cols-3 gap-2 mt-3">
+                  {extraImages.map((img, idx) => (
+                    <div key={idx} className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 group">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={img} alt={`รูปเพิ่มเติม ${idx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      <button onClick={() => removeExtraImage(idx)} className="absolute top-1.5 right-1.5 bg-slate-900/70 hover:bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center transition-colors duration-200 opacity-0 group-hover:opacity-100"><X className="w-3 h-3" /></button>
+                      <div className={`absolute bottom-1 left-1 text-xs rounded px-1.5 py-0.5 font-semibold ${isReceiver ? "bg-amber-500/90 text-white" : "bg-indigo-500/90 text-white"}`}>{idx + 1}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -419,10 +516,16 @@ export default function TransporterMain() {
         {!done && targetReady && (
           <div className="flex flex-col gap-2">
             {isReceiver && !receiverValid && (
-              <p className="text-xs text-amber-600 text-center flex items-center justify-center gap-1"><AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> กรอก PI · SN · วันที่รับรถ · ชื่อผู้รับรถ ให้ครบ</p>
+              <p className="text-xs text-amber-600 text-center flex items-center justify-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                กรอก PI · SN · วันที่รับรถ · ชื่อผู้รับรถ ให้ครบ{!allSlotsFilled && ` + ถ่ายรูปให้ครบ 6 ช่อง (ขาด ${missingSlotLabels.length} รูป)`}
+              </p>
             )}
             {!isReceiver && !delValid && (
-              <p className="text-xs text-amber-600 text-center flex items-center justify-center gap-1"><AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> กรอก ผู้ส่งรถ · วันที่ส่งรถ ให้ครบ</p>
+              <p className="text-xs text-amber-600 text-center flex items-center justify-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                กรอก ผู้ส่งรถ · วันที่ส่งรถ ให้ครบ{!allSlotsFilled && ` + ถ่ายรูปให้ครบ 6 ช่อง (ขาด ${missingSlotLabels.length} รูป)`}
+              </p>
             )}
             <button onClick={isReceiver ? submitReceiver : submitDeliverer} disabled={isReceiver ? !receiverValid : !delValid}
               className={`w-full text-white font-bold py-4 rounded-2xl transition-all duration-200 active:scale-[0.98] text-base shadow-md hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-md disabled:active:scale-100 ${isReceiver ? "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500" : "bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500"}`}>
@@ -469,20 +572,27 @@ export default function TransporterMain() {
                     <p className="text-xs text-slate-500 mb-2">โดย <span className="font-semibold text-slate-700">{rec.transporter_name || "—"}</span></p>
                     {histDeleteId === rec.id && (
                       <div className="flex items-center gap-2 mb-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
-                        <span className="text-xs text-red-700 flex-1">ลบรายการนี้ถาวร?{receiver ? ` + เอารถ ${rec.unit_no} ออกจากสต็อกด้วย` : ""}</span>
+                        <span className="text-xs text-red-700 flex-1">ลบรายการนี้ถาวร? (ตัวรถยังอยู่ในสต็อก — แจ้งฝ่ายสต็อกถ้าต้องเอารถออก)</span>
                         <button onClick={() => deleteHistory(rec)} className="text-xs font-bold bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg">ลบเลย</button>
                         <button onClick={() => setHistDeleteId(null)} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1.5">ยกเลิก</button>
                       </div>
                     )}
                     {rec.images && rec.images.length > 0 ? (
                       <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
-                        {rec.images.map((img, i) => (
-                          <button key={i} onClick={() => setLightbox({ imgs: rec.images, idx: i })}
-                            className="relative aspect-square rounded-lg overflow-hidden bg-slate-200 hover:ring-2 hover:ring-amber-400 transition-all">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={driveImg(img)} alt="" className="w-full h-full object-cover" />
-                          </button>
-                        ))}
+                        {(() => {
+                          // ป้ายชื่อช่อง (Name Plate/PI/4 มุม) จาก image_slots — รูปเก่าไม่มีป้าย
+                          const urlToLabel = new Map(Object.entries(rec.image_slots ?? {}).map(([k, v]) => [v as string, SLOT_LABELS[k] ?? k]));
+                          return rec.images.map((img, i) => (
+                            <button key={i} onClick={() => setLightbox({ imgs: rec.images, idx: i })}
+                              className="relative aspect-square rounded-lg overflow-hidden bg-slate-200 hover:ring-2 hover:ring-amber-400 transition-all">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={driveImg(img)} alt={urlToLabel.get(img) ?? ""} className="w-full h-full object-cover" />
+                              {urlToLabel.get(img) && (
+                                <span className="absolute bottom-0 inset-x-0 bg-black/55 text-white text-[9px] font-semibold px-1 py-0.5 truncate text-center">{urlToLabel.get(img)}</span>
+                              )}
+                            </button>
+                          ));
+                        })()}
                       </div>
                     ) : (
                       <p className="text-xs text-slate-400 flex items-center gap-1"><ImageOff className="w-3.5 h-3.5" />ไม่มีรูป</p>

@@ -10,9 +10,12 @@ import {
   Settings, ChevronDown, Type, ListOrdered, ArrowLeft, Bell, Eye, ChevronUp, RefreshCw,
 } from "lucide-react";
 import { PROVINCES, CONTACT_SOURCES } from "@/lib/mockData";
-import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, ContactSource, SaleType } from "@/lib/types";
+import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, ContactSource, SaleType, InspectionRecord, SLOT_LABELS } from "@/lib/types";
 import { useApp } from "@/lib/AppContext";
 import { driveImg } from "@/lib/img";
+import { isProductId } from "@/lib/productId";
+import { hasActiveSession, signOutSupabase } from "@/lib/auth";
+import { apiEnabled } from "@/lib/api";
 import AiAssistant from "@/components/AiAssistant";
 
 const STATUS_BADGE: Record<string, string> = {
@@ -75,6 +78,17 @@ function daysUntil(dateStr: string): number {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const target = new Date(dateStr); target.setHours(0, 0, 0, 0);
   return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+// รูปพร้อมป้ายกำกับช่อง (Name Plate / เอกสาร PI / รถ 4 มุม) — รูปเก่าไม่มีช่อง = ป้ายว่าง
+type LabeledPhoto = { url: string; label: string };
+function labeledPhotos(recs: InspectionRecord[]): LabeledPhoto[] {
+  return recs.flatMap(r => {
+    const urlToLabel = new Map(
+      Object.entries(r.image_slots ?? {}).map(([k, v]) => [v as string, SLOT_LABELS[k] ?? k])
+    );
+    return (r.images ?? []).map(url => ({ url, label: urlToLabel.get(url) ?? "" }));
+  });
 }
 
 export default function SalesMain() {
@@ -159,8 +173,15 @@ export default function SalesMain() {
 
   useEffect(() => {
     const u = localStorage.getItem("sales_user");
-    if (!u) router.push("/sales/login");
-    else setSalesUser(JSON.parse(u));
+    if (!u) { router.push("/sales/login"); return; }
+    setSalesUser(JSON.parse(u));
+    // มีข้อมูลค้างแต่ session Supabase หมดอายุ/ไม่มี → บังคับล็อกอินใหม่ (กันเซฟไม่เข้าแบบเงียบๆ)
+    (async () => {
+      if (apiEnabled && !(await hasActiveSession())) {
+        localStorage.removeItem("sales_user");
+        router.push("/sales/login");
+      }
+    })();
   }, [router]);
 
   const available = forklifts.filter(f => SELLABLE_STATUSES.includes(String(f.status).trim()));
@@ -189,7 +210,7 @@ export default function SalesMain() {
   const filtered = available.filter(f => {
     const q = search.trim().toLowerCase();
     const base =
-      (!q || hay(f.unit_no).includes(q) || hay(f.brand).includes(q) || hay(f.model).includes(q)) &&
+      (!q || hay(f.id).includes(q) || hay(f.unit_no).includes(q) || hay(f.brand).includes(q) || hay(f.model).includes(q)) &&
       (!fFuel     || hay(f.fuel) === fFuel.toLowerCase()) &&
       (!fCapacity || Number(f.capacity_kg) === Number(fCapacity)) &&
       (!fHeight   || toMeters(f.height) === Number(fHeight));
@@ -236,12 +257,12 @@ export default function SalesMain() {
   }, [mySales, testNotifActive]);
 
   const detailInspPhotos = useMemo(() => {
-    if (!detailSale) return { receiver: [] as string[], deliverer: [] as string[], all: [] as string[], receiverNames: "", delivererNames: "" };
+    if (!detailSale) return { receiver: [] as LabeledPhoto[], deliverer: [] as LabeledPhoto[], all: [] as LabeledPhoto[], receiverNames: "", delivererNames: "" };
     const recs = inspections.filter(r => r.unit_no === detailSale.forklift_unit_no);
     const recvRecs = recs.filter(r => r.role === "ผู้รับรถ" || !r.role);
     const delivRecs = recs.filter(r => r.role === "ผู้ส่งมอบรถ");
-    const receiver  = recvRecs.flatMap(r => r.images);
-    const deliverer = delivRecs.flatMap(r => r.images);
+    const receiver  = labeledPhotos(recvRecs);
+    const deliverer = labeledPhotos(delivRecs);
     const names = (rs: typeof recs) => [...new Set(rs.map(r => r.transporter_name).filter(Boolean))].join(", ");
     return { receiver, deliverer, all: [...receiver, ...deliverer], receiverNames: names(recvRecs), delivererNames: names(delivRecs) };
   }, [detailSale, inspections]);
@@ -267,6 +288,7 @@ export default function SalesMain() {
     // ข้อมูลรถจากสต็อก — เติมให้อัตโนมัติ ไม่ต้องให้เซลล์กรอกเอง
     if (selected) {
       const auto: Record<string, string> = {
+        "รหัสสินค้า": isProductId(selected.id) ? String(selected.id) : "",
         PI: selected.pi_no ?? "", MODEL: selected.model ?? "",
         Valve: selected.control_type ?? "", SN: selected.unit_no ?? "",
         "วันรับรถ": selected.received_date ?? "",
@@ -343,8 +365,8 @@ export default function SalesMain() {
 
   const fmt = (n: number) => n.toLocaleString("th-TH");
   const selectedInspRecs = selected ? inspections.filter(r => r.unit_no === selected.unit_no) : [];
-  const receiverPhotos   = selectedInspRecs.filter(r => r.role === "ผู้รับรถ" || !r.role).flatMap(r => r.images);
-  const delivererPhotos  = selectedInspRecs.filter(r => r.role === "ผู้ส่งมอบรถ").flatMap(r => r.images);
+  const receiverPhotos   = labeledPhotos(selectedInspRecs.filter(r => r.role === "ผู้รับรถ" || !r.role));
+  const delivererPhotos  = labeledPhotos(selectedInspRecs.filter(r => r.role === "ผู้ส่งมอบรถ"));
   const receiverNames    = [...new Set(selectedInspRecs.filter(r => r.role === "ผู้รับรถ" || !r.role).map(r => r.transporter_name).filter(Boolean))].join(", ");
   const delivererNames   = [...new Set(selectedInspRecs.filter(r => r.role === "ผู้ส่งมอบรถ").map(r => r.transporter_name).filter(Boolean))].join(", ");
   const selectedPhotos   = [...receiverPhotos, ...delivererPhotos]; // combined for lightbox
@@ -430,7 +452,7 @@ export default function SalesMain() {
               className="flex items-center gap-1.5 text-slate-600 hover:text-indigo-700 hover:bg-indigo-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-transparent hover:border-indigo-200">
               <History className="w-4 h-4" /><span className="hidden sm:inline">ประวัติ ({mySales.length})</span>
             </button>
-            <button onClick={() => { localStorage.removeItem("sales_user"); router.push("/sales/login"); }}
+            <button onClick={() => { void signOutSupabase(); localStorage.removeItem("sales_user"); router.push("/sales/login"); }}
               className="flex items-center gap-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all">
               <LogOut className="w-4 h-4" /><span className="hidden sm:inline">ออก</span>
             </button>
@@ -514,7 +536,7 @@ export default function SalesMain() {
         <div className="flex gap-2 flex-wrap">
           <div className="flex-1 relative min-w-[200px]">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหา หมายเลข / ยี่ห้อ / รุ่น..."
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหา รหัสสินค้า / หมายเลข / ยี่ห้อ / รุ่น..."
               className="w-full pl-10 pr-4 py-2.5 border border-slate-200 hover:border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-slate-800 placeholder:text-slate-400 transition-all shadow-sm" />
           </div>
           {hasFilter && (
@@ -600,6 +622,9 @@ export default function SalesMain() {
                 <div className="p-4 flex flex-col gap-3">
                   <div className="flex items-start justify-between">
                     <div>
+                      {isProductId(item.id) && (
+                        <span className="inline-block text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-md mb-1">{item.id}</span>
+                      )}
                       <p className="font-bold text-slate-800 text-base">{item.brand}</p>
                       <p className="text-sm text-slate-600 font-medium">{item.model}</p>
                       <p className="text-xs text-slate-400 mt-0.5">{item.unit_no}</p>
@@ -665,6 +690,7 @@ export default function SalesMain() {
                     <p className="text-xs font-semibold text-slate-500 mb-2">ข้อมูลรถ (จากสต็อก)</p>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                       {[
+                        { label: "รหัสสินค้า", value: isProductId(selected.id) ? String(selected.id) : "" },
                         { label: "PI", value: selected.pi_no },
                         { label: "MODEL", value: selected.model },
                         { label: "Valve", value: selected.control_type },
@@ -694,11 +720,12 @@ export default function SalesMain() {
                             🚛 รูปจากผู้รับรถ ({receiverPhotos.length} รูป){receiverNames && <span className="font-bold">— ผู้รับ: {receiverNames}</span>}
                           </p>
                           <div className="grid grid-cols-3 gap-2">
-                            {receiverPhotos.map((img, i) => (
+                            {receiverPhotos.map((p, i) => (
                               <button key={i} onClick={e => { e.stopPropagation(); setLightboxIdx(i); }}
                                 className="relative aspect-square rounded-xl overflow-hidden bg-amber-100 group hover:ring-2 hover:ring-amber-400 transition-all">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={driveImg(img)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                <img src={driveImg(p.url)} alt={p.label} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                {p.label && <span className="absolute bottom-0 inset-x-0 bg-black/55 text-white text-[10px] font-semibold px-1.5 py-0.5 truncate text-center">{p.label}</span>}
                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center"><ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100" /></div>
                               </button>
                             ))}
@@ -711,11 +738,12 @@ export default function SalesMain() {
                             📦 รูปจากผู้ส่งมอบรถ ({delivererPhotos.length} รูป){delivererNames && <span className="font-bold">— ผู้ส่ง: {delivererNames}</span>}
                           </p>
                           <div className="grid grid-cols-3 gap-2">
-                            {delivererPhotos.map((img, i) => (
+                            {delivererPhotos.map((p, i) => (
                               <button key={i} onClick={e => { e.stopPropagation(); setLightboxIdx(receiverPhotos.length + i); }}
                                 className="relative aspect-square rounded-xl overflow-hidden bg-indigo-100 group hover:ring-2 hover:ring-indigo-400 transition-all">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={driveImg(img)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                <img src={driveImg(p.url)} alt={p.label} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                {p.label && <span className="absolute bottom-0 inset-x-0 bg-black/55 text-white text-[10px] font-semibold px-1.5 py-0.5 truncate text-center">{p.label}</span>}
                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center"><ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100" /></div>
                               </button>
                             ))}
@@ -915,10 +943,13 @@ export default function SalesMain() {
           {lightboxIdx > 0 && <button onClick={e => { e.stopPropagation(); setLightboxIdx(lightboxIdx - 1); }} className="absolute left-4 top-1/2 -translate-y-1/2 text-white bg-white/10 hover:bg-white/20 rounded-full p-3"><ChevronLeft className="w-6 h-6" /></button>}
           <div className="max-w-3xl max-h-[80vh]" onClick={e => e.stopPropagation()}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={driveImg(selectedPhotos[lightboxIdx])} alt="" className="max-w-full max-h-[80vh] object-contain rounded-xl shadow-2xl" />
+            <img src={driveImg(selectedPhotos[lightboxIdx].url)} alt={selectedPhotos[lightboxIdx].label} className="max-w-full max-h-[80vh] object-contain rounded-xl shadow-2xl" />
           </div>
           {lightboxIdx < selectedPhotos.length - 1 && <button onClick={e => { e.stopPropagation(); setLightboxIdx(lightboxIdx + 1); }} className="absolute right-4 top-1/2 -translate-y-1/2 text-white bg-white/10 hover:bg-white/20 rounded-full p-3"><ChevronRight className="w-6 h-6" /></button>}
-          <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm">{lightboxIdx + 1} / {selectedPhotos.length}</p>
+          <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm">
+            {selectedPhotos[lightboxIdx].label && <span className="font-semibold text-white">{selectedPhotos[lightboxIdx].label} · </span>}
+            {lightboxIdx + 1} / {selectedPhotos.length}
+          </p>
         </div>
       )}
 
@@ -998,11 +1029,12 @@ export default function SalesMain() {
                     <div className="mb-3">
                       <p className="text-xs font-semibold text-amber-700 mb-2">🚛 รูปผู้รับรถ ({detailInspPhotos.receiver.length} รูป){detailInspPhotos.receiverNames && ` — ผู้รับ: ${detailInspPhotos.receiverNames}`}</p>
                       <div className="grid grid-cols-3 gap-2">
-                        {detailInspPhotos.receiver.map((img, i) => (
+                        {detailInspPhotos.receiver.map((p, i) => (
                           <button key={i} onClick={() => setDetailLightboxIdx(i)}
                             className="relative aspect-square rounded-xl overflow-hidden bg-amber-50 group hover:ring-2 hover:ring-amber-400 transition-all">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={driveImg(img)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            <img src={driveImg(p.url)} alt={p.label} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            {p.label && <span className="absolute bottom-0 inset-x-0 bg-black/55 text-white text-[10px] font-semibold px-1.5 py-0.5 truncate text-center">{p.label}</span>}
                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center">
                               <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100" />
                             </div>
@@ -1015,11 +1047,12 @@ export default function SalesMain() {
                     <div>
                       <p className="text-xs font-semibold text-indigo-700 mb-2">📦 รูปผู้ส่งมอบรถ ({detailInspPhotos.deliverer.length} รูป){detailInspPhotos.delivererNames && ` — ผู้ส่ง: ${detailInspPhotos.delivererNames}`}</p>
                       <div className="grid grid-cols-3 gap-2">
-                        {detailInspPhotos.deliverer.map((img, i) => (
+                        {detailInspPhotos.deliverer.map((p, i) => (
                           <button key={i} onClick={() => setDetailLightboxIdx(detailInspPhotos.receiver.length + i)}
                             className="relative aspect-square rounded-xl overflow-hidden bg-indigo-50 group hover:ring-2 hover:ring-indigo-400 transition-all">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={driveImg(img)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            <img src={driveImg(p.url)} alt={p.label} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            {p.label && <span className="absolute bottom-0 inset-x-0 bg-black/55 text-white text-[10px] font-semibold px-1.5 py-0.5 truncate text-center">{p.label}</span>}
                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center">
                               <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100" />
                             </div>
@@ -1044,12 +1077,15 @@ export default function SalesMain() {
           )}
           <div className="max-w-3xl max-h-[80vh]" onClick={e => e.stopPropagation()}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={driveImg(detailInspPhotos.all[detailLightboxIdx])} alt="" className="max-w-full max-h-[80vh] object-contain rounded-xl shadow-2xl" />
+            <img src={driveImg(detailInspPhotos.all[detailLightboxIdx].url)} alt={detailInspPhotos.all[detailLightboxIdx].label} className="max-w-full max-h-[80vh] object-contain rounded-xl shadow-2xl" />
           </div>
           {detailLightboxIdx < detailInspPhotos.all.length - 1 && (
             <button onClick={e => { e.stopPropagation(); setDetailLightboxIdx(detailLightboxIdx + 1); }} className="absolute right-4 top-1/2 -translate-y-1/2 text-white bg-white/10 hover:bg-white/20 rounded-full p-3"><ChevronRight className="w-6 h-6" /></button>
           )}
-          <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm">{detailLightboxIdx + 1} / {detailInspPhotos.all.length}</p>
+          <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm">
+            {detailInspPhotos.all[detailLightboxIdx].label && <span className="font-semibold text-white">{detailInspPhotos.all[detailLightboxIdx].label} · </span>}
+            {detailLightboxIdx + 1} / {detailInspPhotos.all.length}
+          </p>
         </div>
       )}
 

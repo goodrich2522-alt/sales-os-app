@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
 // Client ID จาก Google Cloud (เป็นค่าสาธารณะ ฝังในหน้าเว็บได้ ไม่ใช่ความลับ)
 export const GOOGLE_CLIENT_ID =
@@ -33,23 +34,44 @@ declare global { interface Window { google?: any; } }
 
 const GSI_SRC = "https://accounts.google.com/gsi/client";
 
-/** ปุ่ม "เข้าสู่ระบบด้วย Google" — เรียก onSuccess พร้อมอีเมล/ชื่อ เมื่อล็อกอินสำเร็จ */
+/**
+ * ปุ่ม "เข้าสู่ระบบด้วย Google" — เรียก onSuccess พร้อมอีเมล/ชื่อ เมื่อล็อกอินสำเร็จ
+ * ถ้าตั้งค่า Supabase ไว้: แลก Google credential เป็น session จริงผ่าน signInWithIdToken
+ * (Supabase ตรวจ signature ให้ — จำเป็นเมื่อเปิด RLS เพราะทุก query ต้องมี JWT ที่ verify แล้ว)
+ */
 export default function GoogleLoginButton({
   onSuccess,
+  onError,
 }: {
   onSuccess: (user: GoogleUser) => void;
+  onError?: (message: string) => void;
 }) {
   const divRef = useRef<HTMLDivElement>(null);
   const cbRef = useRef(onSuccess);
   cbRef.current = onSuccess;
+  const errRef = useRef(onError);
+  errRef.current = onError;
 
   useEffect(() => {
     let cancelled = false;
 
-    const handle = (resp: { credential?: string }) => {
+    const handle = async (resp: { credential?: string }) => {
       if (!resp?.credential) return;
       const p = decodeJwt(resp.credential);
-      if (p.email) cbRef.current({ email: p.email, name: p.name || p.email, picture: p.picture });
+      if (!p.email) return;
+      // สร้าง session จริงกับ Supabase Auth (ข้ามได้ถ้าไม่ได้ตั้งค่า Supabase — โหมด local)
+      if (supabase) {
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: "google",
+          token: resp.credential,
+        });
+        if (error) {
+          console.warn("supabase signInWithIdToken", error);
+          errRef.current?.(`เชื่อมระบบยืนยันตัวตนไม่สำเร็จ: ${error.message}`);
+          return;
+        }
+      }
+      cbRef.current({ email: p.email, name: p.name || p.email, picture: p.picture });
     };
 
     const render = (): boolean => {
