@@ -6,8 +6,6 @@ import { Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRigh
 import { useApp } from "@/lib/AppContext";
 import { Forklift, Sale, INSPECTION_SLOTS, InspectionSlotKey, SLOT_LABELS } from "@/lib/types";
 import { driveImg } from "@/lib/img";
-import { hasActiveSession, signOutSupabase } from "@/lib/auth";
-import { apiEnabled } from "@/lib/api";
 
 type TransporterRole = "ผู้รับรถ" | "ผู้ส่งมอบรถ";
 
@@ -25,6 +23,7 @@ export default function TransporterMain() {
   const router = useRouter();
   const { addInspection, deleteInspection, updateForklift, forklifts, sales, inspections } = useApp();
   const [username, setUsername] = useState("");
+  const [userphone, setUserphone] = useState("");
   const [role, setRole] = useState<TransporterRole>("ผู้รับรถ");
   const [showHistory, setShowHistory] = useState(false);
   const [histSearch, setHistSearch] = useState("");
@@ -56,14 +55,9 @@ export default function TransporterMain() {
   useEffect(() => {
     const name = localStorage.getItem("transporter_name");
     if (!name) { router.push("/transporter/login"); return; }
+    // หน้าผู้ขนส่งจงใจไม่ผูก Supabase Auth (ล็อกอินด้วยชื่อเล่น+เบอร์) — ไม่ต้องเช็ค session
     setUsername(name); setReceiverName(name); setSenderName(name);
-    // มีชื่อค้างแต่ session Supabase หมดอายุ/ไม่มี → บังคับล็อกอินใหม่ (กันสถานะ "เหมือนใช้ได้แต่เซฟไม่เข้า")
-    (async () => {
-      if (apiEnabled && !(await hasActiveSession())) {
-        localStorage.removeItem("transporter_name");
-        router.push("/transporter/login");
-      }
-    })();
+    setUserphone(localStorage.getItem("transporter_phone") || "");
   }, [router]);
 
   const isReceiver = role === "ผู้รับรถ";
@@ -178,7 +172,7 @@ export default function TransporterMain() {
     if (!recvTarget) return;
     const insId = `ins_${Date.now()}`;
     const rd = thaiDate(receivedDate);
-    addInspection({ id: insId, unit_no: snKey, transporter_name: receiverName.trim() || username, date: receivedDate || today(), ...buildImagePayload(), role: "ผู้รับรถ" });
+    addInspection({ id: insId, unit_no: snKey, transporter_name: receiverName.trim() || username, transporter_phone: userphone || undefined, date: receivedDate || today(), ...buildImagePayload(), role: "ผู้รับรถ" });
     const before = { ...recvTarget };
     // รับรถ = รถมาถึงพร้อมขาย → ตั้ง "พร้อมขาย" เสมอ (ทั้งรถรอรับและรถสต็อก) → ขึ้นหน้าเซลล์
     updateForklift({
@@ -194,7 +188,7 @@ export default function TransporterMain() {
   const submitDeliverer = () => {
     if (!delFork) return;
     const insId = `ins_${Date.now()}`;
-    addInspection({ id: insId, unit_no: delFork.unit_no, transporter_name: senderName.trim() || username, date: deliverDate || today(), ...buildImagePayload(), role: "ผู้ส่งมอบรถ" });
+    addInspection({ id: insId, unit_no: delFork.unit_no, transporter_name: senderName.trim() || username, transporter_phone: userphone || undefined, date: deliverDate || today(), ...buildImagePayload(), role: "ผู้ส่งมอบรถ" });
     setDone({ insId, before: null, label: `ส่งมอบ ${delFork.unit_no} แล้ว` });
   };
 
@@ -221,7 +215,7 @@ export default function TransporterMain() {
   };
 
   const switchRole = (r: TransporterRole) => { setRole(r); resetForm(); };
-  const handleLogout = () => { void signOutSupabase(); localStorage.removeItem("transporter_name"); router.push("/transporter/login"); };
+  const handleLogout = () => { localStorage.removeItem("transporter_name"); localStorage.removeItem("transporter_phone"); router.push("/transporter/login"); };
 
   const histFiltered = [...inspections]
     .filter(r => {
@@ -569,7 +563,7 @@ export default function TransporterMain() {
                         <button onClick={() => setHistDeleteId(rec.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-all" title="ลบรายการนี้"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </div>
-                    <p className="text-xs text-slate-500 mb-2">โดย <span className="font-semibold text-slate-700">{rec.transporter_name || "—"}</span></p>
+                    <p className="text-xs text-slate-500 mb-2">โดย <span className="font-semibold text-slate-700">{rec.transporter_name || "—"}</span>{rec.transporter_phone ? ` · ☎ ${rec.transporter_phone}` : ""}</p>
                     {histDeleteId === rec.id && (
                       <div className="flex items-center gap-2 mb-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
                         <span className="text-xs text-red-700 flex-1">ลบรายการนี้ถาวร? (ตัวรถยังอยู่ในสต็อก — แจ้งฝ่ายสต็อกถ้าต้องเอารถออก)</span>

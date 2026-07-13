@@ -93,6 +93,7 @@ export interface InspectionRecord {
   id: string;
   unit_no: string;
   transporter_name: string;
+  transporter_phone?: string; // เบอร์ผู้ขนส่ง (ล็อกอินด้วยชื่อเล่น+เบอร์)
   date: string;
   images: string[]; // รูปทั้งหมดรวมกัน (6 ช่อง + รูปเพิ่มเติม) — หน้าเก่าอ่านช่องนี้
   image_slots?: Partial<Record<InspectionSlotKey, string>>; // รูปแยกช่อง → โชว์ป้ายกำกับ

@@ -11,6 +11,9 @@
 -- เพื่อให้หน้าเก่าๆ ที่อ่าน images ตรงๆ ใช้ได้ต่อ
 alter table inspections add column if not exists image_slots jsonb;
 
+-- เบอร์โทรผู้ขนส่ง (หน้าผู้ขนส่งล็อกอินด้วยชื่อเล่น+เบอร์ ไม่ใช้อีเมล) — เพิ่ม 13 ก.ค. 2026 รอบ 2
+alter table inspections add column if not exists transporter_phone text;
+
 -- หมายเหตุสถานะปัจจุบัน (ตรวจเมื่อ 13 ก.ค. 2026):
 --   - inspections.images เป็น jsonb เก็บ array ของ URL → รองรับการอัปโหลดรูปอยู่แล้ว
 --   - ตัวรูปจริงเก็บบน Google Drive ผ่าน GAS (ไม่ได้เก็บใน Postgres) → ขนาด DB ไม่บวม

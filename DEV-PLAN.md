@@ -25,11 +25,25 @@
 **เกณฑ์ผ่านเฟส 1:** เปิด browser ใหม่ (ไม่ login) ยิง REST ไปที่ Supabase ด้วย anon key → ต้องได้ข้อมูล **0 แถว** ทุกตาราง (ทดสอบแบบ simulate ผ่านแล้ว — รอยืนยันจริงหลังสับสวิตช์)
 
 ### ⚠️ ลำดับ deploy เฟส 1 (ห้ามสลับ — ไม่งั้นทีมใช้ไม่ได้ชั่วคราว)
-1. ตั้ง Google Cloud OAuth: เพิ่ม **Authorized JavaScript origins** = โดเมนที่ deploy จริง + `Authorized redirect URIs` (ถ้าต้องใช้) · ใส่ **Google Client Secret** ใน Supabase (ตอนนี้ใส่แค่ Client ID — พอสำหรับ `signInWithIdToken` แต่ควรมี secret ให้ครบ)
-2. เพิ่ม `Site URL` + `Redirect URLs` ของ Supabase Auth ให้ตรงโดเมน deploy (ตอนนี้เป็น `http://localhost:3000`)
-3. **Deploy โค้ดใหม่** ขึ้น Pages ก่อน
-4. ค่อยสับสวิตช์ RLS (ข้อ 1.1b) — บอก Claude รันให้
-5. ทดสอบ login จริงทุก role → แล้ว rotate anon key (ข้อ 1.3)
+1. ☐ ตั้ง Google Cloud OAuth: verify **Authorized JavaScript origins** มีโดเมน deploy (`https://goodrich2522-alt.github.io`) — น่าจะมีแล้วเพราะ login เดิมทำงานได้ · (ทางเลือก) ใส่ Google Client Secret ใน Supabase ให้ครบ
+2. ☑ (13 ก.ค.) ตั้ง `Site URL` + `uri_allow_list` ของ Supabase Auth = `https://goodrich2522-alt.github.io/sales-os-app.github.io/` (ทำผ่าน API แล้ว)
+3. ☑ (13 ก.ค.) **Deploy โค้ดใหม่ขึ้น Pages** — push master → GitHub Actions build+deploy สำเร็จ (commit e712434) · เว็บ /admin/users ตอบ 200 แล้ว
+4. ☐ **ทดสอบ login จริงทุก role บนเว็บ production** (สำคัญ — ทำก่อนสับ RLS) → ดูหัวข้อล่าง
+5. ☐ สับสวิตช์ RLS ถาวร (ข้อ 1.1b) — บอก Claude รันให้
+6. ☐ rotate anon key (ข้อ 1.3)
+
+### 🚧 ค้างก่อนสับ RLS — write path ของหน้าผู้ขนส่ง (เพิ่ม 13 ก.ค. รอบ 2)
+หน้าผู้ขนส่งเปลี่ยนเป็นล็อกอิน **ชื่อเล่น+เบอร์** (ไม่มี Supabase session) ตามที่ต้องการ → เมื่อเปิด RLS ถาวร ผู้ขนส่งจะ **เขียน inspection / อัปเดตสถานะรถไม่ได้** เพราะไม่มี JWT
+ต้องเลือก 1 ทางก่อนสับสวิตช์ RLS:
+- **ทาง A (แนะนำ):** เปิด anonymous sign-in (`external_anonymous_users_enabled`) + ให้หน้าผู้ขนส่ง `signInAnonymously()` + เพิ่ม policy ให้ anon session: select/update `forklifts` + select/insert/update `inspections` (ไม่แตะ `sales`) — ⚠️ ต้องแดนยืนยันเพราะเป็นการเปิด auth แบบ anonymous
+- **ทาง B:** สร้าง RPC `receive_forklift()` / `deliver_forklift()` แบบ SECURITY DEFINER ให้ anon เรียกได้ (คุมแคบกว่า แต่โค้ดเยอะกว่า)
+> ตอนนี้ยังไม่กระทบ เพราะ RLS ยังไม่เปิด (open_all ยังอยู่) — แต่ **ห้ามสับ RLS จนกว่าจะทำข้อนี้เสร็จ**
+
+### 🧪 เช็คก่อนสับ RLS (แดนทำบนเว็บจริง ~2 นาที)
+- เข้า `https://goodrich2522-alt.github.io/sales-os-app.github.io/` → ลองล็อกอินหน้าทีมขาย/สต็อกด้วย Google บัญชีที่อนุมัติแล้ว → ต้องเข้าได้ + เห็นข้อมูล
+- เข้า `/admin/users` ด้วย goodrichforklift@gmail.com → ต้องเห็นรายชื่อผู้ใช้ 5 คน
+- ถ้า 2 ข้อนี้ผ่าน = signInWithIdToken ทำงานบน production → พร้อมสับ RLS ได้เลย
+- ถ้าล็อกอินไม่ได้ (ปุ่ม Google ไม่ขึ้น/error) = ต้องเพิ่มโดเมนใน Google Cloud origins ก่อน (ข้อ 1)
 
 ---
 

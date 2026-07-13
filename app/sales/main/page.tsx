@@ -28,8 +28,21 @@ const STATUS_BADGE: Record<string, string> = {
   "ส่งมอบแล้ว":    "bg-slate-100 text-slate-600 border-slate-200",
 };
 
-// สถานะที่ยังขึ้นให้เซลล์เห็น (พร้อมขาย + ที่ติดจองไว้) — ขายแล้ว/เช่า/รอรับ ไม่ขึ้น
-const SELLABLE_STATUSES = ["พร้อมขาย", "ติดจอง", "จองแล้ว", "จอง", "ติดจอง/รอส่ง", "รอผ่านไฟแนนซ์"];
+// ── ตรรกะว่ารถคันไหน "ยังขายได้" (โชว์ให้เซลล์) ──────────────────────────────
+// ใช้ blocklist แทน whitelist: ซ่อนเฉพาะรถที่ "ชัดเจนว่าไม่ว่าง" (ขายแล้ว/เช่า/รอรับ/ส่งมอบ)
+// ที่เหลือโชว์หมด — กันรถว่างหายจากจอเพราะสถานะพิมพ์ไม่ตรง (ข้อมูลใน DB มีหลายสะกด เช่น
+// "ขายแล้ว/ไฟแนนซ์", "ขายแล้วเงินสด", "รถเช่า GR-197") · "รอผ่านไฟแนนซ์" = ยังตามได้ ไม่ซ่อน
+// คืนข้อความเหตุผลถ้าถูกซ่อน · คืน null ถ้ายังขายได้
+function notSellableReason(status: unknown): string | null {
+  const s = (status == null ? "" : String(status)).trim();
+  if (s === "") return null; // ไม่มีสถานะ = ให้โชว์ไว้ก่อน (ดีกว่าซ่อนรถจริง)
+  if (s.includes("ขายแล้ว") || s.includes("ขายเงินสด")) return "ขายแล้ว";
+  if (s.includes("ส่งมอบ")) return "ส่งมอบแล้ว";
+  if (s.includes("เช่า")) return "เป็นรถเช่า";
+  if (s.includes("รอรับ") || s.includes("รอเข้าไปรับ")) return "ยังไม่รับรถเข้าคลัง (รอรับ)";
+  return null;
+}
+const isSellable = (f: { status?: unknown }) => notSellableReason(f?.status) === null;
 
 const SALE_STATUS_BADGE: Record<SaleStatus, string> = {
   "ขายแล้ว":        "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -105,6 +118,7 @@ export default function SalesMain() {
   const [refreshing, setRefreshing] = useState(false);
   const handleRefresh = async () => { setRefreshing(true); await refresh(); setTimeout(() => setRefreshing(false), 400); };
   const [search, setSearch]       = useState("");
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest"); // เรียงตามวันที่เข้าสต็อก
   const [selected, setSelected]   = useState<Forklift | null>(null);
   const [form, setForm]           = useState(emptyCheckout);
   const [errors, setErrors]       = useState<Record<string, string>>({});
@@ -184,7 +198,7 @@ export default function SalesMain() {
     })();
   }, [router]);
 
-  const available = forklifts.filter(f => SELLABLE_STATUSES.includes(String(f.status).trim()));
+  const available = forklifts.filter(isSellable);
   const readyCount = available.filter(f => String(f.status).trim() === "พร้อมขาย").length;
   const brands     = [...new Set(available.map(f => f.brand))].sort();
   const models     = [...new Set(available.filter(f => !fBrand || f.brand === fBrand).map(f => f.model))].sort();
@@ -222,6 +236,25 @@ export default function SalesMain() {
       (!fForkWidth  || hay([f.fork_length, f.attachments, JSON.stringify(f.custom_fields ?? {})].join(" ")).includes(fForkWidth.toLowerCase()));
     return base && cat && spec;
   });
+
+  // เรียงตามวันที่เข้าสต็อก (created_at) — ล่าสุด/เก่าสุด
+  const sorted = [...filtered].sort((a, b) => {
+    const ta = String(a.created_at || ""), tb = String(b.created_at || "");
+    const cmp = ta < tb ? -1 : ta > tb ? 1 : 0;
+    return sortOrder === "newest" ? -cmp : cmp;
+  });
+
+  // ── งาน 4: ถ้าค้นด้วยรหัส/SN แล้วไม่เจอในรายการขาย แต่รถมีอยู่จริง (สถานะขายแล้ว/เช่า ฯลฯ)
+  //    → บอกเซลล์ว่าเจอรถแต่ถูกซ่อนเพราะอะไร (กันเข้าใจผิดว่า "ข้อมูลหาย") ──
+  const searchHiddenHit = (() => {
+    const q = search.trim().toLowerCase();
+    if (!q || sorted.length > 0) return null;
+    const hit = forklifts.find(f =>
+      (hay(f.id) === q || hay(f.unit_no) === q || hay(f.id).includes(q) || hay(f.unit_no).includes(q)) &&
+      notSellableReason(f.status) !== null
+    );
+    return hit ? { f: hit, reason: notSellableReason(hit.status)! } : null;
+  })();
 
   const clearFilters = () => {
     setFBrand(""); setFModel(""); setFFuel(""); setFCapacity(""); setFHeight("");
@@ -532,12 +565,23 @@ export default function SalesMain() {
           </div>
         </div>
 
-        {/* Search + Filter */}
+        {/* Search + Sort + Filter */}
         <div className="flex gap-2 flex-wrap">
           <div className="flex-1 relative min-w-[200px]">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหา รหัสสินค้า / หมายเลข / ยี่ห้อ / รุ่น..."
               className="w-full pl-10 pr-4 py-2.5 border border-slate-200 hover:border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-slate-800 placeholder:text-slate-400 transition-all shadow-sm" />
+          </div>
+          {/* จัดเรียง ล่าสุด/เก่าสุด */}
+          <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <button onClick={() => setSortOrder("newest")}
+              className={`flex items-center gap-1 text-sm font-semibold px-3 py-2.5 transition-all ${sortOrder === "newest" ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>
+              <ChevronDown className="w-3.5 h-3.5" />ล่าสุด
+            </button>
+            <button onClick={() => setSortOrder("oldest")}
+              className={`flex items-center gap-1 text-sm font-semibold px-3 py-2.5 transition-all border-l border-slate-200 ${sortOrder === "oldest" ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>
+              <ChevronUp className="w-3.5 h-3.5" />เก่าสุด
+            </button>
           </div>
           {hasFilter && (
             <button onClick={clearFilters}
@@ -546,6 +590,18 @@ export default function SalesMain() {
             </button>
           )}
         </div>
+
+        {/* งาน 4: ค้นเจอรถแต่ถูกซ่อน (ขายแล้ว/เช่า/รอรับ) — แจ้งเหตุผลกันเข้าใจผิดว่าข้อมูลหาย */}
+        {searchHiddenHit && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800">
+              พบรถ <span className="font-bold">{searchHiddenHit.f.unit_no || searchHiddenHit.f.id}</span>
+              {" "}({searchHiddenHit.f.brand} {searchHiddenHit.f.model}) ในระบบ — <span className="font-bold">แต่ไม่แสดงในรายการขายเพราะ &ldquo;{searchHiddenHit.reason}&rdquo;</span>
+              <span className="block text-xs text-amber-600 mt-0.5">สถานะจริงในสต็อก: {String(searchHiddenHit.f.status)} · ถ้าคิดว่าผิด แจ้งฝ่ายสต็อกแก้สถานะ</span>
+            </div>
+          </div>
+        )}
 
         {/* Vehicle Category Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-1">
@@ -605,20 +661,38 @@ export default function SalesMain() {
 
         {/* Product Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.length === 0 && (
+          {sorted.length === 0 && (
             <div className="col-span-full text-center py-16 text-slate-400 bg-white rounded-2xl border border-slate-100">
               <Filter className="w-10 h-10 mx-auto mb-3 text-slate-300" />
               <p className="font-semibold text-slate-500">ไม่มีสินค้าในระบบ</p>
               <p className="text-sm mt-1">{hasFilter ? "ลองเปลี่ยนตัวกรองการค้นหา" : "ยังไม่มีรถพร้อมขายในสต็อก"}</p>
             </div>
           )}
-          {filtered.map(item => {
-            const photos = inspections.filter(r => r.unit_no === item.unit_no).flatMap(r => r.images);
+          {sorted.map(item => {
+            const recs = inspections.filter(r => r.unit_no === item.unit_no);
+            const photos = recs.flatMap(r => r.images);
+            // งาน 3: รูปหน้ารถโชว์บนการ์ด — เลือกช่อง "รถด้านหน้า" ก่อน ถ้าไม่มีใช้รูปแรกที่มี
+            const coverPhoto = recs.map(r => r.image_slots?.front).find(Boolean) || photos[0] || null;
             return (
               <div key={item.id}
                 onClick={() => { setSelected(item); setForm(emptyCheckout); setErrors({}); setSubmitted(false); setLightboxIdx(null); setSaleCustomVals({}); setVehicleType(item.vehicle_category ?? "Forklift"); setCustomNotifItems([]); setShowCustomNotifs(false); setNewNotifLabel(""); setNewNotifDate(""); }}
                 className="bg-white rounded-2xl shadow-sm hover:shadow-lg border border-slate-100 hover:border-indigo-200 transition-all cursor-pointer group overflow-hidden">
                 <div className="h-1 bg-gradient-to-r from-indigo-400 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                {/* รูปหน้ารถ (ถ้ามี) — ทำให้เซลล์เห็นรถได้ทันที */}
+                {coverPhoto ? (
+                  <div className="relative h-40 bg-slate-100 overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={driveImg(coverPhoto)} alt={`${item.brand} ${item.model}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    {photos.length > 0 && (
+                      <span className="absolute top-2 right-2 flex items-center gap-1 text-xs text-white bg-black/55 px-2 py-0.5 rounded-full"><Camera className="w-3 h-3" />{photos.length}</span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="h-40 bg-gradient-to-br from-slate-100 to-slate-50 flex flex-col items-center justify-center gap-1.5 border-b border-slate-100">
+                    <ImageOff className="w-7 h-7 text-slate-300" />
+                    <span className="text-xs text-slate-400">ยังไม่มีรูปรถ</span>
+                  </div>
+                )}
                 <div className="p-4 flex flex-col gap-3">
                   <div className="flex items-start justify-between">
                     <div>
@@ -631,7 +705,6 @@ export default function SalesMain() {
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${STATUS_BADGE[item.status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>{item.status}</span>
-                      {photos.length > 0 && <span className="flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full"><Camera className="w-3 h-3" />{photos.length} รูป</span>}
                     </div>
                   </div>
                   {(() => {
