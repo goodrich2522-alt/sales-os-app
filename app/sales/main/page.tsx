@@ -1194,6 +1194,9 @@ export default function SalesMain() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
+                          {sale.forklift_id && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isProductId(sale.forklift_id) ? "text-indigo-700 bg-indigo-50 border border-indigo-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{sale.forklift_id}</span>
+                          )}
                           <p className="font-bold text-slate-800 text-sm">{sale.forklift_unit_no}</p>
                           <p className="text-slate-600 text-sm">{sale.forklift_brand} {sale.forklift_model}</p>
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${SALE_STATUS_BADGE[sale.sale_status ?? "ขายแล้ว"]}`}>
@@ -1493,13 +1496,31 @@ export default function SalesMain() {
                   <span className="text-xs text-indigo-500">{fieldConfig.salesFilterRequests.length} ตัวกรอง</span>
                 </div>
                 <div className="p-4 flex flex-col gap-2">
-                  {fieldConfig.salesFilterRequests.length === 0 && <p className="text-xs text-slate-400 text-center py-2">ยังไม่มีตัวกรองที่ขอเพิ่ม</p>}
+                  {fieldConfig.salesFilterRequests.length === 0 && !showAddFilter && <p className="text-xs text-slate-400 text-center py-2">ยังไม่มีตัวกรองที่ขอเพิ่ม</p>}
                   {fieldConfig.salesFilterRequests.map(name => (
                     <div key={name} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2">
                       <span className="flex-1 text-sm text-slate-700">{name}</span>
                       <button onClick={() => removeSalesFilterRequest(name)} className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   ))}
+                  {/* เพิ่มตัวกรองใหม่ */}
+                  {showAddFilter ? (
+                    <div className="flex items-center gap-2">
+                      <input autoFocus value={newFilterName} onChange={e => setNewFilterName(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter") confirmAddFilter(); if (e.key === "Escape") { setShowAddFilter(false); setNewFilterName(""); } }}
+                        placeholder="ชื่อตัวกรอง เช่น ความยาวงา"
+                        className="flex-1 border border-indigo-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                      <button onClick={confirmAddFilter} disabled={!newFilterName.trim()}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg disabled:opacity-40 transition-colors"><Check className="w-4 h-4" /></button>
+                      <button onClick={() => { setShowAddFilter(false); setNewFilterName(""); }}
+                        className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-2 rounded-lg transition-all"><X className="w-4 h-4" /></button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setShowAddFilter(true)}
+                      className="w-full border-2 border-dashed border-indigo-200 hover:border-indigo-400 text-indigo-600 hover:bg-indigo-50 rounded-lg py-2.5 flex items-center justify-center gap-1.5 text-sm font-semibold transition-all">
+                      <Plus className="w-4 h-4" />เพิ่มตัวกรอง
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation";
 import {
   Package, Plus, LogOut, CheckCircle, AlertCircle, List, X,
   TrendingUp, Boxes, Trash2, Settings, Pencil, Check, ChevronDown,
-  Type, ListOrdered, ArrowLeft, Clock
+  Type, ListOrdered, ArrowLeft, Clock, Hash, Camera, ImageOff, Eye,
+  ChevronLeft, ChevronRight
 } from "lucide-react";
 import { Forklift } from "@/lib/types";
 import { useApp, FieldConfig } from "@/lib/AppContext";
 import { generateProductId, isProductId } from "@/lib/productId";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { apiEnabled } from "@/lib/api";
+import { driveImg } from "@/lib/img";
 
 const STATUS_BADGE: Record<string, string> = {
   "พร้อมขาย":       "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -97,7 +99,7 @@ type InlineStep = "name" | "type" | "options" | null;
 export default function StockMain() {
   const router = useRouter();
   const {
-    forklifts, addForklift, deleteForklift,
+    forklifts, addForklift, deleteForklift, inspections,
     fieldConfig, updateFieldOptions,
     addCustomFieldDef, removeCustomFieldDef, renameCustomFieldDef,
     addCustomFieldOption, removeCustomFieldOption, editCustomFieldOption,
@@ -115,6 +117,8 @@ export default function StockMain() {
   const [listStatus, setListStatus] = useState("all");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showSettings, setShowSettings]   = useState(false);
+  const [detailItem, setDetailItem]       = useState<Forklift | null>(null); // รถที่กดดูรายละเอียด
+  const [detailLightbox, setDetailLightbox] = useState<{ imgs: string[]; idx: number } | null>(null);
 
   // Settings modal state
   const [editingField, setEditingField]   = useState<DropdownField | null>(null);
@@ -623,7 +627,8 @@ export default function StockMain() {
                 <div className="text-center py-12 text-slate-400 text-sm">ไม่พบรถตามเงื่อนไข</div>
               )}
               {listFiltered.map((item, idx) => (
-                <div key={item.id} className={`flex items-center gap-3 border rounded-xl p-3.5 transition-colors group ${idx === 0 ? "bg-emerald-50/70 border-emerald-200" : "bg-slate-50 hover:bg-slate-100 border-slate-100"}`}>
+                <div key={item.id} onClick={() => setDetailItem(item)}
+                  className={`flex items-center gap-3 border rounded-xl p-3.5 transition-colors group cursor-pointer ${idx === 0 ? "bg-emerald-50/70 border-emerald-200 hover:bg-emerald-50" : "bg-slate-50 hover:bg-slate-100 border-slate-100"}`}>
                   <div className="bg-white border border-slate-200 rounded-xl p-2 flex-shrink-0 shadow-sm">
                     <Package className="w-4 h-4 text-emerald-600" />
                   </div>
@@ -643,22 +648,131 @@ export default function StockMain() {
                     {item.status}
                   </span>
                   {deleteConfirm === item.id ? (
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <div className="flex items-center gap-1.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
                       <button onClick={() => { deleteForklift(item.id); setDeleteConfirm(null); }}
                         className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg transition-colors">ยืนยัน</button>
                       <button onClick={() => setDeleteConfirm(null)}
                         className="bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold px-2.5 py-1.5 rounded-lg transition-colors">ยกเลิก</button>
                     </div>
                   ) : (
-                    <button onClick={() => setDeleteConfirm(item.id)}
-                      className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-all flex-shrink-0">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-0.5 flex-shrink-0">
+                      <span className="opacity-0 group-hover:opacity-100 text-indigo-500 flex items-center gap-1 text-xs font-semibold transition-all pr-1"><Eye className="w-4 h-4" />ดู</span>
+                      <button onClick={e => { e.stopPropagation(); setDeleteConfirm(item.id); }}
+                        className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-all">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Detail Modal — กดดูรายละเอียดรถทีละคัน ── */}
+      {detailItem && (() => {
+        const it = detailItem;
+        const recs = inspections.filter(r => r.unit_no && it.unit_no && String(r.unit_no).toUpperCase() === String(it.unit_no).toUpperCase());
+        const photos = recs.flatMap(r => r.images || []);
+        const spec: [string, string][] = [
+          ["หมวดรถ", it.vehicle_category ?? "Forklift"],
+          ["ยี่ห้อ", it.brand],
+          ["รุ่น", it.model],
+          ["น้ำหนักยก", it.capacity_kg ? fmtCap(it.capacity_kg) : ""],
+          ["ยกสูง", it.height ? `${it.height} เมตร` : ""],
+          ["ความยาวงา", it.fork_length ? `${it.fork_length} มม.` : ""],
+          ["Valve / คอนโทรล", it.control_type ?? ""],
+          ["พลังงาน", it.fuel],
+        ];
+        const info: [string, string][] = [
+          ["SALE CONTRACT / PI", it.pi_no ?? ""],
+          ["วันรับรถ", it.received_date ?? ""],
+          ["ราคาทุน", it.cost_price ? `฿${it.cost_price.toLocaleString()}` : ""],
+          ["โลเคชั่น", it.location ?? ""],
+          ["เติมเข้าสต็อกเมื่อ", fmtAdded(it.created_at)],
+        ];
+        const customs = Object.entries(it.custom_fields ?? {}).filter(([, v]) => String(v ?? "").trim());
+        const Section = ({ title, rows }: { title: string; rows: [string, string][] }) => {
+          const shown = rows.filter(([, v]) => String(v ?? "").trim());
+          if (shown.length === 0) return null;
+          return (
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">{title}</p>
+              <div className="grid grid-cols-2 gap-2">
+                {shown.map(([k, v]) => (
+                  <div key={k} className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2">
+                    <p className="text-[11px] text-slate-400">{k}</p>
+                    <p className="text-sm font-semibold text-slate-700 break-words">{v}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        };
+        return (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={e => e.target === e.currentTarget && setDetailItem(null)}>
+            <div className="bg-white rounded-3xl w-full max-w-lg max-h-[88vh] flex flex-col shadow-2xl">
+              {/* header */}
+              <div className="px-6 py-4 border-b border-slate-100 flex items-start justify-between gap-3 flex-shrink-0">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${isProductId(it.id) ? "text-indigo-700 bg-indigo-50 border border-indigo-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{it.id}</span>
+                    <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${STATUS_BADGE[it.status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>{it.status}</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-800 truncate">{it.brand} {it.model}</h3>
+                  {it.unit_no && <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Hash className="w-3 h-3" />SN {it.unit_no}</p>}
+                </div>
+                <button onClick={() => setDetailItem(null)} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all flex-shrink-0"><X className="w-5 h-5" /></button>
+              </div>
+              {/* body */}
+              <div className="overflow-y-auto flex-1 min-h-0 p-5 flex flex-col gap-5">
+                <Section title="สเปกรถ" rows={spec} />
+                <Section title="ข้อมูลสต็อก / จัดซื้อ" rows={info} />
+                {customs.length > 0 && <Section title="ข้อมูลเพิ่มเติม" rows={customs as [string, string][]} />}
+                {/* รูปตรวจรับ-ส่งรถ */}
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><Camera className="w-3.5 h-3.5" />รูปรถ ({photos.length})</p>
+                  {photos.length > 0 ? (
+                    <div className="grid grid-cols-3 gap-2">
+                      {photos.map((img, i) => (
+                        <button key={i} onClick={() => setDetailLightbox({ imgs: photos, idx: i })}
+                          className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 hover:ring-2 hover:ring-emerald-400 transition-all">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={driveImg(img)} alt="" className="w-full h-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-6 text-slate-300 bg-slate-50 rounded-xl border border-slate-100">
+                      <ImageOff className="w-7 h-7 mb-1" /><span className="text-xs text-slate-400">ยังไม่มีรูป (ถ่ายตอนรับ/ส่งรถ)</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Lightbox รูปในหน้ารายละเอียด */}
+      {detailLightbox && (
+        <div className="fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-4" onClick={() => setDetailLightbox(null)}>
+          <button onClick={() => setDetailLightbox(null)} className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2 transition-all"><X className="w-6 h-6" /></button>
+          {detailLightbox.imgs.length > 1 && (
+            <button onClick={e => { e.stopPropagation(); setDetailLightbox(l => l ? { ...l, idx: (l.idx - 1 + l.imgs.length) % l.imgs.length } : l); }}
+              className="absolute left-3 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2 transition-all"><ChevronLeft className="w-6 h-6" /></button>
+          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={driveImg(detailLightbox.imgs[detailLightbox.idx])} alt="" className="max-h-[85vh] max-w-full object-contain rounded-xl" onClick={e => e.stopPropagation()} />
+          {detailLightbox.imgs.length > 1 && (
+            <>
+              <button onClick={e => { e.stopPropagation(); setDetailLightbox(l => l ? { ...l, idx: (l.idx + 1) % l.imgs.length } : l); }}
+                className="absolute right-3 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2 transition-all"><ChevronRight className="w-6 h-6" /></button>
+              <span className="absolute bottom-4 text-white/80 text-sm bg-white/10 px-3 py-1 rounded-full">{detailLightbox.idx + 1} / {detailLightbox.imgs.length}</span>
+            </>
+          )}
         </div>
       )}
 
