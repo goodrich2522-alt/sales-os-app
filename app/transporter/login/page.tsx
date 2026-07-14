@@ -2,8 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Truck, ArrowLeft, User, Phone, ArrowRight } from "lucide-react";
+import { Truck, ArrowLeft, User, Phone, ArrowRight, UserCheck } from "lucide-react";
 import Link from "next/link";
+
+// จำโปรไฟล์ผู้ขนส่งไว้ข้ามการล็อกเอาต์ (ต่างจาก session key transporter_name ที่ถูกลบตอนออกจากระบบ)
+const PROFILE_KEY = "transporter_profile";
 
 // หน้าผู้ขนส่ง — จงใจ "ไม่ต้องล็อกอินด้วยอีเมล" เพราะผู้ขนส่งบางคนไม่ถนัดเทคโนโลยี
 // ใส่แค่ ชื่อเล่น + เบอร์โทร (บังคับทั้ง 2 ค่า) · ไม่ผูกกับ Supabase Auth
@@ -13,11 +16,31 @@ export default function TransporterLogin() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
+  const [savedProfile, setSavedProfile] = useState<{ name: string; phone: string } | null>(null);
 
-  // จำไว้แล้ว → เข้าหน้าหลักเลย
+  // จำ session ไว้แล้ว → เข้าหน้าหลักเลย · ยังไม่ล็อกอิน → เติมชื่อ/เบอร์ที่เคยใช้ล่าสุดให้อัตโนมัติ
   useEffect(() => {
-    if (typeof window !== "undefined" && localStorage.getItem("transporter_name")) router.replace("/transporter/main");
+    if (typeof window === "undefined") return;
+    if (localStorage.getItem("transporter_name")) { router.replace("/transporter/main"); return; }
+    try {
+      const raw = localStorage.getItem(PROFILE_KEY);
+      if (raw) {
+        const p = JSON.parse(raw) as { name?: string; phone?: string };
+        if (p?.name && p?.phone) {
+          setSavedProfile({ name: p.name, phone: p.phone });
+          setName(p.name); setPhone(p.phone); // เติมให้ในฟอร์มด้วย เผื่ออยากแก้
+        }
+      }
+    } catch { /* โปรไฟล์เสีย — ข้ามไป */ }
   }, [router]);
+
+  // เข้าใช้งาน + จำโปรไฟล์ไว้ให้ครั้งหน้าไม่ต้องกรอกใหม่
+  const enter = (n: string, digits: string) => {
+    localStorage.setItem("transporter_name", n);
+    localStorage.setItem("transporter_phone", digits);
+    localStorage.setItem(PROFILE_KEY, JSON.stringify({ name: n, phone: digits }));
+    router.push("/transporter/main");
+  };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,9 +51,7 @@ export default function TransporterLogin() {
     const digits = p.replace(/[^0-9]/g, "");
     if (!p) { setError("กรุณากรอกเบอร์โทร"); return; }
     if (digits.length < 9 || digits.length > 10) { setError("เบอร์โทรไม่ถูกต้อง (ต้องมี 9–10 หลัก)"); return; }
-    localStorage.setItem("transporter_name", n);
-    localStorage.setItem("transporter_phone", digits);
-    router.push("/transporter/main");
+    enter(n, digits);
   };
 
   return (
@@ -52,6 +73,22 @@ export default function TransporterLogin() {
               <h1 className="text-2xl font-bold text-slate-800">ผู้ขนส่ง</h1>
               <p className="text-slate-500 text-sm mt-1 text-center">กรอกชื่อเล่นกับเบอร์โทรเพื่อเริ่มใช้งาน</p>
             </div>
+
+            {/* เข้าใช้งานต่อด้วยชื่อล่าสุด — แตะปุ่มเดียว ไม่ต้องกรอกใหม่ */}
+            {savedProfile && (
+              <div className="mb-5">
+                <button onClick={() => enter(savedProfile.name, savedProfile.phone)}
+                  className="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white font-bold py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] shadow-sm hover:shadow-md flex items-center justify-center gap-2.5 text-sm">
+                  <UserCheck className="w-5 h-5" />
+                  <span>เข้าใช้งานต่อในชื่อ <b>{savedProfile.name}</b></span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+                <p className="text-center text-[11px] text-slate-400 mt-2">☎ {savedProfile.phone} · หรือแก้ชื่อ/เบอร์ด้านล่างถ้าเปลี่ยนคน</p>
+                <div className="flex items-center gap-3 my-4">
+                  <div className="flex-1 h-px bg-slate-100" /><span className="text-xs text-slate-400">หรือ</span><div className="flex-1 h-px bg-slate-100" />
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleLogin} className="flex flex-col gap-4">
               <div>

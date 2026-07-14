@@ -61,12 +61,12 @@ export const deleteSaleApi = async (id: string) => { const { error } = await sb(
 export const addInspectionApi = async (r: InspectionRecord) => {
   const { error } = await sb().from("inspections").upsert({ ...r, deleted_at: null });
   if (error) {
-    // ยังไม่ได้รัน supabase-migration-2026-07-13.sql (ไม่มีคอลัมน์ image_slots)
-    // → เซฟแบบไม่มีช่องแยกไปก่อน กันข้อมูลหาย แล้วเตือนใน console
-    const { image_slots: _slots, ...noSlots } = r;
-    const retry = await sb().from("inspections").upsert({ ...noSlots, deleted_at: null });
+    // ยังไม่ได้รัน migration (ขาดคอลัมน์ image_slots / delivery_company / location_link)
+    // → เซฟแบบตัดคอลัมน์ใหม่ทิ้งไปก่อน กันข้อมูลหลักหาย แล้วเตือนใน console
+    const { image_slots: _slots, delivery_company: _dc, location_link: _ll, ...core } = r;
+    const retry = await sb().from("inspections").upsert({ ...core, deleted_at: null });
     if (retry.error) throw error;
-    console.warn("inspections.image_slots ยังไม่มีใน DB — รัน supabase-migration-2026-07-13.sql เพื่อเก็บรูปแยกช่อง");
+    console.warn("inspections ขาดคอลัมน์ใหม่ — รัน supabase-migration-2026-07-14.sql (delivery_company/location_link) และ 2026-07-13.sql (image_slots)");
   }
   return { id: r.id };
 };

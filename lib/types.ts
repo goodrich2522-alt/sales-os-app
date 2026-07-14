@@ -98,6 +98,8 @@ export interface InspectionRecord {
   images: string[]; // รูปทั้งหมดรวมกัน (6 ช่อง + รูปเพิ่มเติม) — หน้าเก่าอ่านช่องนี้
   image_slots?: Partial<Record<InspectionSlotKey, string>>; // รูปแยกช่อง → โชว์ป้ายกำกับ
   role?: "ผู้รับรถ" | "ผู้ส่งมอบรถ";
+  delivery_company?: string; // หน้าผู้ส่งมอบรถ: บริษัท/สถานที่ที่ไปส่ง
+  location_link?: string;    // หน้าผู้ส่งมอบรถ: ลิงก์โลเคชั่นหน้างาน
 }
 
 export interface DeletedInspectionRecord extends InspectionRecord {

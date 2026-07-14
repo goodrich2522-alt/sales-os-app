@@ -629,9 +629,8 @@ export default function StockMain() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      {isProductId(item.id) && (
-                        <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-md flex-shrink-0">{item.id}</span>
-                      )}
+                      {/* รหัสสินค้า (ID) — โชว์ทุกคันเพื่อแยกรถถูกตัว */}
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${isProductId(item.id) ? "text-indigo-700 bg-indigo-50 border border-indigo-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{item.id}</span>
                       <p className="font-semibold text-slate-800 text-sm">{item.unit_no ? `${item.unit_no} — ` : ""}{item.brand} {item.model}</p>
                       {idx === 0 && <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded-full flex-shrink-0">ล่าสุด</span>}
                     </div>

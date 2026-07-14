@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRight, ChevronLeft, Package, History, ImageOff, Hash, Calendar, User, FileText, PackageCheck, Clock, Search, RotateCcw, Building2, Briefcase, Trash2 } from "lucide-react";
+import { Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRight, ChevronLeft, Package, History, ImageOff, Hash, Calendar, User, FileText, PackageCheck, Clock, Search, RotateCcw, Building2, Briefcase, Trash2, MapPin, Link2 } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
 import { Forklift, Sale, INSPECTION_SLOTS, InspectionSlotKey, SLOT_LABELS } from "@/lib/types";
 import { driveImg } from "@/lib/img";
@@ -48,6 +48,10 @@ export default function TransporterMain() {
   const [senderName, setSenderName] = useState("");
   const [deliverDate, setDeliverDate] = useState("");
   const [salesOwner, setSalesOwner] = useState("");
+  const [delCompany, setDelCompany] = useState("");   // บริษัท/สถานที่ที่ไปส่ง (บังคับ)
+  const [delLocation, setDelLocation] = useState("");  // ลิงก์โลเคชั่นหน้างาน (ไม่บังคับ)
+
+  const MAX_DELIVERY_PHOTOS = 12;
 
   // ── สถานะหลังบันทึก (เพื่อยกเลิกรายการล่าสุด) ──
   const [done, setDone] = useState<null | { insId: string; before: Forklift | null; label: string }>(null);
@@ -98,7 +102,9 @@ export default function TransporterMain() {
     ? (sales.filter(s => String(s.forklift_unit_no || "").toUpperCase() === delKey)
         .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))[0] || null)
     : null;
-  const delValid = !!(delFork && senderName.trim() && deliverDate) && allSlotsFilled;
+  // ผู้ส่งมอบรถ: รูปอิสระ (ไม่บังคับ 6 ช่อง) แต่ต้องมีอย่างน้อย 1 และไม่เกิน 12 + บริษัทที่ไปส่ง
+  const deliveryPhotosValid = extraImages.length >= 1 && extraImages.length <= MAX_DELIVERY_PHOTOS;
+  const delValid = !!(delFork && senderName.trim() && deliverDate && delCompany.trim()) && deliveryPhotosValid;
   const targetReady = isReceiver ? !!recvTarget : !!delFork;
 
   // รหัสสเปกรถ (รุ่น/เสา/วาล์ว/งา/อุปกรณ์/พิกัด/เชื้อเพลิง)
@@ -148,13 +154,14 @@ export default function TransporterMain() {
   const retakeSlot = (key: InspectionSlotKey) =>
     setSlotImages(p => { const n = { ...p }; delete n[key]; return n; });
 
-  // รูปเพิ่มเติม (ไม่บังคับ หลายรูปได้)
+  // รูปเพิ่มเติม (ผู้รับ = ไม่บังคับ ไม่จำกัด · ผู้ส่งมอบ = รูปหลัก จำกัด 12 รูป)
   const handleExtraUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
+    const cap = isReceiver ? Infinity : MAX_DELIVERY_PHOTOS; // หน้าผู้ส่งมอบจำกัดไม่เกิน 12 รูป
     Array.from(files).forEach(async (file) => {
       const url = await fileToResizedDataUrl(file);
-      setExtraImages(prev => [...prev, url]);
+      setExtraImages(prev => (prev.length >= cap ? prev : [...prev, url]));
     });
     e.target.value = "";
   };
@@ -188,8 +195,8 @@ export default function TransporterMain() {
   const submitDeliverer = () => {
     if (!delFork) return;
     const insId = `ins_${Date.now()}`;
-    addInspection({ id: insId, unit_no: delFork.unit_no, transporter_name: senderName.trim() || username, transporter_phone: userphone || undefined, date: deliverDate || today(), ...buildImagePayload(), role: "ผู้ส่งมอบรถ" });
-    setDone({ insId, before: null, label: `ส่งมอบ ${delFork.unit_no} แล้ว` });
+    addInspection({ id: insId, unit_no: delFork.unit_no, transporter_name: senderName.trim() || username, transporter_phone: userphone || undefined, date: deliverDate || today(), ...buildImagePayload(), role: "ผู้ส่งมอบรถ", delivery_company: delCompany.trim() || undefined, location_link: delLocation.trim() || undefined });
+    setDone({ insId, before: null, label: `ส่งมอบ ${delFork.unit_no} → ${delCompany.trim()}` });
   };
 
   // ยกเลิกรายการล่าสุด — ลบ inspection + คืนรถกลับสถานะก่อนรับ (รถรอรับ → กลับเป็น "รอรับ" ไม่ลบทิ้ง)
@@ -212,6 +219,7 @@ export default function TransporterMain() {
     setPiNo(""); setReceivedDate(""); setUnitNo(""); setPickedModel("");
     setReceiverName(username);
     setDelSN(""); setSenderName(username); setDeliverDate(""); setSalesOwner("");
+    setDelCompany(""); setDelLocation("");
   };
 
   const switchRole = (r: TransporterRole) => { setRole(r); resetForm(); };
@@ -418,19 +426,34 @@ export default function TransporterMain() {
                     <input value={salesOwner} onChange={e => setSalesOwner(e.target.value)} placeholder="เซลล์เจ้าของดีล"
                       className="w-full border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all" />
                   </div>
+                  <div>
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1.5"><Building2 className="w-3.5 h-3.5 text-indigo-500" />บริษัทที่ไปส่ง <span className="text-red-500">*</span></label>
+                    <input value={delCompany} onChange={e => setDelCompany(e.target.value)} placeholder="ชื่อบริษัท / สถานที่ปลายทาง"
+                      className="w-full border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all" />
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1.5"><MapPin className="w-3.5 h-3.5 text-indigo-500" />ลิงก์โลเคชั่นหน้างาน <span className="text-slate-400 font-normal">(ไม่บังคับ)</span></label>
+                    <input value={delLocation} onChange={e => setDelLocation(e.target.value)} type="url" inputMode="url" placeholder="วางลิงก์ Google Maps ที่นี่"
+                      className="w-full border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all" />
+                    {delLocation.trim() && (
+                      <a href={delLocation.trim()} target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+                        <Link2 className="w-3.5 h-3.5" />เปิดลิงก์เพื่อตรวจสอบ
+                      </a>
+                    )}
+                  </div>
                 </>
               )}
             </div>
           </div>
         )}
 
-        {/* ============ ถ่ายรูปบังคับ 6 ช่อง (ทั้ง 2 โหมด เมื่อหาคันเจอแล้ว) ============ */}
-        {!done && targetReady && (
+        {/* ============ ถ่ายรูป — ผู้รับ: บังคับ 6 ช่อง · ผู้ส่งมอบ: อิสระ ไม่เกิน 12 รูป ============ */}
+        {!done && targetReady && isReceiver && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                <Camera className={`w-4 h-4 ${isReceiver ? "text-amber-500" : "text-indigo-500"}`} />ถ่ายรูปสภาพรถ (บังคับ 6 รูป)
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${isReceiver ? "bg-amber-100 text-amber-700" : "bg-indigo-100 text-indigo-700"}`}>{role}</span>
+                <Camera className="w-4 h-4 text-amber-500" />ถ่ายรูปสภาพรถ (บังคับ 6 รูป)
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">{role}</span>
               </h3>
               <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${allSlotsFilled ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
                 {filledSlots.length}/{INSPECTION_SLOTS.length} รูป
@@ -458,10 +481,10 @@ export default function TransporterMain() {
                   </div>
                 ) : (
                   <button key={slot.key} onClick={() => { setActiveSlot(slot.key); slotInputRef.current?.click(); }}
-                    className={`aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all ${isReceiver ? "border-amber-200 hover:border-amber-400 bg-amber-50/40 hover:bg-amber-50" : "border-indigo-200 hover:border-indigo-400 bg-indigo-50/40 hover:bg-indigo-50"}`}>
+                    className="aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all border-amber-200 hover:border-amber-400 bg-amber-50/40 hover:bg-amber-50">
                     <span className="text-2xl">{slot.icon}</span>
                     <span className="text-xs font-bold text-slate-700 px-1 text-center leading-tight">{slot.label}</span>
-                    <span className={`flex items-center gap-1 text-[10px] font-semibold ${isReceiver ? "text-amber-600" : "text-indigo-600"}`}>
+                    <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-600">
                       <Camera className="w-3 h-3" />แตะเพื่อถ่าย
                     </span>
                   </button>
@@ -497,12 +520,63 @@ export default function TransporterMain() {
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={img} alt={`รูปเพิ่มเติม ${idx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                       <button onClick={() => removeExtraImage(idx)} className="absolute top-1.5 right-1.5 bg-slate-900/70 hover:bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center transition-colors duration-200 opacity-0 group-hover:opacity-100"><X className="w-3 h-3" /></button>
-                      <div className={`absolute bottom-1 left-1 text-xs rounded px-1.5 py-0.5 font-semibold ${isReceiver ? "bg-amber-500/90 text-white" : "bg-indigo-500/90 text-white"}`}>{idx + 1}</div>
+                      <div className="absolute bottom-1 left-1 text-xs rounded px-1.5 py-0.5 font-semibold bg-amber-500/90 text-white">{idx + 1}</div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ============ ผู้ส่งมอบรถ: ถ่ายรูปอิสระ (อย่างน้อย 1 · ไม่เกิน 12 รูป) ============ */}
+        {!done && targetReady && !isReceiver && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <Camera className="w-4 h-4 text-indigo-500" />ถ่ายรูปการส่งมอบ
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{role}</span>
+              </h3>
+              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${deliveryPhotosValid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                {extraImages.length}/{MAX_DELIVERY_PHOTOS} รูป
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mb-4">
+              ถ่ายรูปอะไรก็ได้ตามหน้างาน (ไม่จำกัดว่าต้องเป็นมุมไหน) — อย่างน้อย 1 รูป สูงสุด {MAX_DELIVERY_PHOTOS} รูป · รูปจะส่งเข้าหน้าเซลล์ให้ตรวจสอบ
+            </p>
+
+            {extraImages.length < MAX_DELIVERY_PHOTOS ? (
+              <button onClick={() => fileInputRef.current?.click()}
+                className="w-full border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/40 hover:bg-indigo-50 rounded-xl p-5 flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer group">
+                <Camera className="w-6 h-6 text-indigo-400 group-hover:text-indigo-600 transition-colors" />
+                <span className="text-sm text-indigo-600 group-hover:text-indigo-700 font-semibold transition-colors">แตะเพื่อถ่าย/เลือกรูป</span>
+                <span className="text-[11px] text-slate-400">เพิ่มได้อีก {MAX_DELIVERY_PHOTOS - extraImages.length} รูป</span>
+              </button>
+            ) : (
+              <div className="w-full rounded-xl p-3 bg-emerald-50 border border-emerald-200 text-center text-xs font-semibold text-emerald-700">
+                ครบ {MAX_DELIVERY_PHOTOS} รูปแล้ว (สูงสุด) — ลบรูปออกก่อนถ้าต้องการถ่ายใหม่
+              </div>
+            )}
+            <input ref={fileInputRef} type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handleExtraUpload} />
+
+            {extraImages.length > 0 && (
+              <div className="grid grid-cols-3 gap-2 mt-3">
+                {extraImages.map((img, idx) => (
+                  <div key={idx} className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 group">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={img} alt={`รูปส่งมอบ ${idx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    <button onClick={() => removeExtraImage(idx)} className="absolute top-1.5 right-1.5 bg-slate-900/70 hover:bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center transition-colors duration-200 opacity-0 group-hover:opacity-100"><X className="w-3 h-3" /></button>
+                    <div className="absolute bottom-1 left-1 text-xs rounded px-1.5 py-0.5 font-semibold bg-indigo-500/90 text-white">{idx + 1}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {extraImages.length === 0 && (
+              <p className="mt-3 text-xs text-amber-600 flex items-start gap-1">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />ต้องมีรูปการส่งมอบอย่างน้อย 1 รูป
+              </p>
+            )}
           </div>
         )}
 
@@ -518,7 +592,7 @@ export default function TransporterMain() {
             {!isReceiver && !delValid && (
               <p className="text-xs text-amber-600 text-center flex items-center justify-center gap-1">
                 <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                กรอก ผู้ส่งรถ · วันที่ส่งรถ ให้ครบ{!allSlotsFilled && ` + ถ่ายรูปให้ครบ 6 ช่อง (ขาด ${missingSlotLabels.length} รูป)`}
+                กรอก ผู้ส่งรถ · วันที่ส่งรถ · บริษัทที่ไปส่ง ให้ครบ{!deliveryPhotosValid && " + ถ่ายรูปการส่งมอบอย่างน้อย 1 รูป"}
               </p>
             )}
             <button onClick={isReceiver ? submitReceiver : submitDeliverer} disabled={isReceiver ? !receiverValid : !delValid}
@@ -564,6 +638,14 @@ export default function TransporterMain() {
                       </div>
                     </div>
                     <p className="text-xs text-slate-500 mb-2">โดย <span className="font-semibold text-slate-700">{rec.transporter_name || "—"}</span>{rec.transporter_phone ? ` · ☎ ${rec.transporter_phone}` : ""}</p>
+                    {(rec.delivery_company || rec.location_link) && (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2 text-xs">
+                        {rec.delivery_company && <span className="text-slate-600 flex items-center gap-1"><Building2 className="w-3.5 h-3.5 text-indigo-500" />{rec.delivery_company}</span>}
+                        {rec.location_link && (
+                          <a href={rec.location_link} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />เปิดโลเคชั่น</a>
+                        )}
+                      </div>
+                    )}
                     {histDeleteId === rec.id && (
                       <div className="flex items-center gap-2 mb-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
                         <span className="text-xs text-red-700 flex-1">ลบรายการนี้ถาวร? (ตัวรถยังอยู่ในสต็อก — แจ้งฝ่ายสต็อกถ้าต้องเอารถออก)</span>

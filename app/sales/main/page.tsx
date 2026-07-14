@@ -696,9 +696,8 @@ export default function SalesMain() {
                 <div className="p-4 flex flex-col gap-3">
                   <div className="flex items-start justify-between">
                     <div>
-                      {isProductId(item.id) && (
-                        <span className="inline-block text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-md mb-1">{item.id}</span>
-                      )}
+                      {/* รหัสสินค้า (ID) — โชว์ทุกคันเพื่อแยกรถถูกตัว */}
+                      <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-md mb-1 ${isProductId(item.id) ? "text-indigo-700 bg-indigo-50 border border-indigo-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{item.id}</span>
                       <p className="font-bold text-slate-800 text-base">{item.brand}</p>
                       <p className="text-sm text-slate-600 font-medium">{item.model}</p>
                       <p className="text-xs text-slate-400 mt-0.5">{item.unit_no}</p>
