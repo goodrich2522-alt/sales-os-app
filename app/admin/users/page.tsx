@@ -30,6 +30,12 @@ export default function AdminUsersPage() {
   const [adminEmails, setAdminEmails] = useState<string[]>([]);
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  // เพิ่มผู้ใช้ล่วงหน้า (pre-authorize ก่อนเขาล็อกอิน) — เลือกบทบาท + อนุมัติทันที
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserRole, setNewUserRole] = useState("sales");
+  const [addUserError, setAddUserError] = useState("");
 
   const reload = useCallback(async () => {
     const cfg = await getAccessConfig();
@@ -64,6 +70,16 @@ export default function AdminUsersPage() {
     mutate((u, a) => { if (u[email]) u[email] = { ...u[email], role }; return { users: u, adminEmails: a }; });
   const removeUser = (email: string) =>
     mutate((u, a) => { delete u[email]; return { users: u, adminEmails: a }; });
+  // เพิ่มผู้ใช้เอง + กำหนดบทบาท → อนุมัติทันที (ล็อกอิน Google ด้วยอีเมลนี้เข้าใช้งานได้เลย)
+  const addUser = () => {
+    const email = newUserEmail.trim().toLowerCase();
+    if (!email || !email.includes("@")) { setAddUserError("กรุณากรอกอีเมลให้ถูกต้อง"); return; }
+    if (users[email]) { setAddUserError("อีเมลนี้มีอยู่แล้วในรายชื่อ"); return; }
+    const name = newUserName.trim() || email.split("@")[0];
+    const role = newUserRole;
+    setNewUserEmail(""); setNewUserName(""); setNewUserRole("sales"); setAddUserError(""); setShowAddUser(false);
+    mutate((u, a) => { u[email] = { name, role, status: "approved" }; return { users: u, adminEmails: a }; });
+  };
   const addAdmin = () => {
     const email = newAdminEmail.trim().toLowerCase();
     if (!email || !email.includes("@")) return;
@@ -148,10 +164,53 @@ export default function AdminUsersPage() {
 
         {/* ── รายชื่อผู้ใช้ ── */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-2">
             <h2 className="text-sm font-bold text-slate-800">ผู้ใช้ทั้งหมด</h2>
-            <span className="text-xs text-slate-500">{entries.length} บัญชี</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-500">{entries.length} บัญชี</span>
+              <button onClick={() => { setShowAddUser(v => !v); setAddUserError(""); }} disabled={busy}
+                className="flex items-center gap-1 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                <Plus className="w-3.5 h-3.5" />เพิ่มผู้ใช้
+              </button>
+            </div>
           </div>
+
+          {/* ── ฟอร์มเพิ่มผู้ใช้ล่วงหน้า ── */}
+          {showAddUser && (
+            <div className="px-5 py-4 border-b border-slate-100 bg-violet-50/50 flex flex-col gap-2.5">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input value={newUserEmail} autoFocus type="email"
+                  onChange={e => { setNewUserEmail(e.target.value); setAddUserError(""); }}
+                  onKeyDown={e => { if (e.key === "Enter") addUser(); }}
+                  placeholder="อีเมลผู้ใช้ (Gmail)"
+                  className="flex-1 border border-violet-200 rounded-lg px-3 py-2 text-sm bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                <input value={newUserName}
+                  onChange={e => setNewUserName(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") addUser(); }}
+                  placeholder="ชื่อ (ไม่บังคับ)"
+                  className="sm:w-40 border border-violet-200 rounded-lg px-3 py-2 text-sm bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)}
+                  className="sm:w-32 border border-violet-200 rounded-lg px-2.5 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400">
+                  <option value="sales">{ROLE_LABELS.sales}</option>
+                  <option value="stock">{ROLE_LABELS.stock}</option>
+                  <option value="transporter">{ROLE_LABELS.transporter}</option>
+                </select>
+              </div>
+              {addUserError && (
+                <p className="text-xs text-red-600 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />{addUserError}</p>
+              )}
+              <div className="flex items-center gap-2">
+                <button onClick={addUser} disabled={busy || !newUserEmail.trim()}
+                  className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg transition-colors disabled:opacity-50">
+                  <UserCheck className="w-3.5 h-3.5" />เพิ่มและอนุมัติเลย
+                </button>
+                <button onClick={() => { setShowAddUser(false); setAddUserError(""); setNewUserEmail(""); setNewUserName(""); }}
+                  className="text-slate-500 hover:text-slate-800 hover:bg-slate-100 text-xs font-semibold px-3 py-2 rounded-lg transition-all">ยกเลิก</button>
+                <span className="ml-auto text-[11px] text-slate-400">อนุมัติทันที — ล็อกอิน Google ด้วยอีเมลนี้เข้าได้เลย</span>
+              </div>
+            </div>
+          )}
+
           {entries.length === 0 ? (
             <p className="text-sm text-slate-400 text-center py-10">ยังไม่มีผู้ใช้ลงทะเบียน</p>
           ) : (
