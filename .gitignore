@@ -42,3 +42,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+backup-forklifts-2026-07-19.json
+backup-sales-2026-07-19.json
+backup-inspections-2026-07-19.json

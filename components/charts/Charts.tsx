@@ -11,10 +11,14 @@ const TT: React.CSSProperties = {
   border: "none",
   borderRadius: "10px",
   color: "#f1f5f9",
-  fontSize: "12px",
+  fontSize: "13px",
   padding: "8px 12px",
   boxShadow: "0 4px 24px rgba(0,0,0,0.18)",
 };
+// recharts ตั้งสี label เป็นดำ + สี item เป็นสีของกราฟเองทับ contentStyle → บนพื้นเข้มอ่านไม่ออก
+// ต้องบังคับสีตัวอักษรที่ labelStyle/itemStyle ให้สว่างชัดเสมอ
+const TT_LABEL: React.CSSProperties = { color: "#f8fafc", fontWeight: 700, fontSize: "13px", marginBottom: "2px" };
+const TT_ITEM: React.CSSProperties = { color: "#e2e8f0", fontWeight: 600, fontSize: "13px" };
 
 function fmt(n: number) { return Number(n).toLocaleString("th-TH"); }
 
@@ -45,7 +49,7 @@ export function SalesRevenueChart({
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
         <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
         <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => `${(v / 1e6).toFixed(1)}ล`} axisLine={false} tickLine={false} />
-        <Tooltip formatter={(v) => [`฿${fmt(Number(v))}`, "รายได้"]} contentStyle={TT} cursor={{ fill: "#f8fafc" }} />
+        <Tooltip formatter={(v) => [`฿${fmt(Number(v))}`, "รายได้"]} contentStyle={TT} labelStyle={TT_LABEL} itemStyle={TT_ITEM} cursor={{ fill: "#f8fafc" }} />
         <Bar dataKey="revenue" radius={[6, 6, 0, 0]} cursor={onBarClick ? "pointer" : "default"}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           onClick={(d: any) => onBarClick?.(d?.month ?? "")}>
@@ -68,7 +72,7 @@ export function BrandShareChart({ data }: { data: BrandData[] }) {
           dataKey="value" paddingAngle={3} strokeWidth={2} stroke="#fff">
           {data.map((entry, i) => <Cell key={`brand-${i}`} fill={entry.color} />)}
         </Pie>
-        <Tooltip formatter={(v) => [`${v}%`, "สัดส่วน"]} contentStyle={TT} />
+        <Tooltip formatter={(v) => [`${v}%`, "สัดส่วน"]} contentStyle={TT} labelStyle={TT_LABEL} itemStyle={TT_ITEM} />
       </PieChart>
     </ResponsiveContainer>
   );
@@ -84,7 +88,7 @@ export function StockStatusChart({ data }: { data: StockData[] }) {
           dataKey="value" paddingAngle={3} strokeWidth={2} stroke="#fff">
           {data.map((entry, i) => <Cell key={`stock-${i}`} fill={entry.color} />)}
         </Pie>
-        <Tooltip formatter={(v) => [`${v} คัน`]} contentStyle={TT} />
+        <Tooltip formatter={(v) => [`${v} คัน`]} contentStyle={TT} labelStyle={TT_LABEL} itemStyle={TT_ITEM} />
       </PieChart>
     </ResponsiveContainer>
   );
@@ -99,7 +103,7 @@ export function PaymentTypeChart({ data }: { data: PayData[] }) {
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
         <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
         <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} allowDecimals={false} axisLine={false} tickLine={false} />
-        <Tooltip contentStyle={TT} />
+        <Tooltip contentStyle={TT} labelStyle={TT_LABEL} itemStyle={TT_ITEM} />
         <Legend iconType="circle" iconSize={8}
           formatter={(v) => <span style={{ fontSize: "12px", color: "#64748b" }}>{v === "cash" ? "เงินสด" : "ไฟแนนซ์"}</span>}
         />
@@ -146,7 +150,7 @@ export function StaffRevenueChart({
         <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => `${(v / 1e6).toFixed(1)}ล`} axisLine={false} tickLine={false} />
         <Tooltip
           formatter={(v) => [`฿${fmt(Number(v))}`, "รายได้"]}
-          contentStyle={TT}
+          contentStyle={TT} labelStyle={TT_LABEL} itemStyle={TT_ITEM}
           cursor={{ fill: "#f8fafc" }}
         />
         <Bar
@@ -185,7 +189,7 @@ export function WeeklyBreakdownChart({ data }: { data: WeekPoint[] }) {
         <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => `${(v / 1e6).toFixed(1)}ล`} axisLine={false} tickLine={false} />
         <Tooltip
           formatter={(v, name) => name === "revenue" ? [`฿${fmt(Number(v))}`, "รายได้"] : [v, "จำนวน (คัน)"]}
-          contentStyle={TT}
+          contentStyle={TT} labelStyle={TT_LABEL} itemStyle={TT_ITEM}
           cursor={{ fill: "#fef9ec" }}
         />
         <Bar dataKey="revenue" fill="url(#weekGrad)" radius={[6, 6, 0, 0]} />
@@ -208,7 +212,7 @@ export function SaleTypeChart({ data }: { data: SaleTypeData[] }) {
         <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} allowDecimals={false} axisLine={false} tickLine={false} />
         <Tooltip
           formatter={(v, name) => name === "count" ? [`${v} คัน`, "จำนวน"] : [`฿${fmt(Number(v))}`, "รายได้"]}
-          contentStyle={TT}
+          contentStyle={TT} labelStyle={TT_LABEL} itemStyle={TT_ITEM}
           cursor={{ fill: "#f8fafc" }}
         />
         <Bar dataKey="count" radius={[6, 6, 0, 0]}>
