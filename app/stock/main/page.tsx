@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Package, Plus, LogOut, CheckCircle, AlertCircle, List, X,
   TrendingUp, Boxes, Trash2, Settings, Pencil, Check, ChevronDown,
   Type, ListOrdered, ArrowLeft, Clock, Hash, Camera, ImageOff, Eye,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Bell, Download, Upload, FileText, ShoppingCart
 } from "lucide-react";
 import { Forklift } from "@/lib/types";
 import { useApp, FieldConfig } from "@/lib/AppContext";
 import { generateProductId, isProductId } from "@/lib/productId";
+import { parseForkliftCsv, assignIdsAndStamp, buildCsvTemplate } from "@/lib/forkliftCsv";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { apiEnabled } from "@/lib/api";
 import { driveImg } from "@/lib/img";
@@ -99,7 +100,8 @@ type InlineStep = "name" | "type" | "options" | null;
 export default function StockMain() {
   const router = useRouter();
   const {
-    forklifts, addForklift, deleteForklift, inspections,
+    forklifts, addForklift, addForkliftsBulk, deleteForklift, inspections, sales,
+    exportData, importData,
     fieldConfig, updateFieldOptions,
     addCustomFieldDef, removeCustomFieldDef, renameCustomFieldDef,
     addCustomFieldOption, removeCustomFieldOption, editCustomFieldOption,
@@ -119,6 +121,13 @@ export default function StockMain() {
   const [showSettings, setShowSettings]   = useState(false);
   const [detailItem, setDetailItem]       = useState<Forklift | null>(null); // รถที่กดดูรายละเอียด
   const [detailLightbox, setDetailLightbox] = useState<{ imgs: string[]; idx: number } | null>(null);
+
+  // ── แจ้งเตือนเด้งเมื่อเซลล์ทำรายการขายใหม่เข้ามา (realtime) ──
+  type SaleAlert = { id: string; staff: string; status: string; title: string; sub: string };
+  const [saleAlerts, setSaleAlerts] = useState<SaleAlert[]>([]);
+  const prevSaleIdsRef = useRef<Set<string>>(new Set());
+  const alertReadyRef  = useRef(false);
+  const dismissAlert = (id: string) => setSaleAlerts(a => a.filter(x => x.id !== id));
 
   // Settings modal state
   const [editingField, setEditingField]   = useState<DropdownField | null>(null);
@@ -149,6 +158,33 @@ export default function StockMain() {
       }
     })();
   }, [router]);
+
+  // เปิดใช้แจ้งเตือนหลังโหลดข้อมูลชุดแรกเสร็จ (กันเด้งรัวตอนเปิดหน้า)
+  useEffect(() => {
+    const t = setTimeout(() => { alertReadyRef.current = true; }, 2500);
+    return () => clearTimeout(t);
+  }, []);
+
+  // ตรวจดีลใหม่จาก sales — id ที่ไม่เคยเห็น = เซลล์เพิ่งทำรายการเข้ามา → เด้งป๊อปอัพ
+  useEffect(() => {
+    const prev = prevSaleIdsRef.current;
+    if (alertReadyRef.current) {
+      const fresh = sales.filter(s => !prev.has(s.id));
+      if (fresh.length > 0) {
+        const toAlert = (s: typeof sales[number]): SaleAlert => ({
+          id: s.id,
+          staff: s.sales_staff || "เซลล์",
+          status: String(s.sale_status ?? "ขายแล้ว"),
+          title: `${s.forklift_brand} ${s.forklift_model}`.trim() || s.forklift_unit_no || "รถ",
+          sub: `${s.customer_name || "ลูกค้า"} · ฿${Number(s.actual_sale || 0).toLocaleString("th-TH")}`,
+        });
+        const news = fresh.map(toAlert);
+        setSaleAlerts(a => [...news, ...a].slice(0, 5));
+        news.forEach(n => setTimeout(() => dismissAlert(n.id), 12000)); // เด้งค้าง 12 วิ
+      }
+    }
+    prevSaleIdsRef.current = new Set(sales.map(s => s.id));
+  }, [sales]);
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -201,9 +237,71 @@ export default function StockMain() {
 
   const handleLogout = () => { void signOutSupabase(); localStorage.removeItem("stock_user"); router.push("/stock/login"); };
 
-  const available = forklifts.filter(f => f.status === "พร้อมขาย").length;
-  const booked    = forklifts.filter(f => ["จอง", "จองแล้ว", "รอผ่านไฟแนนซ์"].includes(String(f.status))).length;
-  const delivered = forklifts.filter(f => ["ปิดการขายแล้ว", "ส่งมอบแล้ว", "ขายแล้ว"].includes(String(f.status))).length;
+  // ── เครื่องมือข้อมูล: สำรอง (export) / นำเข้า (import) / อัปโหลด CSV ──
+  const [dataBusy, setDataBusy]   = useState(false);
+  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [csvMsg, setCsvMsg]       = useState<{ ok: boolean; text: string } | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const csvInputRef     = useRef<HTMLInputElement>(null);
+
+  const downloadFile = (name: string, content: string, type: string) => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  // เซฟข้อมูลปัจจุบันทั้งหมดเป็นไฟล์ (รถ + ดีลขาย + ตรวจรับ + การตั้งค่า)
+  const handleExport = () => {
+    const data = exportData();
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadFile(`salesos-backup-${stamp}.json`, JSON.stringify(data, null, 2), "application/json");
+  };
+
+  // นำเข้าไฟล์สำรองที่เคยเซฟไว้ (กู้คืนข้อมูล)
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; e.target.value = "";
+    if (!file) return;
+    setDataBusy(true); setImportMsg(null);
+    try {
+      const data = JSON.parse(await file.text());
+      const res = await importData(data);
+      setImportMsg({ ok: true, text: `นำเข้าสำเร็จ — รถ ${res.forklifts} · ดีลขาย ${res.sales} · ตรวจรับ ${res.inspections}` });
+    } catch (err) {
+      setImportMsg({ ok: false, text: err instanceof Error ? err.message : "ไฟล์เสียหรือรูปแบบไม่ถูกต้อง" });
+    }
+    setDataBusy(false);
+  };
+
+  // อัปโหลดรถหลายคันจากไฟล์ CSV
+  const handleCsvFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; e.target.value = "";
+    if (!file) return;
+    setDataBusy(true); setCsvMsg(null);
+    try {
+      const parsed = parseForkliftCsv(await file.text());
+      if (parsed.rowCount === 0) {
+        setCsvMsg({ ok: false, text: parsed.errors[0] || "ไม่พบข้อมูลรถในไฟล์" });
+      } else {
+        const rows = assignIdsAndStamp(parsed.forklifts, forklifts);
+        addForkliftsBulk(rows);
+        const warn = parsed.errors.length ? ` (ข้าม ${parsed.errors.length} แถวที่ไม่สมบูรณ์)` : "";
+        setCsvMsg({ ok: true, text: `เพิ่มรถ ${rows.length} คันเข้าสต็อกแล้ว${warn}` });
+      }
+    } catch {
+      setCsvMsg({ ok: false, text: "อ่านไฟล์ไม่สำเร็จ — ต้องเป็นไฟล์ .csv" });
+    }
+    setDataBusy(false);
+  };
+
+  // นับแยกตามสถานะมาตรฐาน 5 ค่า — ฝ่ายสต็อกเห็นชัดว่าเหลือ/ขาย/ไฟแนนซ์/จอง กี่คัน
+  const countStatus = (s: string) => forklifts.filter(f => String(f.status) === s).length;
+  const available  = countStatus("พร้อมขาย");                                        // เหลือ (พร้อมขาย)
+  const reserved   = countStatus("จอง");                                             // จอง
+  const financing  = countStatus("รอผ่านไฟแนนซ์");                                    // ติดไฟแนนซ์
+  const sold       = countStatus("ปิดการขายแล้ว");                                    // ขายไปแล้ว
+  const waiting    = countStatus("รอรับ");                                            // รอรับเข้าคลัง
 
   // รายการสต็อกที่กรองแล้ว (สำหรับ modal) — ค้นหา + หมวด + สถานะ
   const hs = (v: unknown) => (v == null ? "" : String(v)).toLowerCase();
@@ -282,11 +380,64 @@ export default function StockMain() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-6 flex flex-col gap-5">
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-3">
-          <StatCard label="พร้อมขาย"       value={available} icon={<TrendingUp className="w-4 h-4" />} color="text-emerald-700" bg="bg-emerald-50 border-emerald-100" iconBg="bg-emerald-100 text-emerald-600" />
-          <StatCard label="ติดจอง/รอไฟแนนซ์" value={booked}    icon={<Boxes className="w-4 h-4" />}       color="text-amber-700"   bg="bg-amber-50 border-amber-100"   iconBg="bg-amber-100 text-amber-600" />
-          <StatCard label="ปิดการขายแล้ว"  value={delivered}  icon={<CheckCircle className="w-4 h-4" />} color="text-indigo-700"  bg="bg-indigo-50 border-indigo-100" iconBg="bg-indigo-100 text-indigo-600" />
+        {/* Stats — แยกตามสถานะให้ฝ่ายสต็อกเห็นชัดทุกกอง */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="เหลือ (พร้อมขาย)" value={available} icon={<TrendingUp className="w-4 h-4" />} color="text-emerald-700" bg="bg-emerald-50 border-emerald-100" iconBg="bg-emerald-100 text-emerald-600" />
+          <StatCard label="จอง"              value={reserved}  icon={<Boxes className="w-4 h-4" />}       color="text-amber-700"   bg="bg-amber-50 border-amber-100"   iconBg="bg-amber-100 text-amber-600" />
+          <StatCard label="ติดไฟแนนซ์"       value={financing} icon={<Clock className="w-4 h-4" />}       color="text-rose-700"    bg="bg-rose-50 border-rose-100"     iconBg="bg-rose-100 text-rose-600" />
+          <StatCard label="ขายไปแล้ว"        value={sold}      icon={<CheckCircle className="w-4 h-4" />} color="text-indigo-700"  bg="bg-indigo-50 border-indigo-100" iconBg="bg-indigo-100 text-indigo-600" />
+        </div>
+        {waiting > 0 && (
+          <div className="-mt-2 text-xs text-slate-500 flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-blue-500" />มีรถรอรับเข้าคลังอีก <b className="text-blue-700">{waiting}</b> คัน (ยังไม่ขึ้นหน้าขาย)
+          </div>
+        )}
+
+        {/* ── เครื่องมือข้อมูล: อัปโหลดหลายคัน / สำรอง / นำเข้า ── */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <FileText className="w-4 h-4 text-indigo-500" />
+            <h3 className="text-sm font-bold text-slate-700">เครื่องมือข้อมูล</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {/* อัปโหลดหลายคันจาก CSV */}
+            <button onClick={() => csvInputRef.current?.click()} disabled={dataBusy}
+              className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 px-3.5 py-3 text-left transition-colors disabled:opacity-50">
+              <Upload className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+              <div className="min-w-0"><p className="text-sm font-bold text-emerald-800">อัปโหลดหลายคัน</p><p className="text-[11px] text-emerald-600">จากไฟล์ Excel/CSV</p></div>
+            </button>
+            {/* สำรองข้อมูล */}
+            <button onClick={handleExport} disabled={dataBusy}
+              className="flex items-center gap-2.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 px-3.5 py-3 text-left transition-colors disabled:opacity-50">
+              <Download className="w-5 h-5 text-indigo-600 flex-shrink-0" />
+              <div className="min-w-0"><p className="text-sm font-bold text-indigo-800">สำรองข้อมูล</p><p className="text-[11px] text-indigo-600">เซฟทั้งหมดเป็นไฟล์</p></div>
+            </button>
+            {/* นำเข้าไฟล์สำรอง */}
+            <button onClick={() => importInputRef.current?.click()} disabled={dataBusy}
+              className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 px-3.5 py-3 text-left transition-colors disabled:opacity-50">
+              <FileText className="w-5 h-5 text-slate-600 flex-shrink-0" />
+              <div className="min-w-0"><p className="text-sm font-bold text-slate-700">นำเข้าข้อมูล</p><p className="text-[11px] text-slate-500">กู้จากไฟล์สำรอง</p></div>
+            </button>
+          </div>
+          <input ref={csvInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleCsvFile} />
+          <input ref={importInputRef} type="file" accept=".json,application/json" className="hidden" onChange={handleImportFile} />
+          <div className="mt-2 flex items-center justify-between flex-wrap gap-2">
+            <button onClick={() => downloadFile("แม่แบบอัปโหลดรถ.csv", buildCsvTemplate(), "text/csv")}
+              className="text-xs text-emerald-700 hover:text-emerald-900 font-semibold flex items-center gap-1">
+              <Download className="w-3.5 h-3.5" />ดาวน์โหลดแม่แบบ CSV (กรอกใน Excel แล้ว Save As CSV)
+            </button>
+            {dataBusy && <span className="text-xs text-slate-400">กำลังทำงาน…</span>}
+          </div>
+          {csvMsg && (
+            <p className={`mt-2 text-xs rounded-lg px-3 py-2 flex items-center gap-1.5 ${csvMsg.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+              {csvMsg.ok ? <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />}{csvMsg.text}
+            </p>
+          )}
+          {importMsg && (
+            <p className={`mt-2 text-xs rounded-lg px-3 py-2 flex items-center gap-1.5 ${importMsg.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+              {importMsg.ok ? <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />}{importMsg.text}
+            </p>
+          )}
         </div>
 
         {/* Add Form */}
@@ -667,6 +818,38 @@ export default function StockMain() {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── ป๊อปอัพแจ้งเตือน: เซลล์ทำรายการขายเข้ามา ── */}
+      {saleAlerts.length > 0 && (
+        <div className="fixed z-[70] bottom-4 right-4 left-4 sm:left-auto sm:w-96 flex flex-col gap-2.5 pointer-events-none">
+          <style>{`@keyframes salepop{0%{opacity:0;transform:translateY(16px) scale(.96)}100%{opacity:1;transform:none}}`}</style>
+          {saleAlerts.map(al => {
+            const green = al.status.includes("ขาย");
+            const amber = al.status.includes("จอง");
+            const c = green ? { bar: "bg-emerald-500", chip: "bg-emerald-100 text-emerald-700", ic: "text-emerald-600" }
+                    : amber ? { bar: "bg-amber-500",   chip: "bg-amber-100 text-amber-700",     ic: "text-amber-600" }
+                    :         { bar: "bg-rose-500",    chip: "bg-rose-100 text-rose-700",       ic: "text-rose-600" };
+            return (
+              <div key={al.id} style={{ animation: "salepop .35s ease-out" }}
+                className="pointer-events-auto bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex">
+                <div className={`w-1.5 flex-shrink-0 ${c.bar}`} />
+                <div className="flex-1 min-w-0 p-3.5">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="flex items-center gap-1.5 text-xs font-bold text-slate-700"><ShoppingCart className={`w-4 h-4 ${c.ic}`} />เซลล์ทำรายการใหม่</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${c.chip}`}>{al.status}</span>
+                      <button onClick={() => dismissAlert(al.id)} className="text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg p-1 transition-all"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                  </div>
+                  <p className="font-bold text-slate-800 text-sm truncate">{al.title}</p>
+                  <p className="text-xs text-slate-500 truncate">{al.sub}</p>
+                  <p className="text-[11px] text-slate-400 mt-1">โดย {al.staff}</p>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

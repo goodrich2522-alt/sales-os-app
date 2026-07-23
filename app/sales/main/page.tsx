@@ -107,7 +107,7 @@ function labeledPhotos(recs: InspectionRecord[]): LabeledPhoto[] {
 export default function SalesMain() {
   const router = useRouter();
   const {
-    forklifts, sales, addSale, deleteSale, inspections, fieldConfig, refresh,
+    forklifts, sales, addSale, updateSale, deleteSale, inspections, fieldConfig, refresh,
     updateFieldOptions,
     addSaleExtraFieldDef, removeSaleExtraFieldDef, renameSaleExtraFieldDef,
     addSaleExtraFieldOption, removeSaleExtraFieldOption, editSaleExtraFieldOption,
@@ -120,6 +120,7 @@ export default function SalesMain() {
   const [search, setSearch]       = useState("");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest"); // เรียงตามวันที่เข้าสต็อก
   const [selected, setSelected]   = useState<Forklift | null>(null);
+  const [editingSale, setEditingSale] = useState<Sale | null>(null); // ไม่ null = กำลังแก้ไขดีลเดิม
   const [form, setForm]           = useState(emptyCheckout);
   const [errors, setErrors]       = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
@@ -329,7 +330,8 @@ export default function SalesMain() {
       Object.entries(auto).forEach(([k, v]) => { if (v) customFields[k] = String(v); });
     }
     return {
-      id: `sale_${Date.now()}`,
+      // แก้ไข = คง id/วันที่เดิม · ทำใหม่ = ออก id ใหม่
+      id: editingSale ? editingSale.id : `sale_${Date.now()}`,
       forklift_id: selected!.id, forklift_unit_no: selected!.unit_no,
       forklift_brand: selected!.brand, forklift_model: selected!.model,
       sales_staff: salesUser?.name ?? "",
@@ -340,7 +342,6 @@ export default function SalesMain() {
       actual_sale: Number(form.actual_sale), deposit: Number(form.deposit) || 0,
       delivery_date: form.delivery_date, remark: form.remark || undefined,
       custom_fields: Object.keys(customFields).length > 0 ? customFields : undefined,
-      created_at: new Date().toISOString().slice(0, 10),
       sale_status: status,
       vehicle_type: vehicleType,
       warranty_expiry: form.warranty_expiry || undefined,
@@ -348,11 +349,56 @@ export default function SalesMain() {
       custom_notifications: customNotifItems.length > 0 ? customNotifItems : undefined,
       contact_source: (form.contact_source as ContactSource) || undefined,
       sale_type: (form.sale_type as SaleType) || undefined,
+      created_at: editingSale ? editingSale.created_at : new Date().toISOString().slice(0, 10),
     };
   };
 
+  // บันทึกดีล — ทำใหม่ = addSale · แก้ไขของเดิม = updateSale
+  const commitSale = (status: SaleStatus) => {
+    const s = buildSale(status);
+    if (editingSale) updateSale(s); else addSale(s);
+    setSubmitted(true);
+    setTimeout(resetCheckout, editingSale ? 1400 : 3000);
+  };
+
+  // เปิดฟอร์มแก้ไขดีลที่ทำไปแล้ว — เติมข้อมูลเดิมกลับเข้าฟอร์มทั้งหมด
+  const openEditSale = (sale: Sale) => {
+    // หารถจากสต็อก ถ้าถูกลบไปแล้วสร้างรถชั่วคราวจากข้อมูลในดีล เพื่อให้ฟอร์มทำงานต่อได้
+    const fk = forklifts.find(f => f.id === sale.forklift_id) ?? {
+      id: sale.forklift_id, unit_no: sale.forklift_unit_no, brand: sale.forklift_brand,
+      model: sale.forklift_model, capacity: "", height: "", fuel: "", cost_price: 0,
+      stock_price: 0, status: "", created_at: sale.created_at,
+    } as Forklift;
+    setEditingSale(sale);
+    setSelected(fk);
+    setVehicleType(sale.vehicle_type ?? fk.vehicle_category ?? "Forklift");
+    setForm({
+      customer_name: sale.customer_name ?? "", customer_tel: sale.customer_tel ?? "",
+      customer_type: (sale.customer_type ?? "") as CustomerType | "",
+      province: sale.province ?? "", payment_type: (sale.payment_type ?? "") as PaymentType | "",
+      finance_company: sale.finance_company ?? "",
+      actual_sale: sale.actual_sale ? String(sale.actual_sale) : "",
+      deposit: sale.deposit ? String(sale.deposit) : "",
+      delivery_date: sale.delivery_date ?? "", remark: sale.remark ?? "",
+      warranty_expiry: sale.warranty_expiry ?? "", parts_schedule: sale.parts_schedule ?? "",
+      contact_source: (sale.contact_source ?? "") as ContactSource | "",
+      sale_type: (sale.sale_type ?? "") as SaleType | "",
+    });
+    // เติมค่าช่องที่เพิ่มเอง (จับคู่ตามชื่อ)
+    const cvals: Record<string, string> = {};
+    fieldConfig.saleExtraFieldDefs.forEach(def => {
+      const v = sale.custom_fields?.[def.name];
+      if (v != null) cvals[def.id] = String(v);
+    });
+    setSaleCustomVals(cvals);
+    setCustomNotifItems(sale.custom_notifications ?? []);
+    setShowCustomNotifs((sale.custom_notifications ?? []).length > 0);
+    setErrors({}); setSubmitted(false); setLightboxIdx(null);
+    setDetailSale(null); // ปิดหน้ารายละเอียดถ้าเปิดอยู่
+  };
+
   const resetCheckout = () => {
-    setSelected(null); setForm(emptyCheckout); setErrors({}); setSaleCustomVals({});
+    setSelected(null); setEditingSale(null); setForm(emptyCheckout); setErrors({}); setSaleCustomVals({});
     setSubmitted(false); setCustomNotifItems([]); setShowCustomNotifs(false);
     setNewNotifLabel(""); setNewNotifDate("");
   };
@@ -361,24 +407,21 @@ export default function SalesMain() {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
-    addSale(buildSale("ขายแล้ว")); setSubmitted(true);
-    setTimeout(resetCheckout, 3000);
+    commitSale("ขายแล้ว");
   };
 
   const handleBook = (e: React.MouseEvent) => {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
-    addSale(buildSale("จอง")); setSubmitted(true);
-    setTimeout(resetCheckout, 3000);
+    commitSale("จอง");
   };
 
   const handleFinance = (e: React.MouseEvent) => {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
-    addSale(buildSale("รอผ่านไฟแนนซ์")); setSubmitted(true);
-    setTimeout(resetCheckout, 3000);
+    commitSale("รอผ่านไฟแนนซ์");
   };
 
   const handleUpdateTarget = () => {
@@ -736,10 +779,10 @@ export default function SalesMain() {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && resetCheckout()}>
           <div className="bg-white rounded-3xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
-            <div className="bg-gradient-to-r from-indigo-600 to-blue-700 px-6 py-4 flex items-center justify-between flex-shrink-0">
+            <div className={`px-6 py-4 flex items-center justify-between flex-shrink-0 ${editingSale ? "bg-gradient-to-r from-violet-600 to-fuchsia-700" : "bg-gradient-to-r from-indigo-600 to-blue-700"}`}>
               <div>
-                <h3 className="text-lg font-bold text-white">ปิดการขาย</h3>
-                <p className="text-indigo-200 text-sm">{selected.unit_no} — {selected.brand} {selected.model}</p>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">{editingSale ? <><Pencil className="w-4 h-4" />แก้ไขรายการขาย</> : "ปิดการขาย"}</h3>
+                <p className={`text-sm ${editingSale ? "text-fuchsia-100" : "text-indigo-200"}`}>{selected.unit_no} — {selected.brand} {selected.model}</p>
               </div>
               <button onClick={resetCheckout} className="text-white/70 hover:text-white hover:bg-white/20 rounded-xl p-2 transition-all"><X className="w-5 h-5" /></button>
             </div>
@@ -747,7 +790,7 @@ export default function SalesMain() {
               {submitted ? (
                 <div className="flex flex-col items-center justify-center h-52 gap-4">
                   <div className="bg-emerald-100 rounded-full p-4"><CheckCircle className="w-12 h-12 text-emerald-600" /></div>
-                  <div className="text-center"><p className="text-xl font-bold text-slate-800">บันทึกสำเร็จ!</p><p className="text-slate-500 text-sm mt-1">บันทึกข้อมูลในระบบแล้ว</p></div>
+                  <div className="text-center"><p className="text-xl font-bold text-slate-800">{editingSale ? "แก้ไขสำเร็จ!" : "บันทึกสำเร็จ!"}</p><p className="text-slate-500 text-sm mt-1">บันทึกข้อมูลในระบบแล้ว</p></div>
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">
@@ -986,17 +1029,22 @@ export default function SalesMain() {
 
                     {/* ── Action buttons (Part 3) ── */}
                     <div className="flex flex-col gap-2 pt-2">
-                      <button type="submit" className="w-full bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600 text-white font-bold py-3.5 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2">
-                        <CheckCircle className="w-4 h-4" />ยืนยันการขาย (ขายแล้ว)
+                      {editingSale && (
+                        <p className="text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+                          <Pencil className="w-3.5 h-3.5 flex-shrink-0" />กำลังแก้ไขดีลเดิม — เลือกสถานะที่ต้องการบันทึกทับ (เปลี่ยนสถานะได้)
+                        </p>
+                      )}
+                      <button type="submit" className={`w-full text-white font-bold py-3.5 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 ${editingSale ? "bg-gradient-to-r from-violet-600 to-fuchsia-700 hover:from-violet-500 hover:to-fuchsia-600" : "bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600"}`}>
+                        <CheckCircle className="w-4 h-4" />{editingSale ? "บันทึกการแก้ไข (ปิดการขาย)" : "ยืนยันการขาย (ขายแล้ว)"}
                       </button>
                       <div className="grid grid-cols-2 gap-2">
                         <button type="button" onClick={handleBook}
                           className="w-full bg-amber-400 hover:bg-amber-500 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 text-sm">
-                          📌 จอง
+                          📌 {editingSale ? "บันทึกเป็น จอง" : "จอง"}
                         </button>
                         <button type="button" onClick={handleFinance}
                           className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 text-sm">
-                          🏦 รอผ่านไฟแนนซ์
+                          🏦 {editingSale ? "บันทึกเป็น ไฟแนนซ์" : "รอผ่านไฟแนนซ์"}
                         </button>
                       </div>
                     </div>
@@ -1246,10 +1294,16 @@ export default function SalesMain() {
                       </div>
                       <div className="text-right flex-shrink-0 flex flex-col items-end gap-1">
                         <p className="font-bold text-indigo-700">฿{sale.actual_sale.toLocaleString("th-TH")}</p>
-                        <button onClick={() => setDetailSale(sale)}
-                          className="text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 p-1.5 rounded-lg transition-all flex items-center gap-1 text-xs font-medium">
-                          <Eye className="w-3.5 h-3.5" />ดูรายละเอียด
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => setDetailSale(sale)}
+                            className="text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 p-1.5 rounded-lg transition-all flex items-center gap-1 text-xs font-medium">
+                            <Eye className="w-3.5 h-3.5" />ดู
+                          </button>
+                          <button onClick={() => { setShowHistory(false); openEditSale(sale); }}
+                            className="text-violet-600 hover:text-violet-800 hover:bg-violet-50 p-1.5 rounded-lg transition-all flex items-center gap-1 text-xs font-semibold">
+                            <Pencil className="w-3.5 h-3.5" />แก้ไข
+                          </button>
+                        </div>
                         {deleteConfirm === sale.id ? (
                           <div className="flex gap-1.5 mt-1 justify-end">
                             <button onClick={() => handleDeleteSale(sale.id)} className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1"><Trash2 className="w-3 h-3" />ลบ</button>

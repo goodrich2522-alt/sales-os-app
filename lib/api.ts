@@ -55,7 +55,20 @@ export const deleteForkliftApi = async (id: string)  => { const { error } = awai
 
 // ── Sale ──────────────────────────────────────────────────────────────────--
 export const addSaleApi    = async (s: Sale)    => { const { error } = await sb().from("sales").upsert(s); if (error) throw error; return { id: s.id }; };
+// แก้ไขดีลที่ทำไปแล้ว — update ตรงตาม id (ไม่สร้างใหม่)
+export const updateSaleApi = async (s: Sale)    => { const { id, ...rest } = s; const { error } = await sb().from("sales").update(rest).eq("id", id); if (error) throw error; };
 export const deleteSaleApi = async (id: string) => { const { error } = await sb().from("sales").delete().eq("id", id); if (error) throw error; };
+
+// ── Bulk upsert (นำเข้าข้อมูลสำรอง / อัปโหลดสต็อกหลายคัน) — แบ่งก้อนละ 200 ──
+async function bulkUpsert<T extends object>(table: string, rows: T[]) {
+  for (let i = 0; i < rows.length; i += 200) {
+    const { error } = await sb().from(table).upsert(rows.slice(i, i + 200));
+    if (error) throw error;
+  }
+}
+export const bulkUpsertForkliftsApi   = (rows: Forklift[])         => bulkUpsert("forklifts", rows);
+export const bulkUpsertSalesApi       = (rows: Sale[])            => bulkUpsert("sales", rows);
+export const bulkUpsertInspectionsApi = (rows: InspectionRecord[]) => bulkUpsert("inspections", rows.map(r => ({ ...r, deleted_at: null })));
 
 // ── Inspection (soft delete = ตั้ง deleted_at) ─────────────────────────────--
 export const addInspectionApi = async (r: InspectionRecord) => {

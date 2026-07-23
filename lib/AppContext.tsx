@@ -65,6 +65,17 @@ const DEFAULT_FIELD_CFG: FieldConfig = {
 
 type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "knownUsers" | "adminEmails">;
 
+// ── รูปแบบไฟล์สำรอง/นำเข้าข้อมูล ──
+export interface BackupData {
+  app: "SalesOS";
+  version: number;
+  exported_at: string;
+  forklifts: Forklift[];
+  sales: Sale[];
+  inspections: InspectionRecord[];
+  fieldConfig?: Partial<FieldConfig>;
+}
+
 // ── Context type ──────────────────────────────────────────────────────────────
 interface AppContextType {
   forklifts: Forklift[];
@@ -73,10 +84,14 @@ interface AppContextType {
   deletedInspections: DeletedInspectionRecord[];
   fieldConfig: FieldConfig;
   addForklift: (f: Forklift) => void;
+  addForkliftsBulk: (fs: Forklift[]) => void;
   updateForklift: (f: Forklift) => void;
   deleteForklift: (id: string) => void;
   addSale: (s: Sale) => void;
+  updateSale: (s: Sale) => void;
   deleteSale: (saleId: string) => void;
+  exportData: () => BackupData;
+  importData: (data: BackupData) => Promise<{ forklifts: number; sales: number; inspections: number }>;
   addInspection: (r: InspectionRecord) => void;
   deleteInspection: (id: string) => void;
   restoreInspection: (id: string) => void;
@@ -139,11 +154,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [fieldConfig, setFieldConfig]         = useState<FieldConfig>(DEFAULT_FIELD_CFG);
 
   // ref ข้อมูลล่าสุด — ใช้หา forklift/sale ตอนต้องอัปเดตสถานะรถผ่าน API
-  const forkliftsRef = useRef<Forklift[]>(forklifts);
-  const salesRef     = useRef<Sale[]>(sales);
+  const forkliftsRef   = useRef<Forklift[]>(forklifts);
+  const salesRef       = useRef<Sale[]>(sales);
+  const inspectionsRef = useRef<InspectionRecord[]>(inspections);
   const lastLocalEditRef = useRef(0); // เวลาที่แก้ข้อมูลในเครื่องล่าสุด — กัน auto-refresh ทับของที่เพิ่ง optimistic
   useEffect(() => { forkliftsRef.current = forklifts; }, [forklifts]);
   useEffect(() => { salesRef.current = sales; }, [sales]);
+  useEffect(() => { inspectionsRef.current = inspections; }, [inspections]);
 
   useEffect(() => {
     let cancelled = false;
@@ -259,6 +276,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setForklifts(p => [f, ...p]);
     if (api.apiEnabled) api.addForkliftApi(f).catch(e => console.warn("addForklift", e));
   }, []);
+  // เพิ่มรถหลายคันพร้อมกัน (อัปโหลดจากไฟล์) — optimistic + upsert เป็นก้อน
+  const addForkliftsBulk = useCallback((fs: Forklift[]) => {
+    if (fs.length === 0) return;
+    lastLocalEditRef.current = Date.now();
+    setForklifts(p => [...fs, ...p]);
+    if (api.apiEnabled) api.bulkUpsertForkliftsApi(fs).catch(e => console.warn("addForkliftsBulk", e));
+  }, []);
   const updateForklift = useCallback((f: Forklift) => {
     lastLocalEditRef.current = Date.now();
     setForklifts(p => p.map(x => x.id === f.id ? f : x));
@@ -286,6 +310,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (target) api.updateForkliftApi({ ...target, status: nextStatus }).catch(e => console.warn("updateForklift", e));
     }
   }, []);
+  // แก้ไขดีลที่ทำไปแล้ว — อัปเดตข้อมูล + ปรับสถานะรถให้ตรงกับ sale_status ล่าสุด
+  const updateSale = useCallback((s: Sale) => {
+    lastLocalEditRef.current = Date.now();
+    const nextStatus =
+      s.sale_status === "จอง"           ? "จอง" :
+      s.sale_status === "รอผ่านไฟแนนซ์" ? "รอผ่านไฟแนนซ์" :
+      "ปิดการขายแล้ว";
+    setSales(p => p.map(x => x.id === s.id ? s : x));
+    setForklifts(p => p.map(f => f.id === s.forklift_id ? { ...f, status: nextStatus } : f));
+    if (api.apiEnabled) {
+      api.updateSaleApi(s).catch(e => console.warn("updateSale", e));
+      const target = forkliftsRef.current.find(f => f.id === s.forklift_id);
+      if (target) api.updateForkliftApi({ ...target, status: nextStatus }).catch(e => console.warn("updateForklift", e));
+    }
+  }, []);
+
   const deleteSale = useCallback((saleId: string) => {
     lastLocalEditRef.current = Date.now();
     const sale = salesRef.current.find(s => s.id === saleId);
@@ -455,6 +495,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setFieldConfig(prev => ({ ...prev, salesFilterRequests: prev.salesFilterRequests.filter(r => r !== name) }));
   }, []);
 
+  // ── สำรอง / นำเข้าข้อมูล (กันข้อมูลหายถ้าระบบมีปัญหา) ──
+  const exportData = useCallback((): BackupData => ({
+    app: "SalesOS",
+    version: 1,
+    exported_at: new Date().toISOString(),
+    forklifts: forkliftsRef.current,
+    sales: salesRef.current,
+    inspections: inspectionsRef.current,
+    fieldConfig,
+  }), [fieldConfig]);
+
+  // นำเข้าข้อมูลจากไฟล์สำรอง — เขียนทับด้วย upsert (ไม่ลบของเดิมที่ไม่มีในไฟล์)
+  const importData = useCallback(async (data: BackupData) => {
+    if (!data || data.app !== "SalesOS" || !Array.isArray(data.forklifts)) {
+      throw new Error("ไฟล์ไม่ถูกต้อง — ต้องเป็นไฟล์สำรองของ SalesOS เท่านั้น");
+    }
+    const fks = data.forklifts ?? [], sls = data.sales ?? [], ins = data.inspections ?? [];
+    // อัปเดต state ทันที (optimistic) — รวมกับของเดิม โดยของในไฟล์ทับ id ที่ซ้ำ
+    const mergeById = <T extends { id: string }>(cur: T[], incoming: T[]) => {
+      const map = new Map(cur.map(x => [x.id, x]));
+      incoming.forEach(x => map.set(x.id, x));
+      return [...map.values()];
+    };
+    setForklifts(p => mergeById(p, fks));
+    setSales(p => mergeById(p, sls));
+    setInspections(p => mergeById(p, ins as InspectionRecord[]));
+    if (data.fieldConfig) setFieldConfig(prev => ({ ...prev, ...data.fieldConfig }));
+    if (api.apiEnabled) {
+      if (fks.length) await api.bulkUpsertForkliftsApi(fks);
+      if (sls.length) await api.bulkUpsertSalesApi(sls);
+      if (ins.length) await api.bulkUpsertInspectionsApi(ins as InspectionRecord[]);
+    }
+    return { forklifts: fks.length, sales: sls.length, inspections: ins.length };
+  }, []);
+
   // ดึงข้อมูลใหม่จาก Google Sheets ทันที (ปุ่มรีเฟรชเอง)
   const refresh = useCallback(async () => {
     if (!api.apiEnabled) return;
@@ -470,8 +545,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   return (
     <AppContext.Provider value={{
       forklifts, sales, inspections, deletedInspections, fieldConfig,
-      addForklift, updateForklift, deleteForklift,
-      addSale, deleteSale,
+      addForklift, addForkliftsBulk, updateForklift, deleteForklift,
+      addSale, updateSale, deleteSale,
+      exportData, importData,
       addInspection, deleteInspection, restoreInspection, purgeInspection,
       refresh,
       updateFieldOptions,
