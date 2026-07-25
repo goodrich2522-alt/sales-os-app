@@ -74,6 +74,7 @@ export interface Sale {
   custom_notifications?: { label: string; date: string }[];
   contact_source?: ContactSource;
   sale_type?: SaleType;
+  payment_proof?: string; // รูปหลักฐานการชำระเงิน (บังคับ) — เก็บ URL หลังอัปโหลด
 }
 
 // ── รูปตรวจรถ 6 ช่องบังคับ (ผู้รับรถ/ผู้ส่งมอบรถ ต้องถ่ายครบทุกช่อง) ──

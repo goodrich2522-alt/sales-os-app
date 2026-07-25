@@ -295,34 +295,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ── Sale CRUD ─────────────────────────────────────────────────────────────
+  // อัปโหลดรูปหลักฐานการชำระ (base64 → Drive URL) ถ้ายังไม่ได้อัปโหลด
+  const uploadPaymentProof = async (s: Sale): Promise<Sale> => {
+    if (!s.payment_proof || !s.payment_proof.startsWith("data:")) return s;
+    try {
+      const mime = /^data:(.*?);base64,/.exec(s.payment_proof)?.[1] || "image/jpeg";
+      const url = (await api.uploadImageApi(s.payment_proof, mime, `payment_${s.id}`)).url;
+      return { ...s, payment_proof: url };
+    } catch (e) { console.warn("upload payment_proof", e); return s; } // อัปไม่ได้ → เก็บ base64 ไปก่อน
+  };
+  const forkliftStatusForSale = (s: Sale) =>
+    s.sale_status === "จอง" ? "จอง" : s.sale_status === "รอผ่านไฟแนนซ์" ? "รอผ่านไฟแนนซ์" : "ปิดการขายแล้ว";
+
   const addSale = useCallback((s: Sale) => {
     lastLocalEditRef.current = Date.now();
-    setSales(p => [s, ...p]);
-    // สถานะรถต้องตรงกับที่เซลล์เลือกตอนปิดการขาย — จอง→จอง / รอผ่านไฟแนนซ์→รอผ่านไฟแนนซ์ / ปิดการขาย→ปิดการขายแล้ว
-    const nextStatus =
-      s.sale_status === "จอง"            ? "จอง" :
-      s.sale_status === "รอผ่านไฟแนนซ์"  ? "รอผ่านไฟแนนซ์" :
-      "ปิดการขายแล้ว";
+    setSales(p => [s, ...p]); // optimistic (โชว์รูป base64 ทันที)
+    const nextStatus = forkliftStatusForSale(s);
     setForklifts(p => p.map(f => f.id === s.forklift_id ? { ...f, status: nextStatus } : f));
     if (api.apiEnabled) {
-      api.addSaleApi(s).catch(e => console.warn("addSale", e));
-      const target = forkliftsRef.current.find(f => f.id === s.forklift_id);
-      if (target) api.updateForkliftApi({ ...target, status: nextStatus }).catch(e => console.warn("updateForklift", e));
+      (async () => {
+        const saved = await uploadPaymentProof(s);
+        if (saved !== s) setSales(p => p.map(x => x.id === s.id ? saved : x)); // เปลี่ยน base64 → URL
+        api.addSaleApi(saved).catch(e => console.warn("addSale", e));
+        const target = forkliftsRef.current.find(f => f.id === s.forklift_id);
+        if (target) api.updateForkliftApi({ ...target, status: nextStatus }).catch(e => console.warn("updateForklift", e));
+      })();
     }
   }, []);
   // แก้ไขดีลที่ทำไปแล้ว — อัปเดตข้อมูล + ปรับสถานะรถให้ตรงกับ sale_status ล่าสุด
   const updateSale = useCallback((s: Sale) => {
     lastLocalEditRef.current = Date.now();
-    const nextStatus =
-      s.sale_status === "จอง"           ? "จอง" :
-      s.sale_status === "รอผ่านไฟแนนซ์" ? "รอผ่านไฟแนนซ์" :
-      "ปิดการขายแล้ว";
+    const nextStatus = forkliftStatusForSale(s);
     setSales(p => p.map(x => x.id === s.id ? s : x));
     setForklifts(p => p.map(f => f.id === s.forklift_id ? { ...f, status: nextStatus } : f));
     if (api.apiEnabled) {
-      api.updateSaleApi(s).catch(e => console.warn("updateSale", e));
-      const target = forkliftsRef.current.find(f => f.id === s.forklift_id);
-      if (target) api.updateForkliftApi({ ...target, status: nextStatus }).catch(e => console.warn("updateForklift", e));
+      (async () => {
+        const saved = await uploadPaymentProof(s);
+        if (saved !== s) setSales(p => p.map(x => x.id === s.id ? saved : x));
+        api.updateSaleApi(saved).catch(e => console.warn("updateSale", e));
+        const target = forkliftsRef.current.find(f => f.id === s.forklift_id);
+        if (target) api.updateForkliftApi({ ...target, status: nextStatus }).catch(e => console.warn("updateForklift", e));
+      })();
     }
   }, []);
 

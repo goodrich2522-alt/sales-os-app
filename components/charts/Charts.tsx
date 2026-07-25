@@ -21,6 +21,13 @@ const TT_LABEL: React.CSSProperties = { color: "#f8fafc", fontWeight: 700, fontS
 const TT_ITEM: React.CSSProperties = { color: "#e2e8f0", fontWeight: 600, fontSize: "13px" };
 
 function fmt(n: number) { return Number(n).toLocaleString("th-TH"); }
+// แกน Y ปรับหน่วยอัตโนมัติ — ยอดน้อยโชว์เลขจริง (ไม่เป็น 0.0ล ทั้งแกน)
+function axisNum(v: number) {
+  const n = Math.abs(v);
+  if (n >= 1_000_000) return (v / 1_000_000).toFixed(1) + "ล";
+  if (n >= 1_000)     return Math.round(v / 1_000) + "k";
+  return String(v);
+}
 
 // ─── 1. Monthly Revenue Bar Chart ─────────────────────────────────────────────
 interface RevenueData { month: string; revenue: number; units: number; }
@@ -48,7 +55,7 @@ export function SalesRevenueChart({
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
         <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-        <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => `${(v / 1e6).toFixed(1)}ล`} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={axisNum} axisLine={false} tickLine={false} />
         <Tooltip formatter={(v) => [`฿${fmt(Number(v))}`, "รายได้"]} contentStyle={TT} labelStyle={TT_LABEL} itemStyle={TT_ITEM} cursor={{ fill: "#f8fafc" }} />
         <Bar dataKey="revenue" radius={[6, 6, 0, 0]} cursor={onBarClick ? "pointer" : "default"}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -147,7 +154,7 @@ export function StaffRevenueChart({
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
         <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-        <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => `${(v / 1e6).toFixed(1)}ล`} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={axisNum} axisLine={false} tickLine={false} />
         <Tooltip
           formatter={(v) => [`฿${fmt(Number(v))}`, "รายได้"]}
           contentStyle={TT} labelStyle={TT_LABEL} itemStyle={TT_ITEM}
@@ -186,7 +193,7 @@ export function WeeklyBreakdownChart({ data }: { data: WeekPoint[] }) {
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
         <XAxis dataKey="week" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-        <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => `${(v / 1e6).toFixed(1)}ล`} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={axisNum} axisLine={false} tickLine={false} />
         <Tooltip
           formatter={(v, name) => name === "revenue" ? [`฿${fmt(Number(v))}`, "รายได้"] : [v, "จำนวน (คัน)"]}
           contentStyle={TT} labelStyle={TT_LABEL} itemStyle={TT_ITEM}

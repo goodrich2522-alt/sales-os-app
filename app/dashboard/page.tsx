@@ -47,7 +47,11 @@ const SaleTypeChart = dynamic(
 const MONTHS_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 
 function fmt(n: number)  { return Number(n).toLocaleString("th-TH"); }
-function fmtM(n: number) { return (n / 1_000_000).toFixed(2) + " ล."; }
+// แสดงยอดแบบปรับอัตโนมัติ — ยอดน้อยโชว์เลขจริงเต็ม (ไม่ปัดเป็น 0.00 ล.) · ยอดหลักล้านโชว์ย่อ "ล."
+function fmtM(n: number) {
+  const v = Number(n) || 0;
+  return Math.abs(v) >= 1_000_000 ? (v / 1_000_000).toFixed(2) + " ล." : v.toLocaleString("th-TH");
+}
 
 function ChartSkeleton() {
   return <div className="w-full h-full bg-slate-100 rounded-xl animate-pulse" />;

@@ -54,9 +54,26 @@ export const updateForkliftApi = async (f: Forklift) => { const { id, ...rest } 
 export const deleteForkliftApi = async (id: string)  => { const { error } = await sb().from("forklifts").delete().eq("id", id); if (error) throw error; };
 
 // ── Sale ──────────────────────────────────────────────────────────────────--
-export const addSaleApi    = async (s: Sale)    => { const { error } = await sb().from("sales").upsert(s); if (error) throw error; return { id: s.id }; };
+// ถ้าคอลัมน์ payment_proof ยังไม่มีใน DB (ยังไม่รัน migration) → retry แบบไม่มีคอลัมน์นี้ กันดีลหาย
+export const addSaleApi = async (s: Sale) => {
+  const { error } = await sb().from("sales").upsert(s);
+  if (error) {
+    const { payment_proof: _pp, ...core } = s;
+    const { error: e2 } = await sb().from("sales").upsert(core);
+    if (e2) throw error;
+  }
+  return { id: s.id };
+};
 // แก้ไขดีลที่ทำไปแล้ว — update ตรงตาม id (ไม่สร้างใหม่)
-export const updateSaleApi = async (s: Sale)    => { const { id, ...rest } = s; const { error } = await sb().from("sales").update(rest).eq("id", id); if (error) throw error; };
+export const updateSaleApi = async (s: Sale) => {
+  const { id, ...rest } = s;
+  const { error } = await sb().from("sales").update(rest).eq("id", id);
+  if (error) {
+    const { payment_proof: _pp, ...core } = rest;
+    const { error: e2 } = await sb().from("sales").update(core).eq("id", id);
+    if (e2) throw error;
+  }
+};
 export const deleteSaleApi = async (id: string) => { const { error } = await sb().from("sales").delete().eq("id", id); if (error) throw error; };
 
 // ── Bulk upsert (นำเข้าข้อมูลสำรอง / อัปโหลดสต็อกหลายคัน) — แบ่งก้อนละ 200 ──

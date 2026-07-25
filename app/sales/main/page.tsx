@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   TrendingUp, LogOut, X, CheckCircle, AlertCircle,
@@ -169,6 +169,34 @@ export default function SalesMain() {
   // Checkout custom fields
   const [saleCustomVals, setSaleCustomVals]   = useState<Record<string, string>>({});
   const [lightboxIdx, setLightboxIdx]         = useState<number | null>(null);
+  const [paymentProof, setPaymentProof]       = useState(""); // รูปหลักฐานการชำระเงิน (บังคับ)
+  const paymentInputRef = useRef<HTMLInputElement>(null);
+
+  // ย่อรูปเป็น dataURL (ยาวสุด 1000px, jpeg 78%) — ใช้กับหลักฐานการชำระเงิน
+  const fileToResizedDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        if (!ev.target?.result) { reject(new Error("read fail")); return; }
+        const img = new Image();
+        img.onload = () => {
+          const MAX = 1000;
+          const ratio = Math.min(MAX / img.width, MAX / img.height, 1);
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(img.width * ratio);
+          canvas.height = Math.round(img.height * ratio);
+          canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", 0.78));
+        };
+        img.src = ev.target.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  const handlePaymentProof = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; e.target.value = "";
+    if (!file) return;
+    setPaymentProof(await fileToResizedDataUrl(file));
+  };
 
   // ── Settings modal state ───────────────────────────────────────────────────
   const [showSettings, setShowSettings]         = useState(false);
@@ -311,6 +339,7 @@ export default function SalesMain() {
     if (form.payment_type === "ไฟแนนซ์" && !form.finance_company) e.finance_company = "กรุณาเลือกบริษัทไฟแนนซ์";
     if (!form.actual_sale || isNaN(Number(form.actual_sale))) e.actual_sale = "กรุณากรอกราคาขาย";
     if (!form.delivery_date) e.delivery_date = "กรุณาระบุวันส่งมอบ";
+    if (!paymentProof) e.payment_proof = "กรุณาแนบรูปหลักฐานการชำระเงิน (บังคับ)";
     return e;
   };
 
@@ -349,6 +378,7 @@ export default function SalesMain() {
       custom_notifications: customNotifItems.length > 0 ? customNotifItems : undefined,
       contact_source: (form.contact_source as ContactSource) || undefined,
       sale_type: (form.sale_type as SaleType) || undefined,
+      payment_proof: paymentProof || undefined,
       created_at: editingSale ? editingSale.created_at : new Date().toISOString().slice(0, 10),
     };
   };
@@ -393,6 +423,7 @@ export default function SalesMain() {
     setSaleCustomVals(cvals);
     setCustomNotifItems(sale.custom_notifications ?? []);
     setShowCustomNotifs((sale.custom_notifications ?? []).length > 0);
+    setPaymentProof(sale.payment_proof ?? "");
     setErrors({}); setSubmitted(false); setLightboxIdx(null);
     setDetailSale(null); // ปิดหน้ารายละเอียดถ้าเปิดอยู่
   };
@@ -400,7 +431,7 @@ export default function SalesMain() {
   const resetCheckout = () => {
     setSelected(null); setEditingSale(null); setForm(emptyCheckout); setErrors({}); setSaleCustomVals({});
     setSubmitted(false); setCustomNotifItems([]); setShowCustomNotifs(false);
-    setNewNotifLabel(""); setNewNotifDate("");
+    setNewNotifLabel(""); setNewNotifDate(""); setPaymentProof("");
   };
 
   const handleSell = (e: React.FormEvent) => {
@@ -1006,6 +1037,29 @@ export default function SalesMain() {
                         className="w-full border border-slate-200 hover:border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-800 placeholder:text-slate-400 resize-none transition-all" />
                     </SField>
 
+                    {/* หลักฐานการชำระเงิน — บังคับแนบรูป */}
+                    <SField label="หลักฐานการชำระเงิน *" error={errors.payment_proof}>
+                      <input ref={paymentInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePaymentProof} />
+                      {paymentProof ? (
+                        <div className="relative rounded-xl overflow-hidden border-2 border-emerald-300 bg-slate-100">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={driveImg(paymentProof)} alt="หลักฐานการชำระเงิน" className="w-full max-h-56 object-contain bg-slate-50" />
+                          <div className="absolute top-2 right-2 flex gap-1.5">
+                            <button type="button" onClick={() => paymentInputRef.current?.click()} className="bg-slate-900/70 hover:bg-slate-900 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1"><Camera className="w-3.5 h-3.5" />เปลี่ยน</button>
+                            <button type="button" onClick={() => setPaymentProof("")} className="bg-slate-900/70 hover:bg-red-500 text-white rounded-lg p-1.5"><X className="w-3.5 h-3.5" /></button>
+                          </div>
+                          <span className="absolute bottom-0 inset-x-0 bg-emerald-600/90 text-white text-[11px] font-bold px-2 py-1 text-center">✓ แนบหลักฐานแล้ว</span>
+                        </div>
+                      ) : (
+                        <button type="button" onClick={() => paymentInputRef.current?.click()}
+                          className={`w-full border-2 border-dashed rounded-xl p-5 flex flex-col items-center justify-center gap-1.5 transition-all ${errors.payment_proof ? "border-red-300 bg-red-50/40 hover:bg-red-50" : "border-emerald-300 bg-emerald-50/40 hover:bg-emerald-50"}`}>
+                          <Camera className={`w-6 h-6 ${errors.payment_proof ? "text-red-400" : "text-emerald-500"}`} />
+                          <span className={`text-sm font-semibold ${errors.payment_proof ? "text-red-600" : "text-emerald-700"}`}>แตะเพื่อถ่าย/แนบสลิปการชำระเงิน</span>
+                          <span className="text-[11px] text-slate-400">จำเป็นต้องแนบ — ห้ามข้าม</span>
+                        </button>
+                      )}
+                    </SField>
+
                     {/* Extra sale fields */}
                     {fieldConfig.saleExtraFieldDefs.length > 0 && (
                       <div className="border border-violet-100 rounded-2xl p-4 bg-violet-50/30">
@@ -1132,6 +1186,13 @@ export default function SalesMain() {
                 </div>
               )}
               {detailSale.remark && <DetailRow label="หมายเหตุ" value={detailSale.remark} />}
+              {detailSale.payment_proof && (
+                <div className="border-t border-slate-100 pt-3 mt-1">
+                  <p className="text-xs font-semibold text-emerald-700 mb-2 flex items-center gap-1.5"><Camera className="w-3.5 h-3.5" />หลักฐานการชำระเงิน</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={driveImg(detailSale.payment_proof)} alt="หลักฐานการชำระเงิน" className="w-full max-h-72 object-contain rounded-xl border border-slate-200 bg-slate-50" />
+                </div>
+              )}
               {detailSale.custom_fields && Object.keys(detailSale.custom_fields).length > 0 && (
                 <div className="border-t border-slate-100 pt-3 mt-1">
                   <p className="text-xs font-semibold text-violet-700 mb-2">รายการเพิ่มเติม</p>

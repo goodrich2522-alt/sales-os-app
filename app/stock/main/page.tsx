@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Package, Plus, LogOut, CheckCircle, AlertCircle, List, X,
   TrendingUp, Boxes, Trash2, Settings, Pencil, Check, ChevronDown,
   Type, ListOrdered, ArrowLeft, Clock, Hash, Camera, ImageOff, Eye,
-  ChevronLeft, ChevronRight, Bell, Download, Upload, FileText, ShoppingCart
+  ChevronLeft, ChevronRight, Bell, Download, Upload, FileText, ShoppingCart, User
 } from "lucide-react";
 import { Forklift } from "@/lib/types";
 import { useApp, FieldConfig } from "@/lib/AppContext";
@@ -113,6 +113,12 @@ export default function StockMain() {
   const [errors, setErrors]         = useState<Record<string, string>>({});
   const [submitted, setSubmitted]   = useState(false);
   const [lastProductId, setLastProductId] = useState(""); // รหัสสินค้าที่เพิ่งสร้าง — โชว์ในแบนเนอร์สำเร็จ
+  // เติมสต็อกเคสพิเศษ: รถล็อตเดียวกันหลายคัน SN ไล่เลขอัตโนมัติ
+  const [bulkMode, setBulkMode]     = useState(false);
+  const [bulkPrefix, setBulkPrefix] = useState("");   // ส่วนนำหน้า SN (เหมือนกันทุกคัน) เช่น "SDA2016-"
+  const [bulkStart, setBulkStart]   = useState("");   // เลขเริ่ม (จำนวนหลักที่พิมพ์ = จำนวนหลักที่เติม 0) เช่น "0001"
+  const [bulkCount, setBulkCount]   = useState("");   // จำนวนรถในล็อต
+  const [bulkDone, setBulkDone]     = useState(0);     // จำนวนที่เพิ่งเพิ่มแบบล็อต (โชว์ในแบนเนอร์)
   const [showList, setShowList]     = useState(false);
   const [listSearch, setListSearch] = useState("");
   const [listCat, setListCat]       = useState<"all" | "Forklift" | "Stacker" | "Handlift">("all");
@@ -186,9 +192,23 @@ export default function StockMain() {
     prevSaleIdsRef.current = new Set(sales.map(s => s.id));
   }, [sales]);
 
+  // สร้างรายการ SN ไล่เลข — จำนวนหลักที่พิมพ์ในเลขเริ่ม = จำนวนหลักที่เติม 0 (0001 → 0001,0002,…)
+  const bulkSNs = (): string[] => {
+    const startStr = bulkStart.trim();
+    const base = Number(startStr);
+    const count = Math.floor(Number(bulkCount));
+    if (!startStr || !Number.isFinite(base) || !Number.isFinite(count) || count < 1) return [];
+    const pad = startStr.length;
+    const prefix = bulkPrefix.trim().toUpperCase();
+    return Array.from({ length: Math.min(count, 500) }, (_, i) => `${prefix}${String(base + i).padStart(pad, "0")}`);
+  };
+
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!form.unit_no.trim()) e.unit_no = "กรุณากรอก SN";
+    if (bulkMode) {
+      if (!bulkStart.trim() || !Number.isFinite(Number(bulkStart))) e.bulk = "กรอกเลขเริ่มต้น SN (เช่น 0001)";
+      else if (!bulkCount || Math.floor(Number(bulkCount)) < 1) e.bulk = "กรอกจำนวนรถในล็อต";
+    } else if (!form.unit_no.trim()) e.unit_no = "กรุณากรอก SN";
     if (!form.model.trim()) e.model = "กรุณากรอกรุ่น";
     // สเปกที่เซลล์ใช้ค้นหา — ถ้าไม่กรอก เซลล์จะหารถคันนี้ไม่เจอ
     if (!form.capacity_kg) e.capacity_kg = "เลือกน้ำหนักยก — เซลล์ใช้ค้นหา";
@@ -206,33 +226,35 @@ export default function StockMain() {
     if (form.detail_customer.trim()) cf["รายละเอียด (ลูกค้า)"] = form.detail_customer.trim();
     if (form.invoice_no.trim())      cf["เลขที่ใบกำกับภาษี"] = form.invoice_no.trim();
     if (form.detail_note.trim())     cf["รายละเอียด (หมายเหตุ)"] = form.detail_note.trim();
-    // รหัสสินค้าอัตโนมัติ (FK-0001 / ST-0001 / HL-0001) — ใช้เป็น id หลักคุมทั้งระบบ
-    const productId = generateProductId(form.vehicle_category, forklifts);
-    const newItem: Forklift = {
-      id: productId,
-      unit_no: form.unit_no.toUpperCase(),
-      brand: form.brand,
-      model: form.model,
-      capacity: "",
-      capacity_kg: form.capacity_kg,              // น้ำหนักยก (กก.)
-      height: form.height_m,                      // ยกสูง (เมตร)
-      fork_length: form.fork_length || undefined, // ความยาวงา (มม.)
-      fuel: form.fuel,                            // พลังงาน
-      vehicle_category: form.vehicle_category,    // หมวดรถ (Forklift/Stacker/Handlift)
-      control_type: form.valve || undefined,      // Valve
-      pi_no: form.sale_contract || undefined,     // SALE CONTRACT
-      received_date: form.received_date || undefined,
-      cost_price: form.cost_price ? Number(form.cost_price) : 0,
-      stock_price: 0,
+    // ฟิลด์ที่ใช้ร่วมทุกคัน (ยกเว้น id/unit_no/created_at ที่ต่างกันรายคัน)
+    const shared: Omit<Forklift, "id" | "unit_no" | "created_at"> = {
+      brand: form.brand, model: form.model, capacity: "",
+      capacity_kg: form.capacity_kg, height: form.height_m,
+      fork_length: form.fork_length || undefined, fuel: form.fuel,
+      vehicle_category: form.vehicle_category, control_type: form.valve || undefined,
+      pi_no: form.sale_contract || undefined, received_date: form.received_date || undefined,
+      cost_price: form.cost_price ? Number(form.cost_price) : 0, stock_price: 0,
       status: form.status,
-      created_at: new Date().toISOString(), // เก็บเวลาเต็ม — เรียงหาคันที่เติมล่าสุดได้
       custom_fields: Object.keys(cf).length > 0 ? cf : undefined,
     };
-    addForklift(newItem);
-    setLastProductId(productId);
+
+    if (bulkMode) {
+      // เติมล็อต — SN ไล่เลข + รหัสสินค้าไล่ต่อกันไม่ชน
+      const rows = bulkSNs().map(sn => ({ ...shared, unit_no: sn })) as Omit<Forklift, "id">[];
+      const withIds = assignIdsAndStamp(rows, forklifts);
+      addForkliftsBulk(withIds);
+      setBulkDone(withIds.length);
+      setLastProductId(`${withIds[0]?.id} – ${withIds[withIds.length - 1]?.id}`);
+      setBulkStart(""); setBulkCount(""); setBulkPrefix("");
+    } else {
+      const productId = generateProductId(form.vehicle_category, forklifts);
+      addForklift({ id: productId, unit_no: form.unit_no.toUpperCase(), created_at: new Date().toISOString(), ...shared });
+      setLastProductId(productId);
+      setBulkDone(0);
+    }
     setForm(emptyForm); setCustomValues({}); setErrors({});
     setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 5000);
+    setTimeout(() => setSubmitted(false), 6000);
   };
 
   const handleLogout = () => { void signOutSupabase(); localStorage.removeItem("stock_user"); router.push("/stock/login"); };
@@ -294,6 +316,15 @@ export default function StockMain() {
     }
     setDataBusy(false);
   };
+
+  // เซลล์เจ้าของงานของรถแต่ละคัน (ดีลล่าสุด) — ฝ่ายสต็อกดูได้ว่าเป็นออเดอร์ใคร
+  const saleOwnerByFk = useMemo(() => {
+    const m = new Map<string, string>();
+    [...sales]
+      .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")))
+      .forEach(s => { if (s.sales_staff) m.set(s.forklift_id, s.sales_staff); });
+    return m;
+  }, [sales]);
 
   // นับแยกตามสถานะมาตรฐาน 5 ค่า — ฝ่ายสต็อกเห็นชัดว่าเหลือ/ขาย/ไฟแนนซ์/จอง กี่คัน
   const countStatus = (s: string) => forklifts.filter(f => String(f.status) === s).length;
@@ -455,10 +486,10 @@ export default function StockMain() {
               <div className="mb-5 bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex items-center gap-3">
                 <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0" />
                 <div>
-                  <p className="text-emerald-800 text-sm font-semibold">เพิ่มรถเข้าสต็อกเรียบร้อยแล้ว!</p>
+                  <p className="text-emerald-800 text-sm font-semibold">{bulkDone > 0 ? `เพิ่มรถเข้าสต็อก ${bulkDone} คันเรียบร้อยแล้ว!` : "เพิ่มรถเข้าสต็อกเรียบร้อยแล้ว!"}</p>
                   {lastProductId && (
                     <p className="text-emerald-700 text-xs mt-0.5">
-                      รหัสสินค้า: <span className="font-bold bg-white border border-emerald-200 px-2 py-0.5 rounded-md">{lastProductId}</span> — ใช้รหัสนี้อ้างอิงรถคันนี้ได้ทุกจุดในระบบ
+                      รหัสสินค้า: <span className="font-bold bg-white border border-emerald-200 px-2 py-0.5 rounded-md">{lastProductId}</span> — ใช้รหัสนี้อ้างอิงรถได้ทุกจุดในระบบ
                     </p>
                   )}
                 </div>
@@ -516,6 +547,43 @@ export default function StockMain() {
 
               <Section title="ข้อมูลรถ (ตามไฟล์ STOCK)">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* เติมสต็อกเคสพิเศษ — รถล็อตเดียวกันหลายคัน SN ไล่เลข */}
+                  <div className="sm:col-span-2 rounded-xl border border-violet-200 bg-violet-50/60 p-3.5">
+                    <label className="flex items-center gap-2.5 cursor-pointer">
+                      <input type="checkbox" checked={bulkMode} onChange={e => { setBulkMode(e.target.checked); setErrors({}); }}
+                        className="w-4 h-4 accent-violet-600" />
+                      <span className="text-sm font-bold text-violet-800 flex items-center gap-1.5"><Boxes className="w-4 h-4" />เติมทีละหลายคัน (รถล็อตเดียวกัน SN ไล่เลข)</span>
+                    </label>
+                    {bulkMode && (
+                      <>
+                        <p className="text-xs text-violet-600 mt-2 mb-3">กรอกข้อมูลรถ 1 ครั้ง (PI/รุ่น/สเปกใช้ร่วมกันทั้งล็อต) แล้วตั้งเลข SN — ระบบจะสร้างให้ครบทุกคันเอง</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                          <div>
+                            <label className="text-[11px] font-semibold text-slate-600 block mb-1">SN นำหน้า (ถ้ามี)</label>
+                            <input value={bulkPrefix} onChange={e => setBulkPrefix(e.target.value)} placeholder="เช่น SDA2016-" className={ic("")} />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-semibold text-slate-600 block mb-1">เลขเริ่มต้น *</label>
+                            <input value={bulkStart} onChange={e => setBulkStart(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" placeholder="เช่น 0001" className={ic(errors.bulk)} />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-semibold text-slate-600 block mb-1">จำนวนรถ *</label>
+                            <input value={bulkCount} onChange={e => setBulkCount(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" placeholder="เช่น 60" className={ic(errors.bulk)} />
+                          </div>
+                        </div>
+                        {errors.bulk && <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.bulk}</p>}
+                        {(() => {
+                          const sns = bulkSNs();
+                          if (sns.length === 0) return null;
+                          return (
+                            <p className="text-xs text-violet-700 mt-2 bg-white border border-violet-200 rounded-lg px-3 py-2">
+                              จะสร้าง <b>{sns.length}</b> คัน · SN: <b>{sns[0]}</b> ถึง <b>{sns[sns.length - 1]}</b>
+                            </p>
+                          );
+                        })()}
+                      </>
+                    )}
+                  </div>
                   <FF label="SALE CONTRACT" error="">
                     <input value={form.sale_contract} onChange={e => setForm({ ...form, sale_contract: e.target.value })} placeholder="เช่น PI001 / HCTH-BE..." className={ic("")} />
                   </FF>
@@ -528,9 +596,11 @@ export default function StockMain() {
                   <FF label="Valve (คอนโทรล)" error="">
                     <input value={form.valve} onChange={e => setForm({ ...form, valve: e.target.value })} placeholder="เช่น 2 / 3" className={ic("")} />
                   </FF>
-                  <FF label="SN (หมายเลขรถ) *" error={errors.unit_no}>
-                    <input value={form.unit_no} onChange={e => setForm({ ...form, unit_no: e.target.value })} placeholder="เช่น 010253N9305" className={ic(errors.unit_no)} />
-                  </FF>
+                  {!bulkMode && (
+                    <FF label="SN (หมายเลขรถ) *" error={errors.unit_no}>
+                      <input value={form.unit_no} onChange={e => setForm({ ...form, unit_no: e.target.value })} placeholder="เช่น 010253N9305" className={ic(errors.unit_no)} />
+                    </FF>
+                  )}
                   <FF label="PRICE ทุน (บาท)" error="">
                     <input type="number" value={form.cost_price} onChange={e => setForm({ ...form, cost_price: e.target.value })} placeholder="เช่น 220000" className={ic("")} />
                   </FF>
@@ -791,6 +861,9 @@ export default function StockMain() {
                       {idx === 0 && <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded-full flex-shrink-0">ล่าสุด</span>}
                     </div>
                     <p className="text-xs text-slate-500">{item.capacity}{item.capacity_kg ? ` / ${item.capacity_kg} kg` : ""} · {item.fuel}{item.location ? ` · ${item.location}` : ""}</p>
+                    {saleOwnerByFk.get(item.id) && item.status !== "พร้อมขาย" && (
+                      <p className="text-[11px] text-violet-700 mt-0.5 flex items-center gap-1 font-semibold"><User className="w-3 h-3 flex-shrink-0" />เซลล์: {saleOwnerByFk.get(item.id)}</p>
+                    )}
                     {fmtAdded(item.created_at) && (
                       <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1"><Clock className="w-3 h-3 flex-shrink-0" />เติมเมื่อ {fmtAdded(item.created_at)}</p>
                     )}
@@ -869,6 +942,7 @@ export default function StockMain() {
           ["พลังงาน", it.fuel],
         ];
         const info: [string, string][] = [
+          ["เซลล์เจ้าของงาน", it.status !== "พร้อมขาย" ? (saleOwnerByFk.get(it.id) ?? "") : ""],
           ["SALE CONTRACT / PI", it.pi_no ?? ""],
           ["วันรับรถ", it.received_date ?? ""],
           ["ราคาทุน", it.cost_price ? `฿${it.cost_price.toLocaleString()}` : ""],
