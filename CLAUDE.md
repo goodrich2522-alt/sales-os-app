@@ -51,14 +51,14 @@ lib/
   supabaseClient.ts        สร้าง client (null ถ้าไม่มี env)
   types.ts                 โดเมนไทป์ + INSPECTION_SLOTS (รูปบังคับ 6 ช่อง)
   auth.ts                  ระบบสิทธิ์: knownUsers (approved/pending/blocked) + adminEmails
-  productId.ts             รหัสสินค้าอัตโนมัติ FK-0001/ST-0001/HL-0001 (= forklifts.id)
+  productId.ts             สร้างรหัสรถจาก SN (= forklifts.id) — ดู SN-RULES.md
   mockData.ts              default dropdown + mock fallback
 ```
 
 ### ระบบที่ต้องรู้ (เพิ่ม 13 ก.ค. 2026)
-- **รหัสสินค้าอัตโนมัติ** — เพิ่มรถใหม่ระบบออกรหัส `FK-0001`/`ST-0001`/`HL-0001` เป็น `forklifts.id` โดยตรง · ค้นหาได้ทุกหน้า · ห้ามกลับไปใช้ `Date.now()` เป็น id รถ
+- **SN คือรหัสรถ** — `forklifts.id` = SN ตรงๆ (เลิกใช้รหัสอัตโนมัติ FK-0001 ตั้งแต่ 27 ก.ค. 2569) · กติกาเต็มที่ [SN-RULES.md](SN-RULES.md) · ข้อยกเว้น: SN ซ้ำจากผู้ผลิต → `SN#1`/`SN#2` · รถสั่งผลิตยังไม่มี SN → `<PI>#<ลำดับ>`
 - **รูปตรวจรถ** — **ผู้รับรถ**: บังคับ 6 ช่อง (name plate, เอกสาร PI, รถ 4 มุม) เก็บใน `inspections.image_slots` (jsonb) · **ผู้ส่งมอบรถ**: รูปอิสระ (ไม่จำกัดมุม) อย่างน้อย 1 ไม่เกิน 12 รูป + กรอก `delivery_company` (บังคับ) และ `location_link` (ไม่บังคับ) — migration `supabase-migration-2026-07-14.sql` · ทั้งคู่รวมรูปไว้ที่ `images` เพื่อ backward compat · หน้าเซลล์โชว์ป้ายกำกับช่อง (เฉพาะรูปผู้รับ)
-- **รหัสสินค้า (ID) โชว์ทุกคัน** — การ์ด/แถวรถในหน้าสต็อกและเซลล์โชว์ `#{forklift.id}` เสมอ (ของเก่าเป็น `FK-<unit_no>`, ของใหม่เป็น `FK-0001`) เพื่อแยกรถถูกตัว
+- **รหัสรถโชว์ทุกคัน** — การ์ด/แถวรถโชว์ `#{forklift.id}` (= SN) · ป้ายสีเหลือง = รถสั่งผลิตที่ยังไม่มี SN
 - **ผู้ขนส่งจำโปรไฟล์** — หน้าผู้ขนส่งเก็บ `localStorage.transporter_profile` (ชื่อ+เบอร์) ข้ามการล็อกเอาต์ → หน้า login เติมให้อัตโนมัติ + ปุ่ม "เข้าใช้งานต่อ" แตะเดียว (session อยู่ที่ `transporter_name`/`transporter_phone` ถูกลบตอนออกจากระบบ แต่ profile ไม่ถูกลบ)
 - **ระบบสิทธิ์ผู้ใช้ (UI-level)** — ผู้ใช้ใหม่ = "รออนุมัติ" เข้าไม่ได้จนแอดมินอนุมัติที่ `/admin/users` · role ต้องตรงหน้า (sales เข้าหน้า stock ไม่ได้) · แอดมินกำหนดใน `adminEmails` (ค่าเริ่มต้น goodrichforklift@gmail.com) · ⚠️ ยังไม่ใช่ security จริงจนกว่าจะทำ RLS (DEV-PLAN เฟส 1)
 

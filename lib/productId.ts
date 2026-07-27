@@ -1,34 +1,50 @@
-// lib/productId.ts — รหัสสินค้าอัตโนมัติ (Product ID)
-// รูปแบบ: FK-0001 / ST-0001 / HL-0001 — แยกรันนัมเบอร์ตามไลน์สินค้า
-// รหัสนี้ = id หลักของรถในระบบ (forklifts.id) ใช้อ้างอิงได้ทุกจุด:
-// ดีลขาย (forklift_id), ค้นหาหน้าเซลล์, รับรถหน้าผู้ขนส่ง
+// lib/productId.ts — รหัสรถในระบบ
+// ⚠️ เลิกใช้รหัสสินค้าอัตโนมัติ (FK-0001/ST-0001/HL-0001) ตั้งแต่ 27 ก.ค. 2569
+//    ตอนนี้ **SN คือรหัสหลัก** (forklifts.id = SN) — กติกาเต็มอยู่ที่ SN-RULES.md
+//    เหตุผล: ทีมจำ/ค้นด้วยเลขที่ติดอยู่บนตัวรถได้เลย ไม่ต้องเทียบสองระบบ
 import { Forklift } from "./types";
 
-const CATEGORY_PREFIX: Record<string, string> = {
-  Forklift: "FK",
-  Stacker:  "ST",
-  Handlift: "HL",
-};
+/** รหัสพิเศษที่ไม่ใช่ SN ตรงๆ — ต่อท้ายด้วย #N (ดู SN-RULES.md ข้อ 5) */
+const SPECIAL = /#\d+$/;
 
-/** รหัสนี้เป็นรหัสสินค้าอัตโนมัติหรือไม่ (ไว้เลือกโชว์เฉพาะรหัสรูปแบบใหม่) */
-export function isProductId(id: unknown): boolean {
-  return /^(FK|ST|HL)-\d{4,}$/.test(String(id ?? ""));
+/** รหัสนี้เป็นรหัสชั่วคราวของรถสั่งผลิตที่ยังไม่มี SN หรือไม่ (เช่น PI058KD#1) */
+export function isPendingId(id: unknown): boolean {
+  const s = String(id ?? "");
+  return SPECIAL.test(s) && /^PI/i.test(s);
+}
+
+/** รหัสนี้เป็นคันที่ SN ซ้ำกับคันอื่นหรือไม่ (เช่น SDA1530-0004#2) */
+export function isDuplicateSnId(id: unknown): boolean {
+  const s = String(id ?? "");
+  return SPECIAL.test(s) && !/^PI/i.test(s);
+}
+
+/** ป้ายที่แสดงบนการ์ด — ใช้ SN เป็นหลัก ถ้ายังไม่มีให้โชว์รหัสชั่วคราว */
+export function displayCode(f: Pick<Forklift, "id" | "SN">): string {
+  return String(f.SN ?? "").trim() || String(f.id ?? "");
 }
 
 /**
- * สร้างรหัสสินค้าตัวถัดไปจากรายการรถที่มีอยู่
- * หาเลขสูงสุดของ prefix เดียวกันแล้ว +1 (รถ id แบบเก่า เช่น timestamp ไม่ถูกนับ)
+ * สร้างรหัสรถจาก SN — ใช้ตอนเพิ่มรถใหม่
+ * SN ซ้ำกับที่มีอยู่ → เติม #2, #3 ... ตามลำดับ (กรณีผู้ผลิตใส่ SN ซ้ำ)
+ * ยังไม่มี SN → ใช้ `<เลข PI>#<ลำดับ>` เป็นรหัสชั่วคราวจนกว่ารถจะมาถึง
  */
-export function generateProductId(
-  category: string,
-  forklifts: Pick<Forklift, "id">[],
+export function buildForkliftId(
+  sn: string,
+  piNo: string,
+  existing: Pick<Forklift, "id">[],
 ): string {
-  const prefix = CATEGORY_PREFIX[category] ?? "FK";
-  const re = new RegExp(`^${prefix}-(\\d{4,})$`);
-  let max = 0;
-  forklifts.forEach(f => {
-    const m = re.exec(String(f.id ?? ""));
-    if (m) max = Math.max(max, Number(m[1]));
-  });
-  return `${prefix}-${String(max + 1).padStart(4, "0")}`;
+  const taken = new Set(existing.map(f => String(f.id ?? "")));
+  const nextFree = (base: string) => {
+    if (!taken.has(base)) return base;
+    for (let i = 2; ; i++) if (!taken.has(`${base}#${i}`)) return `${base}#${i}`;
+  };
+
+  const clean = String(sn ?? "").trim().toUpperCase();
+  if (clean) {
+    // คันแรกของ SN นั้นใช้ SN ตรงๆ · คันถัดไปเติม #2, #3
+    return nextFree(clean);
+  }
+  const pi = String(piNo ?? "").trim().toUpperCase() || "NOPI";
+  for (let i = 1; ; i++) if (!taken.has(`${pi}#${i}`)) return `${pi}#${i}`;
 }

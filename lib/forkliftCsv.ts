@@ -2,7 +2,7 @@
 // รองรับหัวคอลัมน์ภาษาไทย · สร้างรหัสสินค้าอัตโนมัติเหมือนกรอกมือ
 
 import type { Forklift } from "./types";
-import { generateProductId } from "./productId";
+import { buildForkliftId } from "./productId";
 
 // ── แม่แบบคอลัมน์ (ต้องตรงกับหัวใน CSV — จับคู่แบบไม่สนตัวพิมพ์/ช่องว่าง) ──
 export const CSV_COLUMNS = [
@@ -102,13 +102,13 @@ export function parseForkliftCsv(text: string): CsvParseResult {
   return { forklifts, errors, rowCount: forklifts.length };
 }
 
-// ออกรหัสสินค้าให้ครบทุกคัน (ต่อเลขไม่ชนกันเองในไฟล์เดียว) + เติมเวลา
+// ออกรหัสรถให้ครบทุกคัน — ใช้ SN เป็นรหัส (ดู SN-RULES.md) + เติมเวลา
 export function assignIdsAndStamp(rows: Omit<Forklift, "id">[], existing: Pick<Forklift, "id">[]): Forklift[] {
   const pool = [...existing];
   const now = new Date().toISOString();
   return rows.map(r => {
-    const id = generateProductId(r.vehicle_category ?? "Forklift", pool);
-    pool.push({ id }); // ให้คันถัดไปนับต่อ
+    const id = buildForkliftId(r.SN ?? "", r.pi_no ?? "", pool);
+    pool.push({ id }); // ให้คันถัดไปไม่ชนกันเองในไฟล์เดียว
     return { ...r, id, created_at: now };
   });
 }

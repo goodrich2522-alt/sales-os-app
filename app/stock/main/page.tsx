@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { Forklift } from "@/lib/types";
 import { useApp, FieldConfig } from "@/lib/AppContext";
-import { generateProductId, isProductId } from "@/lib/productId";
+import { buildForkliftId, isPendingId } from "@/lib/productId";
 import { parseForkliftCsv, assignIdsAndStamp, buildCsvTemplate } from "@/lib/forkliftCsv";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { apiEnabled } from "@/lib/api";
@@ -247,8 +247,9 @@ export default function StockMain() {
       setLastProductId(`${withIds[0]?.id} – ${withIds[withIds.length - 1]?.id}`);
       setBulkStart(""); setBulkCount(""); setBulkPrefix("");
     } else {
-      const productId = generateProductId(form.vehicle_category, forklifts);
-      addForklift({ id: productId, SN: form.SN.toUpperCase(), created_at: new Date().toISOString(), ...shared });
+      const sn = form.SN.toUpperCase();
+      const productId = buildForkliftId(sn, form.sale_contract, forklifts);
+      addForklift({ id: productId, SN: sn, created_at: new Date().toISOString(), ...shared });
       setLastProductId(productId);
       setBulkDone(0);
     }
@@ -476,9 +477,9 @@ export default function StockMain() {
           <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
             <div className="bg-emerald-100 rounded-lg p-1.5"><Plus className="w-4 h-4 text-emerald-600" /></div>
             <h2 className="text-base font-bold text-slate-800">เพิ่มรถใหม่เข้าสต็อก</h2>
-            {/* รหัสสินค้าที่ระบบจะออกให้อัตโนมัติ — เปลี่ยนตามไลน์สินค้าที่เลือก */}
+            {/* รหัสรถ = SN ที่กรอก (ดู SN-RULES.md) — โชว์ให้เห็นก่อนบันทึกว่าจะได้รหัสอะไร */}
             <span className="ml-auto text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
-              รหัสถัดไป: {generateProductId(form.vehicle_category, forklifts)}
+              รหัสรถ: {form.SN.trim() ? buildForkliftId(form.SN.toUpperCase(), form.sale_contract, forklifts) : "— กรอก SN ก่อน"}
             </span>
           </div>
           <div className="p-6">
@@ -856,7 +857,7 @@ export default function StockMain() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       {/* รหัสสินค้า (ID) — โชว์ทุกคันเพื่อแยกรถถูกตัว */}
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${isProductId(item.id) ? "text-indigo-700 bg-indigo-50 border border-indigo-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{item.id}</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{item.id}</span>
                       <p className="font-semibold text-slate-800 text-sm">{item.SN ? `${item.SN} — ` : ""}{item.brand} {item.model}</p>
                       {idx === 0 && <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded-full flex-shrink-0">ล่าสุด</span>}
                     </div>
@@ -975,7 +976,7 @@ export default function StockMain() {
               <div className="px-6 py-4 border-b border-slate-100 flex items-start justify-between gap-3 flex-shrink-0">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${isProductId(it.id) ? "text-indigo-700 bg-indigo-50 border border-indigo-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{it.id}</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${isPendingId(it.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{it.id}</span>
                     <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${STATUS_BADGE[it.status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>{it.status}</span>
                   </div>
                   <h3 className="text-lg font-bold text-slate-800 truncate">{it.brand} {it.model}</h3>

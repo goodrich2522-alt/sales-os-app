@@ -13,7 +13,7 @@ import { PROVINCES, CONTACT_SOURCES } from "@/lib/mockData";
 import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, ContactSource, SaleType, InspectionRecord, SLOT_LABELS } from "@/lib/types";
 import { useApp } from "@/lib/AppContext";
 import { driveImg } from "@/lib/img";
-import { isProductId } from "@/lib/productId";
+import { isPendingId } from "@/lib/productId";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { apiEnabled } from "@/lib/api";
 import AiAssistant from "@/components/AiAssistant";
@@ -351,7 +351,7 @@ export default function SalesMain() {
     // ข้อมูลรถจากสต็อก — เติมให้อัตโนมัติ ไม่ต้องให้เซลล์กรอกเอง
     if (selected) {
       const auto: Record<string, string> = {
-        "รหัสสินค้า": isProductId(selected.id) ? String(selected.id) : "",
+        "รหัสสินค้า": selected.id !== selected.SN ? String(selected.id) : "",
         PI: selected.pi_no ?? "", MODEL: selected.model ?? "",
         Valve: selected.control_type ?? "", SN: selected.SN ?? "",
         "วันรับรถ": selected.received_date ?? "",
@@ -771,7 +771,7 @@ export default function SalesMain() {
                   <div className="flex items-start justify-between">
                     <div>
                       {/* รหัสสินค้า (ID) — โชว์ทุกคันเพื่อแยกรถถูกตัว */}
-                      <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-md mb-1 ${isProductId(item.id) ? "text-indigo-700 bg-indigo-50 border border-indigo-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{item.id}</span>
+                      <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-md mb-1 ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{item.id}</span>
                       <p className="font-bold text-slate-800 text-base">{item.brand}</p>
                       <p className="text-sm text-slate-600 font-medium">{item.model}</p>
                       <p className="text-xs text-slate-400 mt-0.5">{item.SN}</p>
@@ -836,7 +836,7 @@ export default function SalesMain() {
                     <p className="text-xs font-semibold text-slate-500 mb-2">ข้อมูลรถ (จากสต็อก)</p>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                       {[
-                        { label: "รหัสสินค้า", value: isProductId(selected.id) ? String(selected.id) : "" },
+                        { label: "รหัสสินค้า", value: selected.id !== selected.SN ? String(selected.id) : "" },
                         { label: "PI", value: selected.pi_no },
                         { label: "MODEL", value: selected.model },
                         { label: "Valve", value: selected.control_type },
@@ -1304,7 +1304,7 @@ export default function SalesMain() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           {sale.forklift_id && (
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isProductId(sale.forklift_id) ? "text-indigo-700 bg-indigo-50 border border-indigo-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{sale.forklift_id}</span>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isPendingId(sale.forklift_id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{sale.forklift_id}</span>
                           )}
                           <p className="font-bold text-slate-800 text-sm">{sale.forklift_unit_no}</p>
                           <p className="text-slate-600 text-sm">{sale.forklift_brand} {sale.forklift_model}</p>
