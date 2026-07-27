@@ -813,10 +813,12 @@ export default function SalesMain() {
                     <p className="text-xs font-semibold text-slate-500 mb-2">ข้อมูลรถ (จากสต็อก)</p>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                       {[
-                        { label: "รหัสสินค้า", value: selected.id !== selected.SN ? String(selected.id) : "" },
                         { label: "PI", value: selected.pi_no },
                         { label: "MODEL", value: selected.model },
-                        { label: "Valve", value: selected.control_type },
+                        { label: "พิกัดยก", value: selected.capacity || (selected.capacity_kg ? `${selected.capacity_kg} kg` : "") },
+                        { label: "พลังงาน", value: selected.fuel },
+                        { label: "เสา (MAST)", value: selected.custom_fields?.["MAST"] },
+                        { label: "Valve", value: selected.custom_fields?.["Valve"] ?? selected.control_type },
                         { label: "SN", value: selected.SN },
                         { label: "วันรับรถ", value: selected.received_date },
                       ].map(({ label, value }) => (
@@ -829,7 +831,7 @@ export default function SalesMain() {
                     <div className="mt-2.5 pt-2.5 border-t border-slate-200">
                       <span className="text-[11px] text-slate-400 block">รหัสสเปก</span>
                       <span className="text-slate-800 font-medium break-words text-sm">
-                        {[selected.model, selected.height, selected.control_type, selected.fork_length, selected.attachments, selected.capacity_kg, selected.fuel].map(v => (v == null ? "" : String(v)).trim()).filter(Boolean).join(" / ") || "—"}
+                        {[selected.model, selected.custom_fields?.["MAST"], selected.height, selected.custom_fields?.["Valve"] ?? selected.control_type, selected.custom_fields?.["ประเภทสินค้า"], selected.capacity, selected.fuel].map(v => (v == null ? "" : String(v)).trim()).filter(Boolean).join(" / ") || "—"}
                       </span>
                     </div>
                   </div>

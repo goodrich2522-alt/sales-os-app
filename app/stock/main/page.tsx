@@ -943,7 +943,13 @@ export default function StockMain() {
                       <p className="font-semibold text-slate-800 text-sm">{item.SN ? `${item.SN} — ` : ""}{item.brand} {item.model}</p>
                       {idx === 0 && <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded-full flex-shrink-0">ล่าสุด</span>}
                     </div>
-                    <p className="text-xs text-slate-500">{item.capacity}{item.capacity_kg ? ` / ${item.capacity_kg} kg` : ""} · {item.fuel}{item.location ? ` · ${item.location}` : ""}</p>
+                    <p className="text-xs text-slate-500">{[
+                      item.capacity || (item.capacity_kg ? `${item.capacity_kg} kg` : ""),
+                      item.custom_fields?.["ประเภทสินค้า"],
+                      item.fuel,
+                      item.height ? `สูง ${item.height}` : "",
+                      item.location,
+                    ].filter(Boolean).join(" · ") || "—"}</p>
                     {saleOwnerByFk.get(item.id) && item.status !== "พร้อมขาย" && (
                       <p className="text-[11px] text-violet-700 mt-0.5 flex items-center gap-1 font-semibold"><User className="w-3 h-3 flex-shrink-0" />เซลล์: {saleOwnerByFk.get(item.id)}</p>
                     )}
@@ -1012,25 +1018,34 @@ export default function StockMain() {
         const it = detailItem;
         const recs = inspections.filter(r => r.unit_no && it.SN && String(r.unit_no).toUpperCase() === String(it.SN).toUpperCase());
         const photos = recs.flatMap(r => r.images || []);
+        const cf = it.custom_fields ?? {};
         const spec: [string, string][] = [
-          ["หมวดรถ", it.vehicle_category ?? "Forklift"],
+          ["หมวดรถ", it.vehicle_category ?? ""],
           ["ยี่ห้อ", it.brand],
           ["รุ่น", it.model],
+          ["ประเภทสินค้า", cf["ประเภทสินค้า"] ?? ""],
+          ["พิกัดยก", it.capacity ?? ""],
           ["น้ำหนักยก", it.capacity_kg ? fmtCap(it.capacity_kg) : ""],
-          ["ยกสูง", it.height ? `${it.height} เมตร` : ""],
+          ["ยกสูง", it.height ?? ""],
+          ["เสา (MAST)", cf["MAST"] ?? ""],
+          ["Valve / คอนโทรล", cf["Valve"] ?? it.control_type ?? ""],
+          ["ขนาดงา", cf["ขนาดงา"] ?? ""],
           ["ความยาวงา", it.fork_length ? `${it.fork_length} มม.` : ""],
-          ["Valve / คอนโทรล", it.control_type ?? ""],
           ["พลังงาน", it.fuel],
         ];
         const info: [string, string][] = [
-          ["เซลล์เจ้าของงาน", it.status !== "พร้อมขาย" ? (saleOwnerByFk.get(it.id) ?? "") : ""],
+          ["เซลล์เจ้าของงาน", it.status !== "พร้อมขาย" ? (saleOwnerByFk.get(it.id) ?? cf["เซลล์ผู้ดูแล"] ?? "") : ""],
+          ["ลูกค้า", cf["รายละเอียด (ลูกค้า)"] ?? ""],
           ["SALE CONTRACT / PI", it.pi_no ?? ""],
+          ["เลขที่ใบกำกับภาษี", cf["เลขที่ใบกำกับภาษี"] ?? ""],
           ["วันรับรถ", it.received_date ?? ""],
           ["ราคาทุน", it.cost_price ? `฿${it.cost_price.toLocaleString()}` : ""],
           ["โลเคชั่น", it.location ?? ""],
           ["เติมเข้าสต็อกเมื่อ", fmtAdded(it.created_at)],
         ];
-        const customs = Object.entries(it.custom_fields ?? {}).filter(([, v]) => String(v ?? "").trim());
+        // custom_fields ที่โชว์ในสเปก/ข้อมูลแล้ว + คีย์ internal → ไม่ต้องโชว์ซ้ำใน "ข้อมูลเพิ่มเติม"
+        const SHOWN_CF = new Set(["ประเภทสินค้า","MAST","Valve","ขนาดงา","เซลล์ผู้ดูแล","รายละเอียด (ลูกค้า)","เลขที่ใบกำกับภาษี","ชีตต้นทาง"]);
+        const customs = Object.entries(cf).filter(([k, v]) => String(v ?? "").trim() && !SHOWN_CF.has(k));
         const Section = ({ title, rows }: { title: string; rows: [string, string][] }) => {
           const shown = rows.filter(([, v]) => String(v ?? "").trim());
           if (shown.length === 0) return null;
