@@ -11,9 +11,10 @@ import {
 import { Forklift } from "@/lib/types";
 import { useApp, FieldConfig } from "@/lib/AppContext";
 import { buildForkliftId, isPendingId } from "@/lib/productId";
-import { STATUS_BADGE } from "@/lib/constants";
 import { thaiMonthShort } from "@/lib/format";
 import { Lightbox } from "@/components/ui/Lightbox";
+import { Chip } from "@/components/ui/Chip";
+import { StatusBadge } from "@/components/ui/Badge";
 import { parseForkliftCsv, assignIdsAndStamp, buildCsvTemplate } from "@/lib/forkliftCsv";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { apiEnabled } from "@/lib/api";
@@ -115,6 +116,9 @@ export default function StockMain() {
   const [listSearch, setListSearch] = useState("");
   const [listCat, setListCat]       = useState<"all" | "Forklift" | "Stacker" | "Handlift">("all");
   const [listStatus, setListStatus] = useState("all");
+  const [listBrand, setListBrand]   = useState("all");                                       // กรองยี่ห้อ
+  const [listSort, setListSort]     = useState<"recent" | "model" | "remain" | "sn">("recent"); // การเรียง
+  const [listView, setListView]     = useState<"list" | "byModel">("list");                    // มุมมอง: รายคัน / รวมตามรุ่น
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showSettings, setShowSettings]   = useState(false);
   const [detailItem, setDetailItem]       = useState<Forklift | null>(null); // รถที่กดดูรายละเอียด
@@ -327,16 +331,51 @@ export default function StockMain() {
   const sold       = countStatus("ปิดการขายแล้ว");                                    // ขายไปแล้ว
   const waiting    = countStatus("รอรับ");                                            // รอรับเข้าคลัง
 
-  // รายการสต็อกที่กรองแล้ว (สำหรับ modal) — ค้นหา + หมวด + สถานะ
+  // รายการสต็อกที่กรองแล้ว (สำหรับ modal) — ค้นหา + หมวด + ยี่ห้อ + สถานะ + เรียงลำดับ
   const hs = (v: unknown) => (v == null ? "" : String(v)).toLowerCase();
-  const listFiltered = forklifts.filter(f => {
+  const isAvailable = (s: unknown) => String(s ?? "") === "พร้อมขาย"; // "ยังเหลือในสต็อก"
+  const listFiltered = useMemo(() => {
     const q = listSearch.trim().toLowerCase();
-    const okQ = !q || hs(f.id).includes(q) || hs(f.SN).includes(q) || hs(f.brand).includes(q) || hs(f.model).includes(q) || hs(f.pi_no).includes(q);
-    const okCat = listCat === "all" || (f.vehicle_category ?? "Forklift") === listCat;
-    const okStatus = listStatus === "all" || f.status === listStatus;
-    return okQ && okCat && okStatus;
-  }).sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || ""))); // เติมล่าสุดอยู่บนสุด
+    const rows = forklifts.filter(f => {
+      const okQ = !q || hs(f.id).includes(q) || hs(f.SN).includes(q) || hs(f.brand).includes(q) || hs(f.model).includes(q) || hs(f.pi_no).includes(q);
+      const okCat = listCat === "all" || (f.vehicle_category ?? "Forklift") === listCat;
+      const okBrand = listBrand === "all" || (f.brand || "(ไม่ระบุ)") === listBrand;
+      const okStatus = listStatus === "all" || f.status === listStatus;
+      return okQ && okCat && okBrand && okStatus;
+    });
+    const recent = (a: Forklift, b: Forklift) => String(b.created_at || "").localeCompare(String(a.created_at || ""));
+    if (listSort === "model") rows.sort((a, b) => String(a.model || "").localeCompare(String(b.model || "")) || recent(a, b));
+    else if (listSort === "sn") rows.sort((a, b) => String(a.SN || "").localeCompare(String(b.SN || "")) || recent(a, b));
+    else rows.sort(recent); // recent / remain (remain ใช้ในมุมมอง byModel)
+    return rows;
+  }, [forklifts, listSearch, listCat, listBrand, listStatus, listSort]);
+
   const catCount = (c: string) => c === "all" ? forklifts.length : forklifts.filter(f => (f.vehicle_category ?? "Forklift") === c).length;
+  // ยี่ห้อที่มีจริงในสต็อก (เรียงตามจำนวนมาก→น้อย) — ทำเป็นแท็กกรอง
+  const brandList = useMemo(() => {
+    const m = new Map<string, number>();
+    forklifts.forEach(f => { const b = f.brand || "(ไม่ระบุ)"; m.set(b, (m.get(b) ?? 0) + 1); });
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [forklifts]);
+  const brandCount = (b: string) => b === "all" ? forklifts.length : (brandList.find(([n]) => n === b)?.[1] ?? 0);
+
+  // มุมมองรวมตามรุ่น — เห็นทันทีว่ารุ่นไหนเหลือ/หมด (จากรายการที่กรองแล้ว)
+  const byModel = useMemo(() => {
+    const m = new Map<string, { model: string; brand: string; total: number; available: number; sold: number }>();
+    listFiltered.forEach(f => {
+      const key = `${f.brand}|${f.model}`;
+      const g = m.get(key) ?? { model: f.model || "(ไม่ระบุรุ่น)", brand: f.brand || "", total: 0, available: 0, sold: 0 };
+      g.total++;
+      if (isAvailable(f.status)) g.available++;
+      if (String(f.status) === "ปิดการขายแล้ว") g.sold++;
+      m.set(key, g);
+    });
+    const rows = [...m.values()];
+    if (listSort === "remain") rows.sort((a, b) => b.available - a.available); // เหลือเยอะขึ้นก่อน
+    else if (listSort === "model") rows.sort((a, b) => a.model.localeCompare(b.model));
+    else rows.sort((a, b) => b.total - a.total);
+    return rows;
+  }, [listFiltered, listSort]);
 
   // Settings — standard dropdown handlers
   const saveOption = () => {
@@ -804,7 +843,11 @@ export default function StockMain() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-base font-bold text-slate-800">รายการสต็อก</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">แสดง {listFiltered.length} จาก {forklifts.length} คัน</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {listView === "byModel"
+                      ? `${byModel.length} รุ่น · ${listFiltered.length} คัน`
+                      : `แสดง ${listFiltered.length} จาก ${forklifts.length} คัน`}
+                  </p>
                 </div>
                 <button onClick={() => setShowList(false)}
                   className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all">
@@ -813,34 +856,81 @@ export default function StockMain() {
               </div>
               {/* ค้นหา */}
               <input value={listSearch} onChange={e => setListSearch(e.target.value)}
-                placeholder="ค้นหา รหัสสินค้า / SN / ยี่ห้อ / รุ่น / PI..."
+                placeholder="ค้นหา SN / ยี่ห้อ / รุ่น / PI..."
                 className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white text-slate-800 placeholder:text-slate-400" />
-              {/* แท็บหมวด + กรองสถานะ */}
-              <div className="flex items-center gap-2 flex-wrap">
+              {/* แท็กกรอง: ชนิดสินค้า */}
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {([
-                  { key: "all", label: "ทั้งหมด", icon: "📋" },
-                  { key: "Forklift", label: "Forklift", icon: "🚜" },
-                  { key: "Stacker", label: "Stacker", icon: "📦" },
-                  { key: "Handlift", label: "Handlift", icon: "🔧" },
-                ] as { key: "all" | "Forklift" | "Stacker" | "Handlift"; label: string; icon: string }[]).map(({ key, label, icon }) => (
-                  <button key={key} onClick={() => setListCat(key)}
-                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${listCat === key ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:border-emerald-300"}`}>
-                    <span>{icon}</span><span>{label}</span>
-                    <span className={`px-1.5 rounded-full ${listCat === key ? "bg-white/30" : "bg-slate-100 text-slate-500"}`}>{catCount(key)}</span>
-                  </button>
+                  { key: "all", label: "ทุกชนิด" },
+                  { key: "Forklift", label: "🚜 Forklift" },
+                  { key: "Stacker", label: "📦 Stacker" },
+                  { key: "Handlift", label: "🔧 Handlift" },
+                ] as { key: "all" | "Forklift" | "Stacker" | "Handlift"; label: string }[]).map(({ key, label }) => (
+                  <Chip key={key} label={label} count={catCount(key)} active={listCat === key} onClick={() => setListCat(key)} />
                 ))}
+              </div>
+              {/* แท็กกรอง: ยี่ห้อ */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <Chip label="ทุกยี่ห้อ" count={brandCount("all")} active={listBrand === "all"} onClick={() => setListBrand("all")} />
+                {brandList.map(([b, n]) => (
+                  <Chip key={b} label={b} count={n} active={listBrand === b} onClick={() => setListBrand(b)} />
+                ))}
+              </div>
+              {/* สถานะ + เรียง + มุมมอง */}
+              <div className="flex items-center gap-2 flex-wrap">
                 <select value={listStatus} onChange={e => setListStatus(e.target.value)}
-                  className="ml-auto border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                  className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400">
                   <option value="all">ทุกสถานะ</option>
                   {fieldConfig.stockStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
+                <select value={listSort} onChange={e => setListSort(e.target.value as typeof listSort)}
+                  className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                  <option value="recent">เรียง: เติมล่าสุด</option>
+                  <option value="model">เรียง: ตามรุ่น</option>
+                  <option value="sn">เรียง: ตาม SN</option>
+                  {listView === "byModel" && <option value="remain">เรียง: เหลือเยอะสุด</option>}
+                </select>
+                {/* สลับมุมมอง รายคัน ↔ รวมตามรุ่น */}
+                <div className="ml-auto flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold">
+                  <button onClick={() => setListView("list")}
+                    className={`px-2.5 py-1.5 transition ${listView === "list" ? "bg-emerald-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>รายคัน</button>
+                  <button onClick={() => setListView("byModel")}
+                    className={`px-2.5 py-1.5 transition ${listView === "byModel" ? "bg-emerald-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>ตามรุ่น</button>
+                </div>
               </div>
             </div>
             <div className="overflow-y-auto flex-1 min-h-0 p-4 flex flex-col gap-2">
               {listFiltered.length === 0 && (
                 <div className="text-center py-12 text-slate-400 text-sm">ไม่พบรถตามเงื่อนไข</div>
               )}
-              {listFiltered.map((item, idx) => (
+
+              {/* ── มุมมองรวมตามรุ่น: เห็นทันทีว่ารุ่นไหนเหลือ/หมด ── */}
+              {listView === "byModel" && byModel.map(g => {
+                const remainTone = g.available === 0
+                  ? "bg-slate-100 text-slate-500 border-slate-200"          // หมด
+                  : g.available <= 2
+                    ? "bg-red-50 text-red-700 border-red-200"               // ใกล้หมด
+                    : "bg-emerald-50 text-emerald-700 border-emerald-200";  // เหลือเยอะ
+                return (
+                  <button key={`${g.brand}|${g.model}`}
+                    onClick={() => { setListView("list"); setListSearch(g.model); }}
+                    className="flex items-center gap-3 border border-slate-100 bg-slate-50 hover:bg-slate-100 rounded-xl p-3.5 text-left transition-colors">
+                    <div className="bg-white border border-slate-200 rounded-xl p-2 flex-shrink-0 shadow-sm">
+                      <Package className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-800 text-sm truncate">{g.model}</p>
+                      <p className="text-xs text-slate-500">{g.brand || "ไม่ระบุยี่ห้อ"} · ทั้งหมด {g.total} คัน · ขายแล้ว {g.sold}</p>
+                    </div>
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full border flex-shrink-0 ${remainTone}`}>
+                      {g.available === 0 ? "หมด" : `เหลือ ${g.available}`}
+                    </span>
+                  </button>
+                );
+              })}
+
+              {/* ── มุมมองรายคัน ── */}
+              {listView === "list" && listFiltered.map((item, idx) => (
                 <div key={item.id} onClick={() => setDetailItem(item)}
                   className={`flex items-center gap-3 border rounded-xl p-3.5 transition-colors group cursor-pointer ${idx === 0 ? "bg-emerald-50/70 border-emerald-200 hover:bg-emerald-50" : "bg-slate-50 hover:bg-slate-100 border-slate-100"}`}>
                   <div className="bg-white border border-slate-200 rounded-xl p-2 flex-shrink-0 shadow-sm">
@@ -861,9 +951,7 @@ export default function StockMain() {
                       <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1"><Clock className="w-3 h-3 flex-shrink-0" />เติมเมื่อ {fmtAdded(item.created_at)}</p>
                     )}
                   </div>
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border flex-shrink-0 ${STATUS_BADGE[item.status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>
-                    {item.status}
-                  </span>
+                  <span className="flex-shrink-0"><StatusBadge status={item.status} /></span>
                   {deleteConfirm === item.id ? (
                     <div className="flex items-center gap-1.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
                       <button onClick={() => { deleteForklift(item.id); setDeleteConfirm(null); }}
@@ -969,7 +1057,7 @@ export default function StockMain() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${isPendingId(it.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{it.id}</span>
-                    <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${STATUS_BADGE[it.status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>{it.status}</span>
+                    <StatusBadge status={it.status} />
                   </div>
                   <h3 className="text-lg font-bold text-slate-800 truncate">{it.brand} {it.model}</h3>
                   {it.SN && <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Hash className="w-3 h-3" />SN {it.SN}</p>}
