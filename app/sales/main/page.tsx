@@ -253,14 +253,14 @@ export default function SalesMain() {
   const filtered = available.filter(f => {
     const q = search.trim().toLowerCase();
     const base =
-      (!q || hay(f.id).includes(q) || hay(f.unit_no).includes(q) || hay(f.brand).includes(q) || hay(f.model).includes(q)) &&
+      (!q || hay(f.id).includes(q) || hay(f.SN).includes(q) || hay(f.brand).includes(q) || hay(f.model).includes(q)) &&
       (!fFuel     || hay(f.fuel) === fFuel.toLowerCase()) &&
       (!fCapacity || Number(f.capacity_kg) === Number(fCapacity)) &&
       (!fHeight   || toMeters(f.height) === Number(fHeight));
     const cat = activeCategory === "all" || (f.vehicle_category ?? "Forklift") === activeCategory;
     const spec =
       (!fSpecModel  || hay(f.model).includes(fSpecModel.toLowerCase())) &&
-      (!fSpecSN     || hay(f.unit_no).includes(fSpecSN.toLowerCase())) &&
+      (!fSpecSN     || hay(f.SN).includes(fSpecSN.toLowerCase())) &&
       (!fForkLength || hay(f.fork_length).includes(fForkLength.toLowerCase())) &&
       (!fForkWidth  || hay([f.fork_length, f.attachments, JSON.stringify(f.custom_fields ?? {})].join(" ")).includes(fForkWidth.toLowerCase()));
     return base && cat && spec;
@@ -279,7 +279,7 @@ export default function SalesMain() {
     const q = search.trim().toLowerCase();
     if (!q || sorted.length > 0) return null;
     const hit = forklifts.find(f =>
-      (hay(f.id) === q || hay(f.unit_no) === q || hay(f.id).includes(q) || hay(f.unit_no).includes(q)) &&
+      (hay(f.id) === q || hay(f.SN) === q || hay(f.id).includes(q) || hay(f.SN).includes(q)) &&
       notSellableReason(f.status) !== null
     );
     return hit ? { f: hit, reason: notSellableReason(hit.status)! } : null;
@@ -353,7 +353,7 @@ export default function SalesMain() {
       const auto: Record<string, string> = {
         "รหัสสินค้า": isProductId(selected.id) ? String(selected.id) : "",
         PI: selected.pi_no ?? "", MODEL: selected.model ?? "",
-        Valve: selected.control_type ?? "", SN: selected.unit_no ?? "",
+        Valve: selected.control_type ?? "", SN: selected.SN ?? "",
         "วันรับรถ": selected.received_date ?? "",
       };
       Object.entries(auto).forEach(([k, v]) => { if (v) customFields[k] = String(v); });
@@ -361,7 +361,7 @@ export default function SalesMain() {
     return {
       // แก้ไข = คง id/วันที่เดิม · ทำใหม่ = ออก id ใหม่
       id: editingSale ? editingSale.id : `sale_${Date.now()}`,
-      forklift_id: selected!.id, forklift_unit_no: selected!.unit_no,
+      forklift_id: selected!.id, forklift_unit_no: selected!.SN,
       forklift_brand: selected!.brand, forklift_model: selected!.model,
       sales_staff: salesUser?.name ?? "",
       customer_name: form.customer_name, customer_tel: form.customer_tel,
@@ -395,7 +395,7 @@ export default function SalesMain() {
   const openEditSale = (sale: Sale) => {
     // หารถจากสต็อก ถ้าถูกลบไปแล้วสร้างรถชั่วคราวจากข้อมูลในดีล เพื่อให้ฟอร์มทำงานต่อได้
     const fk = forklifts.find(f => f.id === sale.forklift_id) ?? {
-      id: sale.forklift_id, unit_no: sale.forklift_unit_no, brand: sale.forklift_brand,
+      id: sale.forklift_id, SN: sale.forklift_unit_no, brand: sale.forklift_brand,
       model: sale.forklift_model, capacity: "", height: "", fuel: "", cost_price: 0,
       stock_price: 0, status: "", created_at: sale.created_at,
     } as Forklift;
@@ -471,7 +471,7 @@ export default function SalesMain() {
   };
 
   const fmt = (n: number) => n.toLocaleString("th-TH");
-  const selectedInspRecs = selected ? inspections.filter(r => r.unit_no === selected.unit_no) : [];
+  const selectedInspRecs = selected ? inspections.filter(r => r.unit_no === selected.SN) : [];
   const receiverPhotos   = labeledPhotos(selectedInspRecs.filter(r => r.role === "ผู้รับรถ" || !r.role));
   const delivererPhotos  = labeledPhotos(selectedInspRecs.filter(r => r.role === "ผู้ส่งมอบรถ"));
   const receiverNames    = [...new Set(selectedInspRecs.filter(r => r.role === "ผู้รับรถ" || !r.role).map(r => r.transporter_name).filter(Boolean))].join(", ");
@@ -670,7 +670,7 @@ export default function SalesMain() {
           <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-2.5">
             <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
             <div className="text-sm text-amber-800">
-              พบรถ <span className="font-bold">{searchHiddenHit.f.unit_no || searchHiddenHit.f.id}</span>
+              พบรถ <span className="font-bold">{searchHiddenHit.f.SN || searchHiddenHit.f.id}</span>
               {" "}({searchHiddenHit.f.brand} {searchHiddenHit.f.model}) ในระบบ — <span className="font-bold">แต่ไม่แสดงในรายการขายเพราะ &ldquo;{searchHiddenHit.reason}&rdquo;</span>
               <span className="block text-xs text-amber-600 mt-0.5">สถานะจริงในสต็อก: {String(searchHiddenHit.f.status)} · ถ้าคิดว่าผิด แจ้งฝ่ายสต็อกแก้สถานะ</span>
             </div>
@@ -743,7 +743,7 @@ export default function SalesMain() {
             </div>
           )}
           {sorted.map(item => {
-            const recs = inspections.filter(r => r.unit_no === item.unit_no);
+            const recs = inspections.filter(r => r.unit_no === item.SN);
             const photos = recs.flatMap(r => r.images);
             // งาน 3: รูปหน้ารถโชว์บนการ์ด — เลือกช่อง "รถด้านหน้า" ก่อน ถ้าไม่มีใช้รูปแรกที่มี
             const coverPhoto = recs.map(r => r.image_slots?.front).find(Boolean) || photos[0] || null;
@@ -774,7 +774,7 @@ export default function SalesMain() {
                       <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-md mb-1 ${isProductId(item.id) ? "text-indigo-700 bg-indigo-50 border border-indigo-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{item.id}</span>
                       <p className="font-bold text-slate-800 text-base">{item.brand}</p>
                       <p className="text-sm text-slate-600 font-medium">{item.model}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{item.unit_no}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{item.SN}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${STATUS_BADGE[item.status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>{item.status}</span>
@@ -813,7 +813,7 @@ export default function SalesMain() {
             <div className={`px-6 py-4 flex items-center justify-between flex-shrink-0 ${editingSale ? "bg-gradient-to-r from-violet-600 to-fuchsia-700" : "bg-gradient-to-r from-indigo-600 to-blue-700"}`}>
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">{editingSale ? <><Pencil className="w-4 h-4" />แก้ไขรายการขาย</> : "ปิดการขาย"}</h3>
-                <p className={`text-sm ${editingSale ? "text-fuchsia-100" : "text-indigo-200"}`}>{selected.unit_no} — {selected.brand} {selected.model}</p>
+                <p className={`text-sm ${editingSale ? "text-fuchsia-100" : "text-indigo-200"}`}>{selected.SN} — {selected.brand} {selected.model}</p>
               </div>
               <button onClick={resetCheckout} className="text-white/70 hover:text-white hover:bg-white/20 rounded-xl p-2 transition-all"><X className="w-5 h-5" /></button>
             </div>
@@ -840,7 +840,7 @@ export default function SalesMain() {
                         { label: "PI", value: selected.pi_no },
                         { label: "MODEL", value: selected.model },
                         { label: "Valve", value: selected.control_type },
-                        { label: "SN", value: selected.unit_no },
+                        { label: "SN", value: selected.SN },
                         { label: "วันรับรถ", value: selected.received_date },
                       ].map(({ label, value }) => (
                         <div key={label} className="min-w-0">

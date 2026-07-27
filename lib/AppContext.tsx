@@ -121,7 +121,7 @@ const AppContext = createContext<AppContextType | null>(null);
 
 // ── LocalStorage helpers ──────────────────────────────────────────────────────
 const LS_KEYS = {
-  forklifts:    "salesos_forklifts_v2",
+  forklifts:    "salesos_forklifts_v3",
   sales:        "salesos_sales_v2",
   inspMeta:     "salesos_insp_meta_v2",
   inspImages:   "salesos_insp_images_v2",

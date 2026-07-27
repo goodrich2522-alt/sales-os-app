@@ -73,7 +73,7 @@ export default function TransporterMain() {
   // หาได้ทั้งจาก SN และรหัสสินค้า (FK-0001 ฯลฯ) — รหัสสินค้าคือ id หลักของรถในระบบ
   const stockMatch = snKey
     ? (forklifts.find(f =>
-        (f.unit_no && String(f.unit_no).toUpperCase() === snKey) ||
+        (f.SN && String(f.SN).toUpperCase() === snKey) ||
         String(f.id ?? "").toUpperCase() === snKey
       ) || null)
     : null;
@@ -97,7 +97,7 @@ export default function TransporterMain() {
 
   // ===== ผู้ส่งรถ: กรอก SN → หา รถ + ดีล =====
   const delKey = delSN.trim().toUpperCase();
-  const delFork = delKey ? (forklifts.find(f => f.unit_no && String(f.unit_no).toUpperCase() === delKey) || null) : null;
+  const delFork = delKey ? (forklifts.find(f => f.SN && String(f.SN).toUpperCase() === delKey) || null) : null;
   const delSale: Sale | null = delKey
     ? (sales.filter(s => String(s.forklift_unit_no || "").toUpperCase() === delKey)
         .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))[0] || null)
@@ -184,7 +184,7 @@ export default function TransporterMain() {
     // รับรถ = รถมาถึงพร้อมขาย → ตั้ง "พร้อมขาย" เสมอ (ทั้งรถรอรับและรถสต็อก) → ขึ้นหน้าเซลล์
     updateForklift({
       ...recvTarget,
-      unit_no: recvMode === "waiting" ? snKey : recvTarget.unit_no,
+      SN: recvMode === "waiting" ? snKey : recvTarget.SN,
       pi_no: piNo.trim() || recvTarget.pi_no,
       received_date: rd || recvTarget.received_date,
       status: "พร้อมขาย",
@@ -195,8 +195,8 @@ export default function TransporterMain() {
   const submitDeliverer = () => {
     if (!delFork) return;
     const insId = `ins_${Date.now()}`;
-    addInspection({ id: insId, unit_no: delFork.unit_no, transporter_name: senderName.trim() || username, transporter_phone: userphone || undefined, date: deliverDate || today(), ...buildImagePayload(), role: "ผู้ส่งมอบรถ", delivery_company: delCompany.trim() || undefined, location_link: delLocation.trim() || undefined });
-    setDone({ insId, before: null, label: `ส่งมอบ ${delFork.unit_no} → ${delCompany.trim()}` });
+    addInspection({ id: insId, unit_no: delFork.SN, transporter_name: senderName.trim() || username, transporter_phone: userphone || undefined, date: deliverDate || today(), ...buildImagePayload(), role: "ผู้ส่งมอบรถ", delivery_company: delCompany.trim() || undefined, location_link: delLocation.trim() || undefined });
+    setDone({ insId, before: null, label: `ส่งมอบ ${delFork.SN} → ${delCompany.trim()}` });
   };
 
   // ยกเลิกรายการล่าสุด — ลบ inspection + คืนรถกลับสถานะก่อนรับ (รถรอรับ → กลับเป็น "รอรับ" ไม่ลบทิ้ง)

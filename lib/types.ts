@@ -11,7 +11,7 @@ export type ForkliftStatus = string;
 
 export interface Forklift {
   id: string;
-  unit_no: string;
+  SN: string;
   brand: string;
   model: string;
   capacity: string;

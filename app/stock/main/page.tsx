@@ -78,7 +78,7 @@ const emptyForm = {
   model: "",            // 2 MODEL
   mast: "",             // 3 MAST (รหัสเสา — เก็บใน custom_fields)
   valve: "",            // 4 Valve
-  unit_no: "",          // 5 SN
+  SN: "",          // 5 SN
   cost_price: "",       // 6 PRICE(ทุน)
   received_date: "",    // 7 วันรับรถ
   status: "พร้อมขาย",   // 8 สถานะ
@@ -208,7 +208,7 @@ export default function StockMain() {
     if (bulkMode) {
       if (!bulkStart.trim() || !Number.isFinite(Number(bulkStart))) e.bulk = "กรอกเลขเริ่มต้น SN (เช่น 0001)";
       else if (!bulkCount || Math.floor(Number(bulkCount)) < 1) e.bulk = "กรอกจำนวนรถในล็อต";
-    } else if (!form.unit_no.trim()) e.unit_no = "กรุณากรอก SN";
+    } else if (!form.SN.trim()) e.SN = "กรุณากรอก SN";
     if (!form.model.trim()) e.model = "กรุณากรอกรุ่น";
     // สเปกที่เซลล์ใช้ค้นหา — ถ้าไม่กรอก เซลล์จะหารถคันนี้ไม่เจอ
     if (!form.capacity_kg) e.capacity_kg = "เลือกน้ำหนักยก — เซลล์ใช้ค้นหา";
@@ -226,8 +226,8 @@ export default function StockMain() {
     if (form.detail_customer.trim()) cf["รายละเอียด (ลูกค้า)"] = form.detail_customer.trim();
     if (form.invoice_no.trim())      cf["เลขที่ใบกำกับภาษี"] = form.invoice_no.trim();
     if (form.detail_note.trim())     cf["รายละเอียด (หมายเหตุ)"] = form.detail_note.trim();
-    // ฟิลด์ที่ใช้ร่วมทุกคัน (ยกเว้น id/unit_no/created_at ที่ต่างกันรายคัน)
-    const shared: Omit<Forklift, "id" | "unit_no" | "created_at"> = {
+    // ฟิลด์ที่ใช้ร่วมทุกคัน (ยกเว้น id/SN/created_at ที่ต่างกันรายคัน)
+    const shared: Omit<Forklift, "id" | "SN" | "created_at"> = {
       brand: form.brand, model: form.model, capacity: "",
       capacity_kg: form.capacity_kg, height: form.height_m,
       fork_length: form.fork_length || undefined, fuel: form.fuel,
@@ -240,7 +240,7 @@ export default function StockMain() {
 
     if (bulkMode) {
       // เติมล็อต — SN ไล่เลข + รหัสสินค้าไล่ต่อกันไม่ชน
-      const rows = bulkSNs().map(sn => ({ ...shared, unit_no: sn })) as Omit<Forklift, "id">[];
+      const rows = bulkSNs().map(sn => ({ ...shared, SN: sn })) as Omit<Forklift, "id">[];
       const withIds = assignIdsAndStamp(rows, forklifts);
       addForkliftsBulk(withIds);
       setBulkDone(withIds.length);
@@ -248,7 +248,7 @@ export default function StockMain() {
       setBulkStart(""); setBulkCount(""); setBulkPrefix("");
     } else {
       const productId = generateProductId(form.vehicle_category, forklifts);
-      addForklift({ id: productId, unit_no: form.unit_no.toUpperCase(), created_at: new Date().toISOString(), ...shared });
+      addForklift({ id: productId, SN: form.SN.toUpperCase(), created_at: new Date().toISOString(), ...shared });
       setLastProductId(productId);
       setBulkDone(0);
     }
@@ -338,7 +338,7 @@ export default function StockMain() {
   const hs = (v: unknown) => (v == null ? "" : String(v)).toLowerCase();
   const listFiltered = forklifts.filter(f => {
     const q = listSearch.trim().toLowerCase();
-    const okQ = !q || hs(f.id).includes(q) || hs(f.unit_no).includes(q) || hs(f.brand).includes(q) || hs(f.model).includes(q) || hs(f.pi_no).includes(q);
+    const okQ = !q || hs(f.id).includes(q) || hs(f.SN).includes(q) || hs(f.brand).includes(q) || hs(f.model).includes(q) || hs(f.pi_no).includes(q);
     const okCat = listCat === "all" || (f.vehicle_category ?? "Forklift") === listCat;
     const okStatus = listStatus === "all" || f.status === listStatus;
     return okQ && okCat && okStatus;
@@ -597,8 +597,8 @@ export default function StockMain() {
                     <input value={form.valve} onChange={e => setForm({ ...form, valve: e.target.value })} placeholder="เช่น 2 / 3" className={ic("")} />
                   </FF>
                   {!bulkMode && (
-                    <FF label="SN (หมายเลขรถ) *" error={errors.unit_no}>
-                      <input value={form.unit_no} onChange={e => setForm({ ...form, unit_no: e.target.value })} placeholder="เช่น 010253N9305" className={ic(errors.unit_no)} />
+                    <FF label="SN (หมายเลขรถ) *" error={errors.SN}>
+                      <input value={form.SN} onChange={e => setForm({ ...form, SN: e.target.value })} placeholder="เช่น 010253N9305" className={ic(errors.SN)} />
                     </FF>
                   )}
                   <FF label="PRICE ทุน (บาท)" error="">
@@ -857,7 +857,7 @@ export default function StockMain() {
                     <div className="flex items-center gap-2 flex-wrap">
                       {/* รหัสสินค้า (ID) — โชว์ทุกคันเพื่อแยกรถถูกตัว */}
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${isProductId(item.id) ? "text-indigo-700 bg-indigo-50 border border-indigo-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{item.id}</span>
-                      <p className="font-semibold text-slate-800 text-sm">{item.unit_no ? `${item.unit_no} — ` : ""}{item.brand} {item.model}</p>
+                      <p className="font-semibold text-slate-800 text-sm">{item.SN ? `${item.SN} — ` : ""}{item.brand} {item.model}</p>
                       {idx === 0 && <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded-full flex-shrink-0">ล่าสุด</span>}
                     </div>
                     <p className="text-xs text-slate-500">{item.capacity}{item.capacity_kg ? ` / ${item.capacity_kg} kg` : ""} · {item.fuel}{item.location ? ` · ${item.location}` : ""}</p>
@@ -929,7 +929,7 @@ export default function StockMain() {
       {/* ── Detail Modal — กดดูรายละเอียดรถทีละคัน ── */}
       {detailItem && (() => {
         const it = detailItem;
-        const recs = inspections.filter(r => r.unit_no && it.unit_no && String(r.unit_no).toUpperCase() === String(it.unit_no).toUpperCase());
+        const recs = inspections.filter(r => r.unit_no && it.SN && String(r.unit_no).toUpperCase() === String(it.SN).toUpperCase());
         const photos = recs.flatMap(r => r.images || []);
         const spec: [string, string][] = [
           ["หมวดรถ", it.vehicle_category ?? "Forklift"],
@@ -979,7 +979,7 @@ export default function StockMain() {
                     <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${STATUS_BADGE[it.status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>{it.status}</span>
                   </div>
                   <h3 className="text-lg font-bold text-slate-800 truncate">{it.brand} {it.model}</h3>
-                  {it.unit_no && <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Hash className="w-3 h-3" />SN {it.unit_no}</p>}
+                  {it.SN && <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Hash className="w-3 h-3" />SN {it.SN}</p>}
                 </div>
                 <button onClick={() => setDetailItem(null)} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all flex-shrink-0"><X className="w-5 h-5" /></button>
               </div>

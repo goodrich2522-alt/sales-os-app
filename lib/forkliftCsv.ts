@@ -6,7 +6,7 @@ import { generateProductId } from "./productId";
 
 // ── แม่แบบคอลัมน์ (ต้องตรงกับหัวใน CSV — จับคู่แบบไม่สนตัวพิมพ์/ช่องว่าง) ──
 export const CSV_COLUMNS = [
-  { key: "unit_no",       label: "SN",           required: true },
+  { key: "SN",       label: "SN",           required: true },
   { key: "brand",         label: "ยี่ห้อ",        required: false },
   { key: "model",         label: "รุ่น",          required: true },
   { key: "capacity_kg",   label: "น้ำหนักยก(กก.)", required: false },
@@ -61,7 +61,7 @@ export function parseForkliftCsv(text: string): CsvParseResult {
   const colIdx: Record<string, number> = {};
   CSV_COLUMNS.forEach(c => { colIdx[c.key] = header.indexOf(norm(c.label)); });
 
-  if (colIdx.unit_no < 0 || colIdx.model < 0) {
+  if (colIdx.SN < 0 || colIdx.model < 0) {
     errors.push("ไม่พบคอลัมน์ที่จำเป็น: ต้องมีหัวตาราง \"SN\" และ \"รุ่น\" (ใช้ปุ่มดาวน์โหลดแม่แบบเพื่อความถูกต้อง)");
     return { forklifts: [], errors, rowCount: 0 };
   }
@@ -70,7 +70,7 @@ export function parseForkliftCsv(text: string): CsvParseResult {
   for (let r = 1; r < lines.length; r++) {
     const cells = splitCsvLine(lines[r]);
     const get = (k: string) => { const i = colIdx[k]; return i >= 0 && i < cells.length ? cells[i].trim() : ""; };
-    const sn = get("unit_no"), model = get("model");
+    const sn = get("SN"), model = get("model");
     if (!sn && !model) continue; // ข้ามแถวว่าง
     if (!sn)    { errors.push(`แถว ${r + 1}: ไม่มี SN — ข้าม`); continue; }
     if (!model) { errors.push(`แถว ${r + 1}: ไม่มีรุ่น — ข้าม`); continue; }
@@ -81,7 +81,7 @@ export function parseForkliftCsv(text: string): CsvParseResult {
     const cost = costRaw && !isNaN(Number(costRaw)) ? Number(costRaw) : 0;
 
     forklifts.push({
-      unit_no: sn.toUpperCase(),
+      SN: sn.toUpperCase(),
       brand: get("brand") || "HELI",
       model,
       capacity: "",

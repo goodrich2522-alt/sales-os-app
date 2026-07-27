@@ -45,3 +45,10 @@ next-env.d.ts
 backup-forklifts-2026-07-19.json
 backup-sales-2026-07-19.json
 backup-inspections-2026-07-19.json
+
+# ⚠️ ข้อมูลลูกค้า / ราคาทุน — repo นี้เป็น public ห้ามหลุดขึ้น GitHub เด็ดขาด
+*.xlsx
+*.xls
+local-data/
+DATA-SYNC-PLAN.md
+sync-rules.md
