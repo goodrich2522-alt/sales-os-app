@@ -4,8 +4,9 @@
 // ⚠️ สคริปต์นี้ "เขียน" ฐานข้อมูลจริง — รันเมื่อได้รับอนุมัติแล้วเท่านั้น
 // สำรองข้อมูลไว้ที่ local-data/backup-2026-07-27_1343/ เรียบร้อยแล้ว
 //
-// รัน:  node scripts/import-to-supabase.mjs           (นำเข้าจริง)
-//       node scripts/import-to-supabase.mjs --dry     (ทดสอบ ไม่เขียนจริง)
+// รัน:  node scripts/import-to-supabase.mjs [ตาราง] [ไฟล์]   ค่าเริ่มต้น = forklifts apply-forklifts.json
+//       เติม --dry เพื่อทดสอบโดยไม่เขียนจริง
+//   เช่น node scripts/import-to-supabase.mjs sales apply-sales.json
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,19 +24,19 @@ if (!BASE || !KEY) {
   console.error("ต้องตั้ง SUPABASE_URL และ SUPABASE_KEY ก่อนรัน");
   process.exit(1);
 }
-const URL = `${BASE.replace(/\/$/, "")}/rest/v1/forklifts`;
+const args = process.argv.slice(2).filter(a => !a.startsWith("--"));
+const TABLE = args[0] ?? "forklifts";
+const FILE = args[1] ?? "apply-forklifts.json";
+const URL = `${BASE.replace(/\/$/, "")}/rest/v1/${TABLE}`;
 const BATCH = 100;
 
 // PostgREST บังคับว่าทุกอ็อบเจกต์ในชุดเดียวกันต้องมีคีย์ชุดเดียวกันเป๊ะ
 // → ปรับทุกแถวให้มีคอลัมน์ครบชุดเท่ากัน (ที่ไม่มีให้เป็น null)
-const COLS = ["id", "SN", "brand", "model", "capacity", "capacity_kg", "height", "fuel",
-  "cost_price", "stock_price", "status", "created_at", "vehicle_category", "pi_no",
-  "vehicle_group", "year", "control_type", "fork_length", "attachments", "install_date",
-  "install_cost", "po_status", "location", "received_date", "custom_fields"];
-
-const raw = JSON.parse(readFileSync(join(DIR, "apply-forklifts.json"), "utf8"));
+const raw = JSON.parse(readFileSync(join(DIR, FILE), "utf8"));
+// ใช้ union ของคีย์ทั้งหมดในไฟล์ เพื่อให้ทุกแถวมีชุดคีย์เท่ากัน
+const COLS = [...new Set(raw.flatMap(Object.keys))];
 const rows = raw.map(r => Object.fromEntries(COLS.map(c => [c, r[c] ?? null])));
-console.log(`เตรียมนำเข้า ${rows.length} แถว · ชุดละ ${BATCH}${DRY ? "  [โหมดทดสอบ ไม่เขียนจริง]" : ""}`);
+console.log(`เตรียมนำเข้า ${rows.length} แถว → ตาราง ${TABLE} · ชุดละ ${BATCH}${DRY ? "  [โหมดทดสอบ ไม่เขียนจริง]" : ""}`);
 
 let ok = 0;
 const fails = [];
