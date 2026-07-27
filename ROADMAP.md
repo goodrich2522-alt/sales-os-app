@@ -68,15 +68,24 @@
 
 > ⚠️ **ตราบใดที่ยังไม่ทำ ข้อมูลลูกค้าและราคาทุนทั้งบริษัทเปิดให้ใครก็ดึงได้** — เว็บอยู่บน GitHub Pages สาธารณะ ใครเปิด DevTools ก็เห็น anon key
 
-- ☐ **C.1 ตัดสินใจเรื่องหน้าผู้ขนส่ง** ⬅️ **ต้องเคาะก่อน** — ผู้ขนส่งล็อกอินด้วยชื่อ+เบอร์ (ไม่มี Supabase session) พอเปิด RLS จะเขียนข้อมูลไม่ได้เลย
-  - **ทาง A:** เปิด anonymous sign-in + ให้ policy เฉพาะ anon แตะ `forklifts`/`inspections` ได้ (ไม่แตะ `sales`)
-  - **ทาง B:** ทำ RPC `receive_forklift()` / `deliver_forklift()` แบบ SECURITY DEFINER — คุมแคบกว่าแต่เขียนโค้ดเยอะกว่า
-- ☐ **C.2 ทดสอบล็อกอินจริงทุก role บนเว็บ production** (ทำก่อนสับสวิตช์)
-- ☐ **C.3 สับสวิตช์** — ลบ policy `open_all` ออกจากทั้ง 4 ตาราง (`forklifts`, `sales`, `inspections`, `app_config`)
-- ☐ **C.4 เปลี่ยน anon key ใหม่** — key เดิมถือว่าหลุดแล้ว
+- ☑ **C.1 (27 ก.ค.) เลือกทาง B — RPC แบบ SECURITY DEFINER** · ผู้ขนส่งยังล็อกอินด้วยชื่อ+เบอร์เหมือนเดิม
+  RPC ที่ทำ: `transporter_stock` (14 ฟิลด์ ไม่มีราคาทุน/ลูกค้า) · `transporter_inspections` · `transporter_sales_owner` (คืนแค่ชื่อเซลล์) · `transporter_receive` · `transporter_deliver` · `transporter_delete_inspection` · `transporter_set_forklift` (แก้ได้แค่ SN/PI/วันรับ/สถานะ)
+  [lib/api.ts](lib/api.ts) ตรวจ `localStorage.transporter_name` แล้วสลับไปใช้ RPC อัตโนมัติ — หน้า transporter ไม่ต้องแก้
+- ☑ **C.3 (27 ก.ค.) สับสวิตช์แล้ว** — ลบ policy `open_all` ออกครบทั้ง 4 ตาราง
+- ☐ **C.2 ทดสอบล็อกอินจริงทุก role บนเว็บ production** ⬅️ **ต้องทำทันที** (ทำหลังสับสวิตช์เพราะเลือกปิดช่องโหว่ก่อน)
+- ☐ **C.4 เปลี่ยน anon key ใหม่** — ต้องทำที่ Supabase Dashboard (ไม่มี API ให้ทำอัตโนมัติ)
 - ☐ **C.5 ใส่ token ที่ GAS endpoint** (ตอนนี้ใครก็ยิงรูปเข้าได้)
 
-**เกณฑ์ผ่าน:** เปิดเบราว์เซอร์ใหม่ที่ยังไม่ล็อกอิน ยิง REST ด้วย anon key → ต้องได้ **0 แถว** ทุกตาราง
+**✅ ผลทดสอบเกณฑ์ผ่าน (27 ก.ค. 2569)** — ยิง REST ด้วย key สาธารณะแบบไม่ล็อกอิน:
+
+| การกระทำ | ผลลัพธ์ |
+|---|---|
+| อ่าน `forklifts` / `sales` / `inspections` / `app_config` | **0 แถว ทุกตาราง** ✅ |
+| เขียน `forklifts` | **401 — row-level security violation** ✅ |
+| RPC ผู้ขนส่ง | ยังใช้ได้ปกติ (642 คัน) ✅ |
+
+> ⚠️ **ผลข้างเคียง:** สคริปต์ใน `scripts/` ที่ใช้ key สาธารณะ (`health-check.mjs`, `import-to-supabase.mjs`) จะอ่าน/เขียนไม่ได้แล้ว
+> ต่อไปต้องใช้ service role key หรือรันผ่าน Supabase MCP แทน
 
 ---
 
