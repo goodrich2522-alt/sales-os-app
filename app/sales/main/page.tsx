@@ -14,19 +14,11 @@ import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, Con
 import { useApp } from "@/lib/AppContext";
 import { driveImg } from "@/lib/img";
 import { isPendingId } from "@/lib/productId";
+import { STATUS_BADGE, SALE_STATUS_BADGE, CONTACT_SOURCE_COLORS } from "@/lib/constants";
+import { formatBaht } from "@/lib/format";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { apiEnabled } from "@/lib/api";
 import AiAssistant from "@/components/AiAssistant";
-
-const STATUS_BADGE: Record<string, string> = {
-  "พร้อมขาย":      "bg-emerald-100 text-emerald-700 border-emerald-200",
-  "จองแล้ว":       "bg-amber-100 text-amber-700 border-amber-200",
-  "จอง":           "bg-amber-100 text-amber-700 border-amber-200",
-  "ติดจอง":        "bg-amber-100 text-amber-700 border-amber-200",
-  "ติดจอง/รอส่ง":  "bg-orange-100 text-orange-700 border-orange-200",
-  "รอผ่านไฟแนนซ์": "bg-red-100 text-red-700 border-red-200",
-  "ส่งมอบแล้ว":    "bg-slate-100 text-slate-600 border-slate-200",
-};
 
 // ── ตรรกะว่ารถคันไหน "ยังขายได้" (โชว์ให้เซลล์) ──────────────────────────────
 // ใช้ blocklist แทน whitelist: ซ่อนเฉพาะรถที่ "ชัดเจนว่าไม่ว่าง" (ขายแล้ว/เช่า/รอรับ/ส่งมอบ)
@@ -43,21 +35,6 @@ function notSellableReason(status: unknown): string | null {
   return null;
 }
 const isSellable = (f: { status?: unknown }) => notSellableReason(f?.status) === null;
-
-const SALE_STATUS_BADGE: Record<SaleStatus, string> = {
-  "ขายแล้ว":        "bg-emerald-100 text-emerald-700 border-emerald-200",
-  "จอง":            "bg-amber-100 text-amber-700 border-amber-200",
-  "รอผ่านไฟแนนซ์":  "bg-red-100 text-red-700 border-red-200",
-};
-
-const CONTACT_SOURCE_COLORS: Record<string, string> = {
-  "Line":          "bg-green-100 text-green-700",
-  "Facebook":      "bg-blue-100 text-blue-700",
-  "TikTok":        "bg-pink-100 text-pink-700",
-  "โทร":           "bg-indigo-100 text-indigo-700",
-  "Google":        "bg-orange-100 text-orange-700",
-  "คนอื่นบอกต่อ": "bg-violet-100 text-violet-700",
-};
 
 const emptyCheckout = {
   customer_name: "", customer_tel: "",
@@ -470,7 +447,7 @@ export default function SalesMain() {
     if (sale) { setUndoToast(`ลบรายการ ${sale.forklift_unit_no} แล้ว — รถกลับสู่สต็อก`); setTimeout(() => setUndoToast(null), 4000); }
   };
 
-  const fmt = (n: number) => n.toLocaleString("th-TH");
+  const fmt = formatBaht; // ใช้ตัวจัดรูปแบบเงินกลาง (lib/format)
   const selectedInspRecs = selected ? inspections.filter(r => r.unit_no === selected.SN) : [];
   const receiverPhotos   = labeledPhotos(selectedInspRecs.filter(r => r.role === "ผู้รับรถ" || !r.role));
   const delivererPhotos  = labeledPhotos(selectedInspRecs.filter(r => r.role === "ผู้ส่งมอบรถ"));

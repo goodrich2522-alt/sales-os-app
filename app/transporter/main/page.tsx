@@ -2,22 +2,14 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRight, ChevronLeft, Package, History, ImageOff, Hash, Calendar, User, FileText, PackageCheck, Clock, Search, RotateCcw, Building2, Briefcase, Trash2, MapPin, Link2 } from "lucide-react";
+import { Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRight, Package, History, ImageOff, Hash, Calendar, User, FileText, PackageCheck, Clock, Search, RotateCcw, Building2, Briefcase, Trash2, MapPin, Link2 } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
 import { Forklift, Sale, INSPECTION_SLOTS, InspectionSlotKey, SLOT_LABELS } from "@/lib/types";
 import { driveImg } from "@/lib/img";
+import { thaiDate, today, specCode } from "@/lib/format";
+import { Lightbox } from "@/components/ui/Lightbox";
 
 type TransporterRole = "ผู้รับรถ" | "ผู้ส่งมอบรถ";
-
-// วันที่ ISO (2026-01-07) → ข้อความไทย "7 ม.ค. 2569" — กัน Google Sheets แปลงเป็นวันที่ผิด + อ่านง่าย
-const TH_MON = ["", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-function thaiDate(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
-  if (!m) return iso || "";
-  return `${+m[3]} ${TH_MON[+m[2]]} ${+m[1] + 543}`;
-}
-
-const today = () => new Date().toISOString().slice(0, 10);
 
 export default function TransporterMain() {
   const router = useRouter();
@@ -107,9 +99,6 @@ export default function TransporterMain() {
   const delValid = !!(delFork && senderName.trim() && deliverDate && delCompany.trim()) && deliveryPhotosValid;
   const targetReady = isReceiver ? !!recvTarget : !!delFork;
 
-  // รหัสสเปกรถ (รุ่น/เสา/วาล์ว/งา/อุปกรณ์/พิกัด/เชื้อเพลิง)
-  const specCode = (f: Forklift) => [f.model, f.height, f.control_type, f.fork_length, f.attachments, f.capacity_kg, f.fuel]
-    .map(v => (v == null ? "" : String(v)).trim()).filter(Boolean).join(" / ");
 
   // กรอก SN ผู้ส่ง → เติมชื่อเซลล์จากดีลให้อัตโนมัติ
   const handleDelSnChange = (v: string) => {
@@ -681,24 +670,14 @@ export default function TransporterMain() {
         </div>
       )}
 
-      {/* ── Lightbox ── */}
+      {/* ── Lightbox (ใช้ component กลาง) ── */}
       {lightbox && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
-          <button onClick={() => setLightbox(null)} className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2 transition-all"><X className="w-6 h-6" /></button>
-          {lightbox.imgs.length > 1 && (
-            <button onClick={e => { e.stopPropagation(); setLightbox(l => l ? { ...l, idx: (l.idx - 1 + l.imgs.length) % l.imgs.length } : l); }}
-              className="absolute left-3 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2 transition-all"><ChevronLeft className="w-6 h-6" /></button>
-          )}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={driveImg(lightbox.imgs[lightbox.idx])} alt="" className="max-h-[85vh] max-w-full object-contain rounded-xl" onClick={e => e.stopPropagation()} />
-          {lightbox.imgs.length > 1 && (
-            <>
-              <button onClick={e => { e.stopPropagation(); setLightbox(l => l ? { ...l, idx: (l.idx + 1) % l.imgs.length } : l); }}
-                className="absolute right-3 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2 transition-all"><ChevronRight className="w-6 h-6" /></button>
-              <span className="absolute bottom-4 text-white/80 text-sm bg-white/10 px-3 py-1 rounded-full">{lightbox.idx + 1} / {lightbox.imgs.length}</span>
-            </>
-          )}
-        </div>
+        <Lightbox
+          imgs={lightbox.imgs}
+          idx={lightbox.idx}
+          onClose={() => setLightbox(null)}
+          onIdx={next => setLightbox(l => l ? { ...l, idx: next } : l)}
+        />
       )}
     </div>
   );

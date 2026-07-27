@@ -6,26 +6,19 @@ import {
   Package, Plus, LogOut, CheckCircle, AlertCircle, List, X,
   TrendingUp, Boxes, Trash2, Settings, Pencil, Check, ChevronDown,
   Type, ListOrdered, ArrowLeft, Clock, Hash, Camera, ImageOff, Eye,
-  ChevronLeft, ChevronRight, Bell, Download, Upload, FileText, ShoppingCart, User
+  Bell, Download, Upload, FileText, ShoppingCart, User
 } from "lucide-react";
 import { Forklift } from "@/lib/types";
 import { useApp, FieldConfig } from "@/lib/AppContext";
 import { buildForkliftId, isPendingId } from "@/lib/productId";
+import { STATUS_BADGE } from "@/lib/constants";
+import { thaiMonthShort } from "@/lib/format";
+import { Lightbox } from "@/components/ui/Lightbox";
 import { parseForkliftCsv, assignIdsAndStamp, buildCsvTemplate } from "@/lib/forkliftCsv";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { apiEnabled } from "@/lib/api";
 import { driveImg } from "@/lib/img";
 
-const STATUS_BADGE: Record<string, string> = {
-  "พร้อมขาย":       "bg-emerald-100 text-emerald-700 border-emerald-200",
-  "จอง":            "bg-amber-100 text-amber-700 border-amber-200",
-  "จองแล้ว":        "bg-amber-100 text-amber-700 border-amber-200",
-  "รอผ่านไฟแนนซ์":  "bg-red-100 text-red-700 border-red-200",
-  "ปิดการขายแล้ว":  "bg-indigo-100 text-indigo-700 border-indigo-200",
-  "ส่งมอบแล้ว":     "bg-slate-100 text-slate-600 border-slate-200",
-  "ซ่อมบำรุง":      "bg-red-100 text-red-700 border-red-200",
-  "รอตรวจสอบ":     "bg-blue-100 text-blue-700 border-blue-200",
-};
 
 // ฟิลด์ dropdown ฝั่งสต็อก — ไม่รวมประเภทการขาย/การชำระ (จัดการในหน้าฝ่ายขาย)
 type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "saleTypes" | "paymentTypes" | "knownUsers" | "adminEmails">;
@@ -59,12 +52,11 @@ const fmtCap = (v: string) => {
 };
 
 // แปลงเวลาเติม → "10 ก.ค. 69 · 14:30 น." (พ.ศ. + เวลา) · ถ้าเป็นแค่วันที่ (ของเก่า) ไม่โชว์เวลา
-const TH_MON = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 function fmtAdded(iso?: string) {
   if (!iso) return "";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return String(iso);
-  const date = `${d.getDate()} ${TH_MON[d.getMonth()]} ${(d.getFullYear() + 543) % 100}`;
+  const date = `${d.getDate()} ${thaiMonthShort(d.getMonth() + 1)} ${(d.getFullYear() + 543) % 100}`;
   const hasTime = /T\d\d:/.test(iso);
   if (!hasTime) return date;
   const hh = String(d.getHours()).padStart(2, "0");
@@ -1014,24 +1006,14 @@ export default function StockMain() {
         );
       })()}
 
-      {/* Lightbox รูปในหน้ารายละเอียด */}
+      {/* Lightbox รูปในหน้ารายละเอียด (ใช้ component กลาง) */}
       {detailLightbox && (
-        <div className="fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-4" onClick={() => setDetailLightbox(null)}>
-          <button onClick={() => setDetailLightbox(null)} className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2 transition-all"><X className="w-6 h-6" /></button>
-          {detailLightbox.imgs.length > 1 && (
-            <button onClick={e => { e.stopPropagation(); setDetailLightbox(l => l ? { ...l, idx: (l.idx - 1 + l.imgs.length) % l.imgs.length } : l); }}
-              className="absolute left-3 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2 transition-all"><ChevronLeft className="w-6 h-6" /></button>
-          )}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={driveImg(detailLightbox.imgs[detailLightbox.idx])} alt="" className="max-h-[85vh] max-w-full object-contain rounded-xl" onClick={e => e.stopPropagation()} />
-          {detailLightbox.imgs.length > 1 && (
-            <>
-              <button onClick={e => { e.stopPropagation(); setDetailLightbox(l => l ? { ...l, idx: (l.idx + 1) % l.imgs.length } : l); }}
-                className="absolute right-3 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2 transition-all"><ChevronRight className="w-6 h-6" /></button>
-              <span className="absolute bottom-4 text-white/80 text-sm bg-white/10 px-3 py-1 rounded-full">{detailLightbox.idx + 1} / {detailLightbox.imgs.length}</span>
-            </>
-          )}
-        </div>
+        <Lightbox
+          imgs={detailLightbox.imgs}
+          idx={detailLightbox.idx}
+          onClose={() => setDetailLightbox(null)}
+          onIdx={next => setDetailLightbox(l => l ? { ...l, idx: next } : l)}
+        />
       )}
 
       {/* ── Settings Modal ── */}

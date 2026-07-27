@@ -10,6 +10,7 @@ import {
 import { useApp } from "@/lib/AppContext";
 import { getRegion } from "@/lib/mockData";
 import { buildStaffMonthly, buildStaffWeekly, buildAllMonthlyWeekly, MONTH_LABELS } from "@/components/charts/Charts";
+import { CONTACT_SOURCE_COLORS } from "@/lib/constants";
 import { Sale } from "@/lib/types";
 import GoogleLoginButton, { type GoogleUser } from "@/components/GoogleLoginButton";
 import { checkAccess, hasActiveSession } from "@/lib/auth";
@@ -63,15 +64,6 @@ const REGION_COLORS: Record<string, { bg: string; border: string; text: string; 
   "กลาง":   { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700", dot: "#10B981" },
   "อีสาน":  { bg: "bg-amber-50",  border: "border-amber-200",  text: "text-amber-700",  dot: "#F59E0B" },
   "ใต้":    { bg: "bg-violet-50", border: "border-violet-200", text: "text-violet-700", dot: "#8B5CF6" },
-};
-
-const CONTACT_SOURCE_COLORS: Record<string, string> = {
-  "Line":          "bg-green-100 text-green-700",
-  "Facebook":      "bg-blue-100 text-blue-700",
-  "TikTok":        "bg-pink-100 text-pink-700",
-  "โทร":           "bg-indigo-100 text-indigo-700",
-  "Google":        "bg-orange-100 text-orange-700",
-  "คนอื่นบอกต่อ": "bg-violet-100 text-violet-700",
 };
 
 export default function Dashboard() {
