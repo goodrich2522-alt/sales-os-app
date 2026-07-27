@@ -115,6 +115,10 @@ npm run lint     # eslint
 - **แต่มี `unit_no` อีก 2 ที่ที่ชื่อถูกอยู่แล้ว ห้ามแตะ:** `sales.forklift_unit_no` และ `inspections.unit_no`
 - ห้าม find-replace ทั้งโปรเจกต์ — ดูรายละเอียดที่ [ROADMAP.md](ROADMAP.md) เฟส A
 
+## 📌 แอปเป็นระบบหลัก (ตัดสินใจ 27 ก.ค. 2569)
+ทีมกรอกข้อมูลในแอปอย่างเดียว — **เลิกใช้ Excel เป็นที่บันทึกงาน** (ถ้าต้องการไฟล์ให้ export ออกจากระบบ)
+เดิมมี 2 แหล่งที่ไม่ตรงกันจนข้อมูลเพี้ยน · ตรวจสุขภาพข้อมูลเป็นระยะด้วย `node scripts/health-check.mjs`
+
 ## ⚠️ repo นี้เป็น public
 ห้าม commit ไฟล์ที่มีชื่อลูกค้า/ราคาทุน — `.gitignore` กันไว้แล้ว: `*.xlsx`, `local-data/`, `DATA-SYNC-PLAN.md`, `sync-rules.md`
 
