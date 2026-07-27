@@ -28,8 +28,16 @@ const add = (level, title, items) => { if (items.length) warn.push({ level, titl
 const bySn = new Map();
 forklifts.forEach(f => { const sn = norm(f.SN).toUpperCase(); if (sn) (bySn.get(sn) ?? bySn.set(sn, []).get(sn)).push(f); });
 
-add("⚠️", "SN ซ้ำ (ตรวจว่าเป็นคนละคันจริงหรือกรอกซ้ำ)",
-  [...bySn].filter(([, v]) => v.length > 1).map(([sn, v]) => `${sn} — ${v.length} คัน: ${v.map(f => f.id).join(", ")}`));
+// SN ซ้ำที่ตรวจสอบแล้วว่าเป็นคนละคันจริง จะถูกติดป้าย "หมายเหตุ SN" ไว้ → ไม่ต้องเตือนซ้ำ
+const dupGroups = [...bySn].filter(([, v]) => v.length > 1);
+const confirmed = dupGroups.filter(([, v]) => v.every(f => norm(f.custom_fields?.["หมายเหตุ SN"])));
+const unconfirmed = dupGroups.filter(([, v]) => !v.every(f => norm(f.custom_fields?.["หมายเหตุ SN"])));
+
+add("⚠️", "SN ซ้ำที่ยังไม่ได้ตรวจสอบ (อาจกรอกซ้ำ)",
+  unconfirmed.map(([sn, v]) => `${sn} — ${v.length} คัน: ${v.map(f => f.id).join(", ")}`));
+
+add("ℹ️", "SN ซ้ำที่ยืนยันแล้วว่าเป็นคนละคันจริง",
+  confirmed.map(([sn, v]) => `${sn} — ${v.length} คัน: ${v.map(f => f.id).join(", ")}`));
 
 add("ℹ️", "รถที่ยังไม่มี SN (ปกติคือรถสั่งผลิตที่ยังไม่ผลิตเสร็จ)",
   forklifts.filter(f => !norm(f.SN)).map(f => `${f.id} — ${norm(f.model)} · ${norm(f.status)}`));
