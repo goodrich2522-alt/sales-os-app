@@ -23,8 +23,31 @@ function sb() {
   return supabase;
 }
 
+/** โหมดผู้ขนส่ง = ล็อกอินด้วยชื่อเล่น+เบอร์ ไม่มี Supabase session → แตะตารางตรงไม่ได้ (RLS) */
+const isTransporterMode = () =>
+  typeof window !== "undefined" && !!localStorage.getItem("transporter_name");
+
+/** โหลดข้อมูลผ่าน RPC เฉพาะที่ผู้ขนส่งจำเป็นต้องใช้ (ไม่มีราคาทุน/ข้อมูลลูกค้า) */
+async function bootstrapTransporter(): Promise<BootstrapData> {
+  const c = sb();
+  const [fk, ins] = await Promise.all([
+    c.rpc("transporter_stock"),
+    c.rpc("transporter_inspections"),
+  ]);
+  if (fk.error) throw fk.error;
+  if (ins.error) throw ins.error;
+  return {
+    forklifts: (fk.data ?? []) as Forklift[],
+    sales: [],                                   // ผู้ขนส่งไม่มีสิทธิ์เห็นดีลขาย
+    inspections: (ins.data ?? []) as InspectionRecord[],
+    deletedInspections: [],
+    fieldConfig: {},                             // ใช้ค่าเริ่มต้นในเครื่องแทน
+  };
+}
+
 // ── อ่านข้อมูลทั้งหมดครั้งเดียว ──────────────────────────────────────────────
 export async function bootstrap(): Promise<BootstrapData> {
+  if (isTransporterMode()) return bootstrapTransporter();
   const c = sb();
   const [fk, sl, ins, cfg] = await Promise.all([
     c.from("forklifts").select("*").limit(5000),
@@ -50,7 +73,20 @@ export async function bootstrap(): Promise<BootstrapData> {
 // ── Forklift ────────────────────────────────────────────────────────────────
 export const addForkliftApi    = async (f: Forklift) => { const { error } = await sb().from("forklifts").upsert(f); if (error) throw error; return { id: f.id }; };
 // ใช้ update ตรง (ไม่ใช่ upsert) — ใต้ RLS เซลล์/ผู้ขนส่งมีสิทธิ์แค่ UPDATE ไม่มี INSERT
-export const updateForkliftApi = async (f: Forklift) => { const { id, ...rest } = f; const { error } = await sb().from("forklifts").update(rest).eq("id", id); if (error) throw error; };
+export const updateForkliftApi = async (f: Forklift) => {
+  // โหมดผู้ขนส่ง → แก้ได้เฉพาะ SN / PI / วันรับ / สถานะ ผ่าน RPC
+  if (isTransporterMode()) {
+    const { error } = await sb().rpc("transporter_set_forklift", {
+      p_id: f.id, p_sn: f.SN ?? "", p_pi_no: f.pi_no ?? "",
+      p_received_date: f.received_date ?? "", p_status: f.status ?? "",
+    });
+    if (error) throw error;
+    return;
+  }
+  const { id, ...rest } = f;
+  const { error } = await sb().from("forklifts").update(rest).eq("id", id);
+  if (error) throw error;
+};
 export const deleteForkliftApi = async (id: string)  => { const { error } = await sb().from("forklifts").delete().eq("id", id); if (error) throw error; };
 
 // ── Sale ──────────────────────────────────────────────────────────────────--
@@ -89,6 +125,21 @@ export const bulkUpsertInspectionsApi = (rows: InspectionRecord[]) => bulkUpsert
 
 // ── Inspection (soft delete = ตั้ง deleted_at) ─────────────────────────────--
 export const addInspectionApi = async (r: InspectionRecord) => {
+  // โหมดผู้ขนส่ง → เขียนผ่าน RPC (ไม่มี session จึงแตะตารางตรงไม่ได้)
+  if (isTransporterMode()) {
+    const common = {
+      p_ins_id: r.id, p_unit_no: r.unit_no, p_name: r.transporter_name,
+      p_phone: r.transporter_phone ?? "", p_date: r.date, p_images: r.images ?? [],
+    };
+    const { error } = r.role === "ผู้ส่งมอบรถ"
+      ? await sb().rpc("transporter_deliver", {
+          ...common, p_company: r.delivery_company ?? "", p_location: r.location_link ?? "" })
+      : await sb().rpc("transporter_receive", {
+          ...common, p_image_slots: r.image_slots ?? {},
+          p_forklift_id: "", p_sn: "", p_pi_no: "", p_received_date: "" });
+    if (error) throw error;
+    return { id: r.id };
+  }
   const { error } = await sb().from("inspections").upsert({ ...r, deleted_at: null });
   if (error) {
     // ยังไม่ได้รัน migration (ขาดคอลัมน์ image_slots / delivery_company / location_link)
@@ -100,7 +151,18 @@ export const addInspectionApi = async (r: InspectionRecord) => {
   }
   return { id: r.id };
 };
-export const deleteInspectionApi  = async (id: string) => { const { error } = await sb().from("inspections").update({ deleted_at: new Date().toISOString() }).eq("id", id); if (error) throw error; };
+export const deleteInspectionApi  = async (id: string) => {
+  // โหมดผู้ขนส่ง → ลบได้เฉพาะรายการที่ตัวเองบันทึก (RPC เช็คชื่อให้)
+  if (isTransporterMode()) {
+    const { error } = await sb().rpc("transporter_delete_inspection", {
+      p_id: id, p_name: localStorage.getItem("transporter_name") ?? "",
+    });
+    if (error) throw error;
+    return;
+  }
+  const { error } = await sb().from("inspections").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+  if (error) throw error;
+};
 export const restoreInspectionApi = async (id: string) => { const { error } = await sb().from("inspections").update({ deleted_at: null }).eq("id", id); if (error) throw error; };
 export const purgeInspectionApi   = async (id: string) => { const { error } = await sb().from("inspections").delete().eq("id", id); if (error) throw error; };
 

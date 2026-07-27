@@ -47,8 +47,14 @@ backup-sales-2026-07-19.json
 backup-inspections-2026-07-19.json
 
 # ⚠️ ข้อมูลลูกค้า / ราคาทุน — repo นี้เป็น public ห้ามหลุดขึ้น GitHub เด็ดขาด
+# กันทั้งโฟลเดอร์ data/ ไว้ก่อน (มีเอกสารใบกำกับภาษี บิลเงินสด รายงานภาษีขาย)
+# ยกเว้น formOptions.json ที่แอปใช้จริงและไม่มีข้อมูลลูกค้า
+data/*
+!data/formOptions.json
 *.xlsx
 *.xls
+*.pdf
+*.csv
 local-data/
 DATA-SYNC-PLAN.md
 sync-rules.md
