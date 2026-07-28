@@ -768,7 +768,7 @@ export default function SalesMain() {
                     );
                   })()}
                   <div className="border-t border-slate-100 pt-3">
-                    <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-2.5"><p className="text-xs text-indigo-500 font-medium">ราคาสต็อก</p><p className="font-bold text-indigo-700 text-sm">฿{fmt(item.stock_price)}</p></div>
+                    <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-2.5"><p className="text-xs text-indigo-500 font-medium">ราคาต้นทุน</p><p className="font-bold text-indigo-700 text-sm">฿{fmt(item.cost_price)}</p></div>
                   </div>
                   <button className="w-full bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600 text-white text-sm font-bold py-2.5 rounded-xl transition-all active:scale-[0.97] flex items-center justify-center gap-1.5 shadow-sm">
                     ปิดการขาย <ChevronRight className="w-4 h-4" />
@@ -802,8 +802,8 @@ export default function SalesMain() {
                 <div className="flex flex-col gap-4">
                   {/* Stock price only */}
                   <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3">
-                    <p className="text-xs text-indigo-500 font-medium">ราคาสต็อก</p>
-                    <p className="font-bold text-indigo-700">฿{fmt(selected.stock_price)}</p>
+                    <p className="text-xs text-indigo-500 font-medium">ราคาต้นทุน</p>
+                    <p className="font-bold text-indigo-700">฿{fmt(selected.cost_price)}</p>
                   </div>
 
                   {/* ข้อมูลรถจากสต็อก (ดึงอัตโนมัติ ไม่ต้องกรอก) */}
