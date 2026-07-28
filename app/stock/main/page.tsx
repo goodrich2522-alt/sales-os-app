@@ -264,6 +264,36 @@ export default function StockMain() {
   const mastOpts  = [...new Set(forklifts.filter(f => (listBrand === "all" || (f.brand || "(ไม่ระบุ)") === listBrand) && (listModel === "all" || f.model === listModel)).map(mastOf).filter(Boolean))].sort();
   const fuelOpts  = [...new Set(forklifts.map(f => f.fuel).filter(Boolean))].sort();
 
+  // ส่งออกรายการสินค้าเป็น Excel (.xlsx) — ตามที่กรองอยู่ (ถ้าไม่กรองก็ทั้งหมด) เรียงตามที่แสดง
+  const exportProductsExcel = async () => {
+    if (listFiltered.length === 0) return;
+    const XLSX = await import("xlsx");
+    const rows = listFiltered.map(f => ({
+      "รหัส (SN)": f.id ?? "",
+      "SN": f.SN ?? "",
+      "ยี่ห้อ": f.brand || "(ไม่ระบุ)",
+      "รุ่น": f.model ?? "",
+      "ชนิด": f.vehicle_category ?? "Forklift",
+      "PI": f.pi_no ?? "",
+      "พิกัดยก": f.capacity || (f.capacity_kg ? `${f.capacity_kg} kg` : ""),
+      "เสา (MAST)": mastOf(f),
+      "พลังงาน": f.fuel ?? "",
+      "ความสูง": f.height ?? "",
+      "สถานะ": String(f.status ?? ""),
+      "ราคาต้นทุน": Number(f.cost_price) || 0,
+      "วันรับรถ": f.received_date ?? "",
+      "โลเคชั่น": f.location ?? "",
+      "เซลล์ดูแล": saleOwnerByFk.get(f.id) || (f.custom_fields?.["เซลล์ผู้ดูแล"] as string) || "",
+      "วันเติมเข้าระบบ": String(f.created_at ?? "").slice(0, 10),
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [16, 14, 12, 18, 14, 10, 12, 10, 10, 10, 14, 12, 12, 12, 16, 12].map(w => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "รายการสินค้า");
+    const stamp = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `รายการสินค้า_${stamp}.xlsx`);
+  };
+
   const catCount = (c: string) => c === "all" ? forklifts.length : forklifts.filter(f => (f.vehicle_category ?? "Forklift") === c).length;
   // ยี่ห้อที่มีจริงในสต็อก (เรียงตามจำนวนมาก→น้อย) — ทำเป็นแท็กกรอง
   const brandList = useMemo(() => {
@@ -426,7 +456,7 @@ export default function StockMain() {
       <section id="stock-list" className="max-w-4xl mx-auto w-full px-4 pb-10">
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col">
             <div className="px-5 py-4 border-b border-slate-100 flex-shrink-0 flex flex-col gap-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <div>
                   <h3 className="text-base font-bold text-slate-800">รายการสต็อก</h3>
                   <p className="text-xs text-slate-500 mt-0.5">
@@ -435,6 +465,10 @@ export default function StockMain() {
                       : `แสดง ${listFiltered.length} จาก ${forklifts.length} คัน`}
                   </p>
                 </div>
+                <button onClick={exportProductsExcel} disabled={listFiltered.length === 0}
+                  className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg px-3 py-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
+                  <Download className="w-4 h-4" /><span className="hidden sm:inline">Export Excel</span>
+                </button>
               </div>
               {/* ค้นหา */}
               <input value={listSearch} onChange={e => setListSearch(e.target.value)}
