@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useState, useEffect, useMemo } from "react";
 import {
   ArrowLeft, TrendingUp, Package, Users, BarChart3, DollarSign, Award,
-  ChevronRight, User, Lock, Eye, EyeOff, X, Calendar, MapPin,
+  ChevronRight, User, X, Calendar, MapPin, Clock,
 } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
 import { getRegion } from "@/lib/mockData";
-import { buildStaffMonthly, buildStaffWeekly, buildAllMonthlyWeekly, MONTH_LABELS } from "@/components/charts/Charts";
+import { buildStaffMonthly, buildStaffWeekly, buildAllMonthlyWeekly } from "@/components/charts/Charts";
 import { CONTACT_SOURCE_COLORS } from "@/lib/constants";
 import { Sale } from "@/lib/types";
 import GoogleLoginButton, { type GoogleUser } from "@/components/GoogleLoginButton";
@@ -156,6 +156,23 @@ export default function Dashboard() {
       .slice(0, 6)
       .map(([model, count]) => ({ model, count, pct: Math.round((count / total) * 100) }));
   }, [sales, fkMeta]);
+
+  // ── FIFO เฟส 5: สุขภาพสต็อก (อายุค้าง) — จากรถ "พร้อมขาย" ปัจจุบัน (ไม่ขึ้นกับตัวกรองปี) ──
+  const agingMetrics = useMemo(() => {
+    const ready = forklifts.filter((f) => String(f.status).trim() === "พร้อมขาย");
+    const rows = ready.map((f) => {
+      const d = String(f.received_date || "").slice(0, 10);
+      const days = /^\d{4}-\d{2}-\d{2}$/.test(d) ? Math.max(0, Math.floor((Date.now() - new Date(d + "T00:00:00").getTime()) / 86400000)) : null;
+      return { cost: Number(f.cost_price) || 0, days };
+    });
+    const dated = rows.filter((r) => r.days != null);
+    const avg = dated.length ? Math.round(dated.reduce((s, r) => s + (r.days ?? 0), 0) / dated.length) : 0;
+    const over90 = rows.filter((r) => (r.days ?? 0) > 90);
+    const over180 = rows.filter((r) => (r.days ?? 0) > 180);
+    const stuckCost = over90.reduce((s, r) => s + r.cost, 0);
+    return { readyCount: ready.length, avg, over90: over90.length, over180: over180.length,
+      pctOver90: ready.length ? Math.round((over90.length / ready.length) * 100) : 0, stuckCost };
+  }, [forklifts]);
 
   const contactSourceData = useMemo(() => {
     const ALL_SOURCES = ["Line", "Facebook", "TikTok", "โทร", "Google", "คนอื่นบอกต่อ"];
@@ -521,6 +538,30 @@ export default function Dashboard() {
                 <span className="text-xs text-slate-500">รวมทั้งหมด</span>
                 <span className="text-sm font-bold text-slate-700">{sales.length} คัน</span>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Row FIFO: สุขภาพสต็อก / อายุค้าง (FIFO) */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+          <SectionHeader icon={<Clock className="w-4 h-4 text-amber-500" />} title="สุขภาพสต็อก (FIFO)" sub="อายุค้างสต็อกของรถพร้อมขาย — ยิ่งค้างนาน ต้นทุนยิ่งจม" iconBg="bg-amber-50" />
+          <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
+              <p className="text-xs text-slate-500 font-medium">พร้อมขายทั้งหมด</p>
+              <p className="text-2xl font-bold text-slate-800 mt-1">{agingMetrics.readyCount} <span className="text-sm font-semibold text-slate-400">คัน</span></p>
+            </div>
+            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
+              <p className="text-xs text-indigo-500 font-medium">อายุสต็อกเฉลี่ย</p>
+              <p className="text-2xl font-bold text-indigo-700 mt-1">{agingMetrics.avg} <span className="text-sm font-semibold text-indigo-400">วัน</span></p>
+            </div>
+            <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+              <p className="text-xs text-amber-600 font-medium">ค้าง &gt; 90 วัน</p>
+              <p className="text-2xl font-bold text-amber-700 mt-1">{agingMetrics.over90} <span className="text-sm font-semibold text-amber-500">คัน · {agingMetrics.pctOver90}%</span></p>
+              <p className="text-[11px] text-red-500 mt-0.5">ในนั้นค้าง &gt; 180 วัน: {agingMetrics.over180} คัน</p>
+            </div>
+            <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4">
+              <p className="text-xs text-rose-500 font-medium">ต้นทุนจม (ค้าง &gt; 90 วัน)</p>
+              <p className="text-2xl font-bold text-rose-700 mt-1">฿{fmtM(agingMetrics.stuckCost)}</p>
             </div>
           </div>
         </div>
