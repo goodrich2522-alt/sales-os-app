@@ -15,8 +15,9 @@ export default function TransporterLogin() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [plate, setPlate] = useState("");
   const [error, setError] = useState("");
-  const [savedProfile, setSavedProfile] = useState<{ name: string; phone: string } | null>(null);
+  const [savedProfile, setSavedProfile] = useState<{ name: string; phone: string; plate?: string } | null>(null);
 
   // จำ session ไว้แล้ว → เข้าหน้าหลักเลย · ยังไม่ล็อกอิน → เติมชื่อ/เบอร์ที่เคยใช้ล่าสุดให้อัตโนมัติ
   useEffect(() => {
@@ -25,20 +26,21 @@ export default function TransporterLogin() {
     try {
       const raw = localStorage.getItem(PROFILE_KEY);
       if (raw) {
-        const p = JSON.parse(raw) as { name?: string; phone?: string };
+        const p = JSON.parse(raw) as { name?: string; phone?: string; plate?: string };
         if (p?.name && p?.phone) {
-          setSavedProfile({ name: p.name, phone: p.phone });
-          setName(p.name); setPhone(p.phone); // เติมให้ในฟอร์มด้วย เผื่ออยากแก้
+          setSavedProfile({ name: p.name, phone: p.phone, plate: p.plate });
+          setName(p.name); setPhone(p.phone); setPlate(p.plate ?? ""); // เติมให้ในฟอร์มด้วย เผื่ออยากแก้
         }
       }
     } catch { /* โปรไฟล์เสีย — ข้ามไป */ }
   }, [router]);
 
   // เข้าใช้งาน + จำโปรไฟล์ไว้ให้ครั้งหน้าไม่ต้องกรอกใหม่
-  const enter = (n: string, digits: string) => {
+  const enter = (n: string, digits: string, plt: string) => {
     localStorage.setItem("transporter_name", n);
     localStorage.setItem("transporter_phone", digits);
-    localStorage.setItem(PROFILE_KEY, JSON.stringify({ name: n, phone: digits }));
+    localStorage.setItem("transporter_plate", plt);
+    localStorage.setItem(PROFILE_KEY, JSON.stringify({ name: n, phone: digits, plate: plt }));
     router.push("/transporter/main");
   };
 
@@ -46,12 +48,14 @@ export default function TransporterLogin() {
     e.preventDefault();
     const n = name.trim();
     const p = phone.trim();
+    const pl = plate.trim();
     if (!n) { setError("กรุณากรอกชื่อเล่น"); return; }
     // เบอร์โทร: ตัวเลข 9–10 หลัก (อนุญาตเว้นวรรค/ขีดตอนพิมพ์ แต่เก็บเฉพาะตัวเลข)
     const digits = p.replace(/[^0-9]/g, "");
     if (!p) { setError("กรุณากรอกเบอร์โทร"); return; }
     if (digits.length < 9 || digits.length > 10) { setError("เบอร์โทรไม่ถูกต้อง (ต้องมี 9–10 หลัก)"); return; }
-    enter(n, digits);
+    if (!pl) { setError("กรุณากรอกป้ายทะเบียนรถที่ขับ"); return; }
+    enter(n, digits, pl);
   };
 
   return (
@@ -77,13 +81,13 @@ export default function TransporterLogin() {
             {/* เข้าใช้งานต่อด้วยชื่อล่าสุด — แตะปุ่มเดียว ไม่ต้องกรอกใหม่ */}
             {savedProfile && (
               <div className="mb-5">
-                <button onClick={() => enter(savedProfile.name, savedProfile.phone)}
+                <button onClick={() => plate.trim() ? enter(savedProfile.name, savedProfile.phone, plate.trim()) : setError("กรอกป้ายทะเบียนรถที่ขับด้านล่างก่อน")}
                   className="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white font-bold py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] shadow-sm hover:shadow-md flex items-center justify-center gap-2.5 text-sm">
                   <UserCheck className="w-5 h-5" />
                   <span>เข้าใช้งานต่อในชื่อ <b>{savedProfile.name}</b></span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
-                <p className="text-center text-[11px] text-slate-400 mt-2">☎ {savedProfile.phone} · หรือแก้ชื่อ/เบอร์ด้านล่างถ้าเปลี่ยนคน</p>
+                <p className="text-center text-[11px] text-slate-400 mt-2">☎ {savedProfile.phone}{savedProfile.plate ? ` · 🚚 ${savedProfile.plate}` : ""} · แก้ด้านล่างถ้าเปลี่ยนคน/รถ</p>
                 <div className="flex items-center gap-3 my-4">
                   <div className="flex-1 h-px bg-slate-100" /><span className="text-xs text-slate-400">หรือ</span><div className="flex-1 h-px bg-slate-100" />
                 </div>
@@ -108,6 +112,16 @@ export default function TransporterLogin() {
                   <input value={phone} onChange={(e) => { setPhone(e.target.value); setError(""); }}
                     type="tel" inputMode="numeric"
                     placeholder="เช่น 0812345678"
+                    className="w-full pl-10 pr-4 py-3 border border-slate-200 hover:border-slate-300 rounded-xl text-slate-800 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-transparent bg-white transition-all" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">ป้ายทะเบียนรถที่ขับ <span className="text-red-500">*</span></label>
+                <div className="relative">
+                  <Truck className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input value={plate} onChange={(e) => { setPlate(e.target.value); setError(""); }}
+                    placeholder="เช่น 1กข 1234 นนทบุรี"
                     className="w-full pl-10 pr-4 py-3 border border-slate-200 hover:border-slate-300 rounded-xl text-slate-800 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-transparent bg-white transition-all" />
                 </div>
               </div>
