@@ -94,6 +94,7 @@ export default function StockMain() {
   const [histStaff, setHistStaff]         = useState("all"); // กรองรายเซลล์
   const [histStatus, setHistStatus]       = useState("all");
   const [histSearch, setHistSearch]       = useState("");
+  const [histView, setHistView]           = useState<"deals" | "summary">("deals"); // รายดีล / สรุปรายเซลล์
   const [histDetail, setHistDetail]       = useState<Sale | null>(null); // ดีลที่กางดูรายละเอียด
   const [histEdit, setHistEdit]           = useState<{ sale_status: string; delivery_date: string; remark: string; eta: string } | null>(null); // eta = วันคาดรับรถสั่งผลิต
 
@@ -402,10 +403,36 @@ export default function StockMain() {
       .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || ""))); // ล่าสุดบน
   }, [sales, histStaff, histStatus, histSearch]);
 
+  // สรุปยอดรายเซลล์ (จากดีลที่กรองอยู่) — จำนวนดีล/ยอดขาย/ปิดได้/ค้าง
+  const staffSummary = useMemo(() => {
+    const m = new Map<string, { staff: string; deals: number; revenue: number; closed: number; pending: number }>();
+    histFiltered.forEach(s => {
+      const staff = s.sales_staff || "ไม่ระบุ";
+      const g = m.get(staff) ?? { staff, deals: 0, revenue: 0, closed: 0, pending: 0 };
+      g.deals++;
+      g.revenue += Number(s.actual_sale) || 0;
+      const st = s.sale_status ?? "ขายแล้ว";
+      if (st === "ปิดการขาย/จัดส่งแล้ว" || st === "ขายแล้ว") g.closed++; else g.pending++;
+      m.set(staff, g);
+    });
+    return [...m.values()].sort((a, b) => b.revenue - a.revenue);
+  }, [histFiltered]);
+
   // Export ประวัติการขายเป็น Excel (ตามที่กรองอยู่ — ทั้งหมด/รายเซลล์)
   const exportSaleHistory = async () => {
     if (histFiltered.length === 0) return;
     const XLSX = await import("xlsx");
+    if (histView === "summary") {
+      const srows = staffSummary.map(g => ({
+        "เซลล์": g.staff, "จำนวนดีล": g.deals, "ยอดขายรวม": g.revenue, "ปิดการขายได้": g.closed, "กำลังดำเนินการ": g.pending,
+      }));
+      const sws = XLSX.utils.json_to_sheet(srows);
+      sws["!cols"] = [16, 10, 14, 12, 14].map(w => ({ wch: w }));
+      const swb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(swb, sws, "สรุปรายเซลล์");
+      XLSX.writeFile(swb, `สรุปยอดขายรายเซลล์_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      return;
+    }
     const rows = histFiltered.map(s => ({
       "วันที่": s.created_at ?? "", "สถานะ": s.sale_status ?? "ขายแล้ว", "เซลล์": s.sales_staff ?? "",
       "SN": s.forklift_unit_no ?? "", "ยี่ห้อ/รุ่น": `${s.forklift_brand ?? ""} ${s.forklift_model ?? ""}`.trim(),
@@ -966,7 +993,50 @@ export default function StockMain() {
                 <option value="all">ทุกสถานะ</option>
                 {Object.keys(SALE_STATUS_BADGE).map(s => <option key={s} value={s}>{s}</option>)}
               </select>
+              <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold">
+                <button onClick={() => setHistView("deals")} className={`px-3 py-1.5 transition ${histView === "deals" ? "bg-indigo-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>📋 รายดีล</button>
+                <button onClick={() => setHistView("summary")} className={`px-3 py-1.5 transition ${histView === "summary" ? "bg-indigo-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>📊 สรุปรายเซลล์</button>
+              </div>
             </div>
+
+            {/* มุมมองสรุปรายเซลล์ */}
+            {histView === "summary" && (
+              <div className="overflow-y-auto flex-1 min-h-0 p-3">
+                {staffSummary.length === 0 ? (
+                  <div className="text-center py-16 text-slate-400 text-sm">ไม่มีข้อมูล</div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                        {["เซลล์", "ดีล", "ยอดขายรวม", "ปิดได้", "ค้าง"].map((h, i) => <th key={i} className={`px-3 py-2 font-semibold ${i >= 1 ? "text-right" : ""}`}>{h}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {staffSummary.map((g, i) => (
+                        <tr key={g.staff} className="border-b border-slate-50">
+                          <td className="px-3 py-2.5"><span className="text-xs font-bold text-slate-400 mr-1.5">{i + 1}</span><span className="font-semibold text-slate-800">{g.staff}</span></td>
+                          <td className="px-3 py-2.5 text-right text-slate-700 font-semibold">{g.deals}</td>
+                          <td className="px-3 py-2.5 text-right font-bold text-indigo-700">฿{g.revenue.toLocaleString("th-TH")}</td>
+                          <td className="px-3 py-2.5 text-right text-emerald-600 font-semibold">{g.closed}</td>
+                          <td className="px-3 py-2.5 text-right text-amber-600 font-semibold">{g.pending}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-indigo-50 border-t border-indigo-100 font-bold text-indigo-800">
+                        <td className="px-3 py-2.5">รวม {staffSummary.length} คน</td>
+                        <td className="px-3 py-2.5 text-right">{staffSummary.reduce((a, g) => a + g.deals, 0)}</td>
+                        <td className="px-3 py-2.5 text-right">฿{staffSummary.reduce((a, g) => a + g.revenue, 0).toLocaleString("th-TH")}</td>
+                        <td className="px-3 py-2.5 text-right">{staffSummary.reduce((a, g) => a + g.closed, 0)}</td>
+                        <td className="px-3 py-2.5 text-right">{staffSummary.reduce((a, g) => a + g.pending, 0)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {histView === "deals" && (
             <div className="overflow-y-auto flex-1 min-h-0 p-3 flex flex-col gap-2">
               {histFiltered.length === 0 ? (
                 <div className="text-center py-16 text-slate-400 text-sm">ไม่พบดีลตามเงื่อนไข</div>
@@ -989,6 +1059,7 @@ export default function StockMain() {
                 </button>
               ))}
             </div>
+            )}
           </div>
 
           {/* รายละเอียดดีล + แก้ไข (ฝ่ายสต็อก) */}
