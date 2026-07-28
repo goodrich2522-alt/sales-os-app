@@ -8,6 +8,7 @@ import {
   Package, Trash2, History, RotateCcw, Pencil, Check, Camera,
   SlidersHorizontal, ImageOff, ZoomIn, ChevronLeft, Plus, ClipboardList,
   Settings, ChevronDown, Type, ListOrdered, ArrowLeft, Bell, Eye, ChevronUp, RefreshCw,
+  LayoutGrid, Table as TableIcon,
 } from "lucide-react";
 import { PROVINCES, CONTACT_SOURCES } from "@/lib/mockData";
 import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, ContactSource, SaleType, InspectionRecord, SLOT_LABELS } from "@/lib/types";
@@ -96,6 +97,7 @@ export default function SalesMain() {
   const handleRefresh = async () => { setRefreshing(true); await refresh(); setTimeout(() => setRefreshing(false), 400); };
   const [search, setSearch]       = useState("");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest"); // เรียงตามวันที่เข้าสต็อก
+  const [viewMode, setViewMode]   = useState<"card" | "table">("card");      // มุมมองสินค้า: การ์ด/ตาราง
   const [selected, setSelected]   = useState<Forklift | null>(null);
   const [editingSale, setEditingSale] = useState<Sale | null>(null); // ไม่ null = กำลังแก้ไขดีลเดิม
   const [form, setForm]           = useState(emptyCheckout);
@@ -411,6 +413,13 @@ export default function SalesMain() {
     setNewNotifLabel(""); setNewNotifDate(""); setPaymentProof("");
   };
 
+  // เปิดฟอร์มปิดการขายของรถคันหนึ่ง (ใช้ร่วมทั้งมุมมองการ์ดและตาราง)
+  const openCheckout = (item: Forklift) => {
+    setSelected(item); setForm(emptyCheckout); setErrors({}); setSubmitted(false);
+    setLightboxIdx(null); setSaleCustomVals({}); setVehicleType(item.vehicle_category ?? "Forklift");
+    setCustomNotifItems([]); setShowCustomNotifs(false); setNewNotifLabel(""); setNewNotifDate("");
+  };
+
   const handleSell = (e: React.FormEvent) => {
     e.preventDefault();
     const errs = validate();
@@ -708,15 +717,66 @@ export default function SalesMain() {
           </div>
         )}
 
-        {/* Product Grid */}
+        {/* แถบสลับมุมมอง + จำนวนที่แสดง */}
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-slate-500">แสดง <span className="font-bold text-slate-700">{sorted.length}</span> คัน</p>
+          <div className="flex rounded-xl border border-slate-200 overflow-hidden text-sm font-semibold bg-white">
+            <button onClick={() => setViewMode("card")}
+              className={`px-3 py-1.5 flex items-center gap-1.5 transition ${viewMode === "card" ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>
+              <LayoutGrid className="w-4 h-4" />การ์ด
+            </button>
+            <button onClick={() => setViewMode("table")}
+              className={`px-3 py-1.5 flex items-center gap-1.5 transition ${viewMode === "table" ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>
+              <TableIcon className="w-4 h-4" />ตาราง
+            </button>
+          </div>
+        </div>
+
+        {sorted.length === 0 && (
+          <div className="text-center py-16 text-slate-400 bg-white rounded-2xl border border-slate-100">
+            <Filter className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+            <p className="font-semibold text-slate-500">ไม่มีสินค้าในระบบ</p>
+            <p className="text-sm mt-1">{hasFilter ? "ลองเปลี่ยนตัวกรองการค้นหา" : "ยังไม่มีรถพร้อมขายในสต็อก"}</p>
+          </div>
+        )}
+
+        {/* ── มุมมองตาราง ── */}
+        {viewMode === "table" && sorted.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                  {["รหัส", "ยี่ห้อ/รุ่น", "SN", "พิกัด", "พลังงาน", "สถานะ", "ราคาต้นทุน", ""].map((h) => (
+                    <th key={h} className="px-3 py-2.5 font-semibold whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((item) => (
+                  <tr key={item.id} onClick={() => openCheckout(item)}
+                    className="border-b border-slate-50 hover:bg-indigo-50/40 cursor-pointer transition-colors">
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-500 bg-slate-100 border border-slate-200"}`}>#{item.id}</span>
+                    </td>
+                    <td className="px-3 py-2.5"><span className="font-semibold text-slate-800">{item.brand}</span> <span className="text-slate-500">{item.model}</span></td>
+                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{item.SN || "—"}</td>
+                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{item.capacity || (item.capacity_kg ? `${item.capacity_kg} kg` : "—")}</td>
+                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{item.fuel || "—"}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap"><span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${STATUS_BADGE[item.status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>{item.status}</span></td>
+                    <td className="px-3 py-2.5 font-bold text-indigo-700 whitespace-nowrap">฿{fmt(item.cost_price)}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1 text-indigo-600 font-semibold text-xs">ปิดการขาย<ChevronRight className="w-3.5 h-3.5" /></span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* ── มุมมองการ์ด ── */}
+        {viewMode === "card" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {sorted.length === 0 && (
-            <div className="col-span-full text-center py-16 text-slate-400 bg-white rounded-2xl border border-slate-100">
-              <Filter className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-              <p className="font-semibold text-slate-500">ไม่มีสินค้าในระบบ</p>
-              <p className="text-sm mt-1">{hasFilter ? "ลองเปลี่ยนตัวกรองการค้นหา" : "ยังไม่มีรถพร้อมขายในสต็อก"}</p>
-            </div>
-          )}
           {sorted.map(item => {
             const recs = inspections.filter(r => r.unit_no === item.SN);
             const photos = recs.flatMap(r => r.images);
@@ -724,7 +784,7 @@ export default function SalesMain() {
             const coverPhoto = recs.map(r => r.image_slots?.front).find(Boolean) || photos[0] || null;
             return (
               <div key={item.id}
-                onClick={() => { setSelected(item); setForm(emptyCheckout); setErrors({}); setSubmitted(false); setLightboxIdx(null); setSaleCustomVals({}); setVehicleType(item.vehicle_category ?? "Forklift"); setCustomNotifItems([]); setShowCustomNotifs(false); setNewNotifLabel(""); setNewNotifDate(""); }}
+                onClick={() => openCheckout(item)}
                 className="bg-white rounded-2xl shadow-sm hover:shadow-lg border border-slate-100 hover:border-indigo-200 transition-all cursor-pointer group overflow-hidden">
                 <div className="h-1 bg-gradient-to-r from-indigo-400 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 {/* รูปหน้ารถ (ถ้ามี) — ทำให้เซลล์เห็นรถได้ทันที */}
@@ -778,6 +838,7 @@ export default function SalesMain() {
             );
           })}
         </div>
+        )}
       </main>
 
       {/* ── Checkout Modal ── */}
