@@ -16,6 +16,7 @@ import { Lightbox } from "@/components/ui/Lightbox";
 import { Chip } from "@/components/ui/Chip";
 import { StatusBadge } from "@/components/ui/Badge";
 import { VEHICLE_CATS, CatFilter } from "@/lib/constants";
+import { QuoteImport } from "@/components/QuoteImport";
 import { parseForkliftCsv, assignIdsAndStamp, buildCsvTemplate } from "@/lib/forkliftCsv";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { apiEnabled } from "@/lib/api";
@@ -109,6 +110,7 @@ export default function StockMain() {
   const [bulkCount, setBulkCount]   = useState("");   // จำนวนรถในล็อต
   const [bulkDone, setBulkDone]     = useState(0);     // จำนวนที่เพิ่งเพิ่มแบบล็อต (โชว์ในแบนเนอร์)
   const [showList, setShowList]     = useState(false);
+  const [showImport, setShowImport] = useState(false);   // นำเข้าจากใบเสนอราคา (เฟส 4)
   const [listSearch, setListSearch] = useState("");
   const [listCat, setListCat]       = useState<CatFilter>("all");
   const [listStatus, setListStatus] = useState("all");
@@ -460,7 +462,13 @@ export default function StockMain() {
             <FileText className="w-4 h-4 text-indigo-500" />
             <h3 className="text-sm font-bold text-slate-700">เครื่องมือข้อมูล</h3>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            {/* นำเข้าจากใบเสนอราคา (อ่าน PDF อัตโนมัติ) */}
+            <button onClick={() => setShowImport(true)}
+              className="flex items-center gap-2.5 rounded-xl border border-violet-200 bg-violet-50 hover:bg-violet-100 px-3.5 py-3 text-left transition-colors">
+              <FileText className="w-5 h-5 text-violet-600 flex-shrink-0" />
+              <div className="min-w-0"><p className="text-sm font-bold text-violet-800">ใบเสนอราคา</p><p className="text-[11px] text-violet-600">อ่าน PDF อัตโนมัติ (HELI)</p></div>
+            </button>
             {/* อัปโหลดหลายคันจาก CSV */}
             <button onClick={() => csvInputRef.current?.click()} disabled={dataBusy}
               className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 px-3.5 py-3 text-left transition-colors disabled:opacity-50">
@@ -833,6 +841,8 @@ export default function StockMain() {
       </main>
 
       {/* ── Inventory List Modal ── */}
+      {showImport && <QuoteImport onClose={() => setShowImport(false)} />}
+
       {showList && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setShowList(false)}>

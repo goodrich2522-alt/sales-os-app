@@ -109,37 +109,40 @@
 ### สถาปัตยกรรม — client-side อ่าน text layer + Typhoon OCR บนเซิร์ฟเวอร์เราเอง
 
 ```
-เบราว์เซอร์ (แอป static)                     เซิร์ฟเวอร์ Typhoon OCR (ของบริษัท)
-──────────────────────                      ──────────────────────────────────
-ไฟล์เข้า → [เดาชนิด] ─┬─ text layer → pdf.js อ่านเอง (ไม่ออกนอกเครื่อง)
-                      │
-                      └─ สแกน/รูป ─── POST รูป ──→ Typhoon OCR 1.5 2B (Ollama/vLLM)
-                                                   → คืน Markdown/JSON มีโครงสร้าง
-        ← ────────────────────────────────────────────┘
-        → [normalize เบาๆ] แปลงผลเป็นรายการรถ (VLM เข้าใจตารางแล้ว งานน้อยกว่า OCR ดิบ)
+เครื่องทีม (คอมของ user เอง — ไม่มีเซิร์ฟเวอร์แยก)
+────────────────────────────────────────────────
+เบราว์เซอร์ (แอป static บน GitHub Pages)
+ไฟล์เข้า → [เดาผู้ผลิต] ─┬─ text layer (HELI/STAXX/ROCKMAN) → pdf.js อ่านในเบราว์เซอร์ 100%
+                        │                                      (ไม่ต้องพึ่งอะไรเลย)
+                        └─ สแกน (HANGCHA) → pdf.js render เป็นรูป
+                                          → Ollama บนเครื่อง user (http://localhost:11434)
+                                            typhoon-ocr1.5 → คืน Markdown
+        → [parser แยกเจ้า] แปลงเป็นรายการรถ
         → [หน้าคนตรวจ + ยืนยัน]
-        → บันทึกเข้าสต็อกตาม SN-RULES.md
+        → บันทึกเข้า Supabase ตาม SN-RULES.md
 ```
 
-### สิ่งที่ต้องเตรียมฝั่งเซิร์ฟเวอร์ (นอก repo แอป)
+### สถาปัตยกรรมจริง (ปรับ 27 ก.ค.): มีแค่ **เครื่องทีม + Supabase** ไม่มีเซิร์ฟเวอร์แยก
 
-- เซิร์ฟเวอร์ Linux ในองค์กร/cloud ที่บริษัทคุม · โมเดล `scb10x/typhoon-ocr1.5-2b` (GPU ช่วยให้เร็ว · 2B รัน CPU ได้)
-- เสิร์ฟผ่าน **Ollama** (ง่ายสุด) หรือ **vLLM** (ได้ OpenAI-compatible endpoint) · โมเดลโหลดครั้งแรกครั้งเดียว
-- แอปยิงรูป + prompt → รับ Markdown/JSON กลับ · มี auth (โทเคน) + จำกัด origin เฉพาะโดเมนแอป · เก็บ log น้อย (ไฟล์มีราคาทุน/ลูกค้า)
+- **3/4 เจ้า (HELI/STAXX/ROCKMAN) = text layer** → pdf.js อ่านในเบราว์เซอร์ล้วน ทำได้ทันทีไม่ต้องติดตั้งอะไร ✅
+- **HANGCHA (สแกน) = ทางเลือก** เมื่อจำเป็น:
+  - (ก) ติดตั้ง **Ollama บนคอมเครื่องทีม** (Windows) + โมเดล typhoon-ocr · แอปเรียก `http://localhost:11434` ตรงๆ (localhost = secure context เบราว์เซอร์ไม่บล็อก) · ตั้ง `OLLAMA_ORIGINS` ให้โดเมนแอป
+  - (ข) หรือ **กรอกมือ** (HANGCHA มาไม่บ่อย) — เร็วกว่าถ้าไม่อยากเปิด Ollama
+- ไม่ต้องมี proxy/เซิร์ฟเวอร์ Linux — `ocr-server/` ปรับเป็นคู่มือรัน Ollama บนเครื่อง user (ดู README)
 
 **⚠️ ข้อควรรู้:**
-1. **ต้องดูแลเซิร์ฟเวอร์เพิ่ม 1 ตัว** — ต่างจากส่วนอื่นที่เป็น static ล้วน · เป็นราคาของการไม่ส่งข้อมูลออก
-2. **ยังมีขั้น normalize + คนตรวจ** — VLM เข้าใจตารางแล้วแต่ไม่แม่น 100% · แต่**งาน parser เบากว่า EasyOCR มาก** เพราะ Typhoon คืนโครงสร้างมาให้แล้ว
+1. HANGCHA ต้องเปิด Ollama บนเครื่องตอนใช้ (ไม่เปิด = กรอกมือ) · ข้อมูลไม่ออกนอกเครื่องเลย
+2. งานหลักฝั่งแอปคือ **parser text layer ต่อเจ้า** (HELI ก่อน) + หน้าตรวจทาน
 
 ### รายการงาน
 
 - ☑ 4.1 (27 ก.ค.) ดูตัวอย่างจริง 4 เจ้า + จำแนกชนิดไฟล์ (3 text layer · HANGCHA สแกน)
 - ☑ 4.2 **ตั้งเซิร์ฟเวอร์ Typhoon OCR** (27 ก.ค.) — สร้างชุด deploy ที่ [`ocr-server/`](ocr-server/) : docker-compose (Ollama + proxy) · FastAPI proxy (`/ocr` รับ PDF/รูป → คืน Markdown · auth โทเคน · จำกัด origin · PDF→รูปด้วย PyMuPDF) · README คู่มือ setup ครบ · **รอทีม deploy บนเซิร์ฟเวอร์บริษัท**
-- ☐ 4.3 **ฝัง pdf.js ในแอป** — อ่าน text layer + render หน้า PDF เป็นรูปเพื่อส่ง OCR (โหลด worker แบบ dynamic)
-- ☐ 4.4 **หน้าอัปโหลด** — ลากไฟล์มาวาง · เดาชนิด (text layer/สแกน) · เดาผู้ผลิตจากคำเฉพาะ ("NINGBO STAXX"/"HELI SOUTHEAST"/"cnc-moving"/"HANGCHA")
-- ☐ 4.5 **ท่ออ่าน** — text layer → pdf.js ในเครื่อง · สแกน → ส่งรูปไป Typhoon OCR รับ Markdown/JSON
+- ☑ 4.3 **ฝัง pdf.js ในแอป** (27 ก.ค.) — `lib/quoteImport/pdfText.ts` อ่าน text layer ในเบราว์เซอร์ (lazy-load pdfjs-dist · worker ผ่าน `new URL(..., import.meta.url)` build ผ่าน static export) · `looksScanned()` เดาไฟล์สแกน
+- ☑ 4.4 **หน้าอัปโหลด** (27 ก.ค.) — `components/QuoteImport.tsx` : ลากไฟล์ PDF หลายไฟล์ · เดาผู้ผลิต (`detectVendor`) · ตารางตรวจ/แก้รายคัน · ติดธงคันที่ไม่มั่นใจ + SN ซ้ำ · บันทึกเข้าสต็อกผ่าน `addForkliftsBulk` (ปุ่มในหน้า stock "ใบเสนอราคา")
+- ☐ 4.5 **ท่ออ่าน** — ✅ text layer เสร็จ (pdf.js ในเครื่อง) · ☐ สแกน (HANGCHA) → Ollama local ยังไม่ต่อ
 - ☐ 4.6 **normalize ต่อเจ้า** `lib/quoteParser/` (เบากว่าเดิมเพราะ VLM คืนโครงสร้างแล้ว):
-  - `heli.ts` — Sales Contract 1 คัน มี SN จริง → นำเข้าพร้อม SN
+  - ☑ `heli.ts` (27 ก.ค.) — Sales Contract text layer · จับ รุ่น/SN/พิกัด(จากเลขรุ่น)/พลังงาน/MAST/Valve/ราคาทุน/PI · ทดสอบกับใบจริง CPCD35-Q22K2 ถูก 100% · รองรับหลาย SN ต่อใบ · id=SN (SN-RULES)
   - `staxx.ts` — Proforma หลายรุ่น × จำนวน → แตกเป็นรถหลายคัน ออกเลขล็อตตาม [SN-RULES.md](SN-RULES.md)
   - `rockman.ts` — จับฟิลด์รุ่น/ราคา/สเปก
   - `hangcha.ts` — รับ Markdown จาก Typhoon → จับ รุ่น/ราคา/PI/สเปก

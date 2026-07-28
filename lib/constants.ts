@@ -15,6 +15,16 @@ export const VEHICLE_CATS: { key: VehicleType; label: string; icon: string }[] =
 /** ตัวเลือกกรองชนิดรถ (รวม "all") */
 export type CatFilter = "all" | VehicleType;
 
+/** จัดชนิดรถจากรหัสรุ่น — กติกาเดียวกับที่จัดใน DB (ดู STOCK-SPEC-FIX-PLAN.md) */
+export function categorizeModel(model: string): VehicleType {
+  const m = (model || "").trim();
+  if (/^(CPCD|CPD)/i.test(m)) return "Forklift";
+  if (/^(CBD|CBS)/i.test(m)) return "Electric Pallet Truck";
+  if (/^CQD/i.test(m)) return "Reach Truck";
+  if (/^(CDD|EPS|PS|WMS|WDS|SDA|DGB|PTS|PD|BFG)/i.test(m)) return "Stacker";
+  return "Handlift"; // BF/AC/PWH/WS/CNS/WH/HLD/HLS/EHLS ...
+}
+
 // ── สีป้ายสถานะรถ (forklift.status) ─────────────────────────────────────────
 // ครอบคลุมทุกสถานะที่ใช้จริง รวมของใหม่ (สั่งผลิต/รถเช่า/เคลม/รับกลับ) ที่เดิมไม่มีสี
 export const STATUS_BADGE: Record<string, string> = {

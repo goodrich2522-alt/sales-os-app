@@ -1,0 +1,180 @@
+"use client";
+// components/QuoteImport.tsx — นำเข้ารถจากใบเสนอราคา (เฟส 4)
+// อ่าน PDF ในเบราว์เซอร์ (ไฟล์ไม่ออกนอกเครื่อง) → parse → คนตรวจ/แก้ → บันทึกเข้าสต็อก
+// รอบแรกรองรับ HELI (text layer) · เจ้าอื่นทยอยเพิ่ม
+
+import { useState } from "react";
+import { useApp } from "@/lib/AppContext";
+import { readPdfText, looksScanned, parseQuoteText, detectVendor, ParsedVehicle } from "@/lib/quoteImport";
+import { categorizeModel } from "@/lib/constants";
+import { today } from "@/lib/format";
+import { Forklift } from "@/lib/types";
+import { X, Upload, FileText, CheckCircle, AlertTriangle, Loader2, Trash2 } from "lucide-react";
+
+export function QuoteImport({ onClose }: { onClose: () => void }) {
+  const { addForkliftsBulk, forklifts } = useApp();
+  const [rows, setRows] = useState<ParsedVehicle[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [vendor, setVendor] = useState("");
+  const [notice, setNotice] = useState("");
+  const [saved, setSaved] = useState(0);
+
+  const existingIds = new Set(forklifts.map((f) => String(f.id)));
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setBusy(true); setNotice("");
+    const all: ParsedVehicle[] = [];
+    const vendors = new Set<string>();
+    for (const f of Array.from(files)) {
+      try {
+        const text = await readPdfText(f);
+        if (looksScanned(text)) {
+          const v = detectVendor(text);
+          vendors.add(v === "unknown" ? "สแกน" : v);
+          setNotice(`⚠️ "${f.name}" เป็นไฟล์สแกน (ไม่มี text layer) — ต้องใช้ OCR (ยังไม่รองรับในรอบนี้) หรือกรอกมือ`);
+          continue;
+        }
+        const res = parseQuoteText(text);
+        vendors.add(res.vendor);
+        if (res.vendor === "unknown") { setNotice(`⚠️ "${f.name}" เดาผู้ผลิตไม่ได้`); continue; }
+        if (res.vendor !== "HELI") { setNotice(`ℹ️ "${f.name}" เป็น ${res.vendor} — รอบนี้รองรับเฉพาะ HELI`); continue; }
+        all.push(...res.vehicles);
+      } catch (e) {
+        setNotice(`อ่าน "${f.name}" ไม่ได้: ${e instanceof Error ? e.message : "ผิดพลาด"}`);
+      }
+    }
+    setVendor([...vendors].join(", "));
+    setRows(all);
+    setBusy(false);
+  };
+
+  const edit = (i: number, key: keyof ParsedVehicle, val: string) =>
+    setRows((r) => r.map((v, j) => (j === i ? { ...v, [key]: val } : v)));
+  const removeRow = (i: number) => setRows((r) => r.filter((_, j) => j !== i));
+
+  const toForklift = (v: ParsedVehicle, i: number): Forklift => ({
+    id: v.SN || `${v.pi_no || "PI"}#${i + 1}`,
+    SN: v.SN || "",
+    brand: v.brand, model: v.model,
+    capacity: v.capacity || "", capacity_kg: v.capacity_kg || "",
+    height: v.height || "", fuel: v.fuel || "",
+    cost_price: v.cost_price || 0, stock_price: 0,
+    status: "รอรับ", created_at: today(),
+    vehicle_category: categorizeModel(v.model),
+    pi_no: v.pi_no,
+    custom_fields: {
+      ...(v.mast ? { MAST: v.mast } : {}),
+      ...(v.valve ? { Valve: v.valve } : {}),
+      ชีตต้นทาง: "ใบเสนอราคา",
+    },
+  } as Forklift);
+
+  const save = () => {
+    const fks = rows.map(toForklift);
+    addForkliftsBulk(fks);
+    setSaved(fks.length);
+    setTimeout(onClose, 1600);
+  };
+
+  const dupCount = rows.filter((v, i) => existingIds.has(toForklift(v, i).id)).length;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+      onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[88vh] flex flex-col shadow-2xl">
+        {/* header */}
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+          <div>
+            <h3 className="text-base font-bold text-slate-800 flex items-center gap-2"><FileText className="w-4 h-4 text-emerald-600" />นำเข้าจากใบเสนอราคา</h3>
+            <p className="text-xs text-slate-500 mt-0.5">อ่านไฟล์ในเครื่อง 100% · รอบนี้รองรับ HELI (text layer){vendor ? ` · อ่านได้: ${vendor}` : ""}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all"><X className="w-5 h-5" /></button>
+        </div>
+
+        {/* body */}
+        <div className="overflow-y-auto flex-1 min-h-0 p-5 flex flex-col gap-4">
+          {saved > 0 ? (
+            <div className="text-center py-12 text-emerald-700">
+              <CheckCircle className="w-12 h-12 mx-auto mb-3" />
+              <p className="font-bold">บันทึกเข้าสต็อกแล้ว {saved} คัน (สถานะ "รอรับ")</p>
+            </div>
+          ) : (
+            <>
+              {/* dropzone */}
+              <label className="border-2 border-dashed border-slate-300 rounded-2xl p-8 text-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/40 transition-all">
+                <input type="file" accept="application/pdf" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+                {busy ? <Loader2 className="w-8 h-8 mx-auto text-emerald-600 animate-spin" />
+                  : <Upload className="w-8 h-8 mx-auto text-slate-400" />}
+                <p className="text-sm font-semibold text-slate-600 mt-2">{busy ? "กำลังอ่าน..." : "ลากไฟล์ PDF มาวาง หรือกดเลือก"}</p>
+                <p className="text-xs text-slate-400 mt-0.5">รองรับหลายไฟล์พร้อมกัน</p>
+              </label>
+
+              {notice && <div className="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-3 py-2 flex items-start gap-1.5"><AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />{notice}</div>}
+
+              {rows.length > 0 && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-slate-700">อ่านได้ {rows.length} คัน — ตรวจ/แก้ก่อนบันทึก</p>
+                    {dupCount > 0 && <span className="text-xs text-red-600 font-semibold">⚠️ {dupCount} คัน SN ซ้ำกับที่มีในสต็อก</span>}
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs border-collapse">
+                      <thead>
+                        <tr className="text-slate-400 text-left">
+                          {["รุ่น", "SN", "พิกัด", "พลังงาน", "MAST", "Valve", "ราคาทุน", "ชนิด", ""].map((h) => <th key={h} className="px-2 py-1.5 font-semibold whitespace-nowrap">{h}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((v, i) => {
+                          const dup = existingIds.has(toForklift(v, i).id);
+                          return (
+                            <tr key={i} className={`border-t border-slate-100 ${dup ? "bg-red-50/60" : ""}`}>
+                              <Cell val={v.model} onChange={(x) => edit(i, "model", x)} w="w-32" />
+                              <Cell val={v.SN ?? ""} onChange={(x) => edit(i, "SN", x)} w="w-28" />
+                              <Cell val={v.capacity ?? ""} onChange={(x) => edit(i, "capacity", x)} w="w-16" />
+                              <Cell val={v.fuel ?? ""} onChange={(x) => edit(i, "fuel", x)} w="w-16" />
+                              <Cell val={v.mast ?? ""} onChange={(x) => edit(i, "mast", x)} w="w-16" />
+                              <Cell val={v.valve ?? ""} onChange={(x) => edit(i, "valve", x)} w="w-12" />
+                              <Cell val={v.cost_price ? String(v.cost_price) : ""} onChange={(x) => edit(i, "cost_price", x)} w="w-20" />
+                              <td className="px-2 py-1 text-slate-500 whitespace-nowrap">{categorizeModel(v.model)}</td>
+                              <td className="px-1"><button onClick={() => removeRow(i)} className="text-slate-300 hover:text-red-600 p-1"><Trash2 className="w-3.5 h-3.5" /></button></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {rows.some((v) => v.flags?.length) && (
+                    <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                      ⚠️ บางคันมีข้อมูลที่ parser ไม่มั่นใจ: {[...new Set(rows.flatMap((v) => v.flags ?? []))].join(" · ")}
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* footer */}
+        {saved === 0 && rows.length > 0 && (
+          <div className="px-6 py-3 border-t border-slate-100 flex-shrink-0 flex justify-end gap-2">
+            <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">ยกเลิก</button>
+            <button onClick={save} className="px-5 py-2 rounded-xl text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-1.5">
+              <CheckCircle className="w-4 h-4" />บันทึกเข้าสต็อก {rows.length} คัน
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Cell({ val, onChange, w }: { val: string; onChange: (v: string) => void; w: string }) {
+  return (
+    <td className="px-1 py-1">
+      <input value={val} onChange={(e) => onChange(e.target.value)}
+        className={`${w} border border-transparent hover:border-slate-200 focus:border-emerald-400 rounded px-1.5 py-1 text-xs bg-transparent focus:bg-white focus:outline-none`} />
+    </td>
+  );
+}
