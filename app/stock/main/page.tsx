@@ -95,7 +95,7 @@ export default function StockMain() {
   const [histStatus, setHistStatus]       = useState("all");
   const [histSearch, setHistSearch]       = useState("");
   const [histDetail, setHistDetail]       = useState<Sale | null>(null); // ดีลที่กางดูรายละเอียด
-  const [histEdit, setHistEdit]           = useState<{ sale_status: string; delivery_date: string; remark: string } | null>(null);
+  const [histEdit, setHistEdit]           = useState<{ sale_status: string; delivery_date: string; remark: string; eta: string } | null>(null); // eta = วันคาดรับรถสั่งผลิต
 
   // ── แจ้งเตือนเซลล์ทำรายการขาย — คงค้างจนแอดมินอ่าน + กดยืนยันตัดออกจากสต็อก (เก็บ ack ใน localStorage) ──
   type SaleAlert = { id: string; staff: string; status: string; title: string; sub: string };
@@ -411,24 +411,45 @@ export default function StockMain() {
       "SN": s.forklift_unit_no ?? "", "ยี่ห้อ/รุ่น": `${s.forklift_brand ?? ""} ${s.forklift_model ?? ""}`.trim(),
       "ลูกค้า": s.customer_name ?? "", "เบอร์โทร": s.customer_tel ?? "", "จังหวัด": s.province ?? "",
       "การชำระ": s.payment_type ?? "", "ราคาขาย": Number(s.actual_sale) || 0, "มัดจำ": Number(s.deposit) || 0,
-      "ค่าขนส่ง": Number(s.shipping_cost) || 0, "วันส่งมอบ": s.delivery_date ?? "", "หมายเหตุ": s.remark ?? "",
+      "ค่าขนส่ง": Number(s.shipping_cost) || 0, "วันส่งมอบ": s.delivery_date ?? "",
+      "รถสั่งผลิต": isPendingId(s.forklift_id) ? "ใช่" : "", "วันคาดรับ": (s.custom_fields?.["วันคาดรับรถสั่งผลิต"] as string) ?? "",
+      "หมายเหตุ": s.remark ?? "",
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws["!cols"] = [12, 16, 14, 14, 20, 18, 12, 10, 12, 12, 10, 10, 12, 20].map(w => ({ wch: w }));
+    ws["!cols"] = [12, 16, 14, 14, 20, 18, 12, 10, 12, 12, 10, 10, 12, 10, 12, 20].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "ประวัติการขาย");
     const who = histStaff === "all" ? "ทุกเซลล์" : histStaff;
     XLSX.writeFile(wb, `ประวัติการขาย_${who}_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
-  // เปิดกางรายละเอียดดีล + เตรียมช่องแก้ไข
+  // เปิดกางรายละเอียดดีล + เตรียมช่องแก้ไข (รวมวันคาดรับรถสั่งผลิต)
   const openHistDetail = (s: Sale) => {
     setHistDetail(s);
-    setHistEdit({ sale_status: s.sale_status ?? "ขายแล้ว", delivery_date: s.delivery_date ?? "", remark: s.remark ?? "" });
+    setHistEdit({
+      sale_status: s.sale_status ?? "ขายแล้ว", delivery_date: s.delivery_date ?? "", remark: s.remark ?? "",
+      eta: (s.custom_fields?.["วันคาดรับรถสั่งผลิต"] as string) ?? "",
+    });
   };
   const saveHistEdit = () => {
     if (!histDetail || !histEdit) return;
-    const u = { ...histDetail, sale_status: histEdit.sale_status as Sale["sale_status"], delivery_date: histEdit.delivery_date, remark: histEdit.remark };
+    const cf = { ...(histDetail.custom_fields ?? {}) };
+    if (histEdit.eta.trim()) cf["วันคาดรับรถสั่งผลิต"] = histEdit.eta.trim(); else delete cf["วันคาดรับรถสั่งผลิต"];
+    const u: Sale = { ...histDetail, sale_status: histEdit.sale_status as Sale["sale_status"], delivery_date: histEdit.delivery_date, remark: histEdit.remark,
+      custom_fields: Object.keys(cf).length ? cf : undefined };
     updateSale(u); setHistDetail(u);
+  };
+
+  // ── helper รถสั่งผลิต (เฟส 2) ──
+  const addDaysStr = (dateStr: string, n: number): string => {
+    const d = String(dateStr || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return "";
+    const dt = new Date(d + "T00:00:00"); dt.setDate(dt.getDate() + n);
+    return dt.toISOString().slice(0, 10);
+  };
+  const daysUntil = (dateStr: string): number | null => {
+    const d = String(dateStr || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+    return Math.round((new Date(d + "T00:00:00").getTime() - Date.now()) / 86400000);
   };
 
   // Settings — standard dropdown handlers
@@ -916,7 +937,10 @@ export default function StockMain() {
                   className="text-left bg-slate-50 border border-slate-100 rounded-xl p-3 hover:border-indigo-200 hover:bg-white transition-all">
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <span className="text-xs text-slate-400">{s.created_at}</span>
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${SALE_STATUS_BADGE[s.sale_status ?? "ขายแล้ว"] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>{s.sale_status ?? "ขายแล้ว"}</span>
+                    <div className="flex items-center gap-1.5">
+                      {isPendingId(s.forklift_id) && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200">🏭 สั่งผลิต</span>}
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${SALE_STATUS_BADGE[s.sale_status ?? "ขายแล้ว"] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>{s.sale_status ?? "ขายแล้ว"}</span>
+                    </div>
                   </div>
                   <p className="font-bold text-slate-800 text-sm">{s.forklift_brand} {s.forklift_model} <span className="text-slate-400 font-normal">· {s.forklift_unit_no}</span></p>
                   <p className="text-xs text-slate-500">{s.customer_name || "ไม่ระบุลูกค้า"}{s.province ? ` · ${s.province}` : ""}</p>
@@ -960,6 +984,30 @@ export default function StockMain() {
                       {histDetail.add_ons.map((a, i) => <p key={i} className="text-xs text-slate-700">{a.name} — ฿{Number(a.price).toLocaleString()}</p>)}
                     </div>
                   ) : null}
+                  {/* รถสั่งผลิต (เฟส 2): ETA นับจากวันสั่งผลิต (วันทำรายการ) 60-90 วัน + กรอกวันคาดจริง */}
+                  {isPendingId(histDetail.forklift_id) && (() => {
+                    const orderDate = String(histDetail.created_at || "").slice(0, 10);
+                    const eta = histEdit.eta.trim();
+                    const left = eta ? daysUntil(eta) : null;
+                    return (
+                      <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 flex flex-col gap-2">
+                        <p className="text-xs font-bold text-violet-800 flex items-center gap-1.5">🏭 รถสั่งผลิต — ติดตามการผลิต</p>
+                        <p className="text-[11px] text-violet-600">
+                          สั่งผลิตเมื่อ <b>{orderDate || "ไม่ระบุ"}</b> · คาดได้รับ (60-90 วัน): <b>{addDaysStr(orderDate, 60) || "?"}</b> ถึง <b>{addDaysStr(orderDate, 90) || "?"}</b>
+                        </p>
+                        <label className="text-xs text-violet-700">วันคาดรับจริง (กรอกเมื่อรู้กำหนดแน่)
+                          <input type="date" value={histEdit.eta} onChange={e => setHistEdit({ ...histEdit, eta: e.target.value })}
+                            className="mt-1 w-full border border-violet-200 rounded-lg px-3 py-2 text-sm text-slate-800 bg-white" />
+                        </label>
+                        {eta && left != null && (
+                          <p className={`text-xs font-bold ${left < 0 ? "text-red-600" : left <= 14 ? "text-amber-600" : "text-violet-700"}`}>
+                            {left < 0 ? `⚠️ เกินกำหนดแล้ว ${-left} วัน — ควรติดตาม` : left === 0 ? "📦 ครบกำหนดวันนี้" : `⏳ อีก ${left} วันถึงกำหนดรับ`}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   <div className="border-t border-slate-100 pt-3 flex flex-col gap-2">
                     <p className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><Pencil className="w-3.5 h-3.5" />แก้ไข (ฝ่ายสต็อก)</p>
                     <label className="text-xs text-slate-500">สถานะ
