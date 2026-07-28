@@ -90,7 +90,14 @@ export default function Dashboard() {
     allSales.forEach((s) => { const d = new Date(s.created_at); if (!isNaN(d.getTime())) ys.add(String(d.getFullYear())); });
     return [...ys].sort((a, b) => b.localeCompare(a)); // ใหม่ → เก่า
   }, [allSales]);
-  useEffect(() => { if (!dashYear && years.length) setDashYear(years[0]); }, [years, dashYear]);
+  // ค่าเริ่มต้น = ปีที่มีดีลมากสุด (กันปีล่าสุดที่มีดีลหลงมาแค่ 1-2 ดีล ทำให้แดชบอร์ดว่าง)
+  useEffect(() => {
+    if (dashYear || allSales.length === 0) return;
+    const cnt: Record<string, number> = {};
+    allSales.forEach((s) => { const d = new Date(s.created_at); if (!isNaN(d.getTime())) { const y = String(d.getFullYear()); cnt[y] = (cnt[y] ?? 0) + 1; } });
+    const top = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (top) setDashYear(top);
+  }, [allSales, dashYear]);
   const brandOptions = useMemo(() => [...new Set(allSales.map((s) => s.forklift_brand || "อื่นๆ"))].sort(), [allSales]);
   // กรองตามปี (ใช้กับกราฟสัดส่วนแบรนด์ — ให้เห็นทุกแบรนด์ในปีนั้น ไม่ถูก brand filter บีบเหลือ 1)
   const yearSales = useMemo(() => dashYear
@@ -312,7 +319,7 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-          <span className="text-xs font-medium bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full hidden sm:block">ปีงบประมาณ 2024</span>
+          {dashYear && <span className="text-xs font-medium bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full hidden sm:block">ปี {Number(dashYear) + 543}</span>}
         </div>
       </header>
 
@@ -823,7 +830,7 @@ export default function Dashboard() {
       )}
 
       <footer className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between border-t border-slate-200 mt-2">
-        <p className="text-slate-400 text-xs">SalesOS Dashboard — ข้อมูล Mock สำหรับสาธิต</p>
+        <p className="text-slate-400 text-xs">SalesOS Dashboard — ข้อมูลจริงจากระบบ</p>
         <Link href="/" className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-indigo-600 font-medium transition-colors">
           กลับหน้าหลัก <ChevronRight className="w-3.5 h-3.5" />
         </Link>
