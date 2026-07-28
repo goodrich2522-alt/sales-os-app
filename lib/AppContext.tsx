@@ -304,8 +304,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return { ...s, payment_proof: url };
     } catch (e) { console.warn("upload payment_proof", e); return s; } // อัปไม่ได้ → เก็บ base64 ไปก่อน
   };
-  const forkliftStatusForSale = (s: Sale) =>
-    s.sale_status === "จอง" ? "จอง" : s.sale_status === "รอผ่านไฟแนนซ์" ? "รอผ่านไฟแนนซ์" : "ปิดการขายแล้ว";
+  // สถานะรถตามดีล — ทั้ง 4 สถานะใหม่กันสต็อก (≠ "พร้อมขาย") · ค่าเก่า map ให้เข้ากัน
+  const forkliftStatusForSale = (s: Sale): string => {
+    const st = s.sale_status;
+    if (st === "ขายแล้ว") return "ปิดการขายแล้ว";       // เก่า
+    if (st === "จอง") return "จอง";                     // เก่า
+    if (st === "รอผ่านไฟแนนซ์") return "รอผ่านไฟแนนซ์";  // เก่า
+    return st || "ปิดการขายแล้ว";                        // ใหม่ (มัดจำ/รอจัดส่ง/รอไฟแนนซ์/ปิด-ส่งแล้ว)
+  };
 
   const addSale = useCallback((s: Sale) => {
     lastLocalEditRef.current = Date.now();

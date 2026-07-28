@@ -29,8 +29,12 @@ import AiAssistant from "@/components/AiAssistant";
 function notSellableReason(status: unknown): string | null {
   const s = (status == null ? "" : String(status)).trim();
   if (s === "") return null; // ไม่มีสถานะ = ให้โชว์ไว้ก่อน (ดีกว่าซ่อนรถจริง)
-  if (s.includes("ขายแล้ว") || s.includes("ขายเงินสด")) return "ขายแล้ว";
-  if (s.includes("ส่งมอบ")) return "ส่งมอบแล้ว";
+  // ── สถานะที่ถูกจับจอง/ขายแล้ว → กันสต็อก ไม่ให้เปิดขายซ้ำ (รวม 4 สถานะใหม่) ──
+  if (s.includes("ขายแล้ว") || s.includes("ขายเงินสด") || s.includes("ปิดการขาย")) return "ปิดการขายแล้ว";
+  if (s.includes("ส่งมอบ") || s.includes("จัดส่งแล้ว")) return "ส่งมอบแล้ว";
+  if (s.includes("รอจัดส่ง")) return "รอจัดส่ง";
+  if (s.includes("มัดจำ") || s.includes("จอง")) return "จอง/มัดจำแล้ว";
+  if (s.includes("ไฟแนนซ์")) return "รอไฟแนนซ์";
   if (s.includes("เช่า")) return "เป็นรถเช่า";
   if (s.includes("รอรับ") || s.includes("รอเข้าไปรับ")) return "ยังไม่รับรถเข้าคลัง (รอรับ)";
   return null;
@@ -59,10 +63,11 @@ const SALE_FIELD_LABELS: Record<string, string> = {
 type SaleDropdown = "saleTypes" | "paymentTypes" | "customerTypes" | "financeCompanies";
 
 const HISTORY_TABS: { key: SaleStatus | "all"; label: string }[] = [
-  { key: "all",           label: "ทั้งหมด" },
-  { key: "ขายแล้ว",       label: "ขายแล้ว" },
-  { key: "จอง",           label: "จอง" },
-  { key: "รอผ่านไฟแนนซ์", label: "รอผ่านไฟแนนซ์" },
+  { key: "all",                    label: "ทั้งหมด" },
+  { key: "มัดจำแล้ว",              label: "มัดจำแล้ว" },
+  { key: "รอจัดส่ง",               label: "รอจัดส่ง" },
+  { key: "รอไฟแนนซ์",             label: "รอไฟแนนซ์" },
+  { key: "ปิดการขาย/จัดส่งแล้ว",   label: "ปิด/ส่งแล้ว" },
 ];
 
 function daysUntil(dateStr: string): number {
@@ -433,26 +438,16 @@ export default function SalesMain() {
     setCustomNotifItems([]); setShowCustomNotifs(false); setNewNotifLabel(""); setNewNotifDate("");
   };
 
-  const handleSell = (e: React.FormEvent) => {
-    e.preventDefault();
+  // ตรวจฟอร์มแล้วบันทึกดีลด้วยสถานะที่เลือก (ใช้ร่วมทุกปุ่ม)
+  const submitSale = (status: SaleStatus) => {
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
-    commitSale("ขายแล้ว");
+    commitSale(status);
   };
-
-  const handleBook = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const errs = validate();
-    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
-    commitSale("จอง");
-  };
-
-  const handleFinance = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const errs = validate();
-    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
-    commitSale("รอผ่านไฟแนนซ์");
-  };
+  const handleSell = (e: React.FormEvent) => { e.preventDefault(); submitSale("ปิดการขาย/จัดส่งแล้ว"); };
+  const handleBook = (e: React.MouseEvent) => { e.preventDefault(); submitSale("มัดจำแล้ว"); };
+  const handleShipping = (e: React.MouseEvent) => { e.preventDefault(); submitSale("รอจัดส่ง"); };
+  const handleFinance = (e: React.MouseEvent) => { e.preventDefault(); submitSale("รอไฟแนนซ์"); };
 
   const handleUpdateTarget = () => {
     const n = Number(targetInput.replace(/,/g, ""));
@@ -1176,16 +1171,20 @@ export default function SalesMain() {
                         </p>
                       )}
                       <button type="submit" className={`w-full text-white font-bold py-3.5 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 ${editingSale ? "bg-gradient-to-r from-violet-600 to-fuchsia-700 hover:from-violet-500 hover:to-fuchsia-600" : "bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600"}`}>
-                        <CheckCircle className="w-4 h-4" />{editingSale ? "บันทึกการแก้ไข (ปิดการขาย)" : "ยืนยันการขาย (ขายแล้ว)"}
+                        <CheckCircle className="w-4 h-4" />{editingSale ? "บันทึกการแก้ไข" : "ปิดการขาย / จัดส่งแล้ว"}
                       </button>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         <button type="button" onClick={handleBook}
-                          className="w-full bg-amber-400 hover:bg-amber-500 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 text-sm">
-                          📌 {editingSale ? "บันทึกเป็น จอง" : "จอง"}
+                          className="w-full bg-amber-400 hover:bg-amber-500 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-1 text-xs">
+                          📌 มัดจำแล้ว
+                        </button>
+                        <button type="button" onClick={handleShipping}
+                          className="w-full bg-orange-400 hover:bg-orange-500 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-1 text-xs">
+                          🚚 รอจัดส่ง
                         </button>
                         <button type="button" onClick={handleFinance}
-                          className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 text-sm">
-                          🏦 {editingSale ? "บันทึกเป็น ไฟแนนซ์" : "รอผ่านไฟแนนซ์"}
+                          className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-1 text-xs">
+                          🏦 รอไฟแนนซ์
                         </button>
                       </div>
                     </div>

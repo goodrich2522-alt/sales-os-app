@@ -35,6 +35,11 @@ export const STATUS_BADGE: Record<string, string> = {
   "ติดจอง/รอส่ง":   "bg-orange-100 text-orange-700 border-orange-200",
   "รอรับ":          "bg-sky-100 text-sky-700 border-sky-200",
   "รอผ่านไฟแนนซ์":  "bg-red-100 text-red-700 border-red-200",
+  // ── 4 สถานะปิดการขายใหม่ ──
+  "มัดจำแล้ว":            "bg-amber-100 text-amber-700 border-amber-200",
+  "รอจัดส่ง":             "bg-orange-100 text-orange-700 border-orange-200",
+  "รอไฟแนนซ์":           "bg-red-100 text-red-700 border-red-200",
+  "ปิดการขาย/จัดส่งแล้ว": "bg-indigo-100 text-indigo-700 border-indigo-200",
   "สั่งผลิต":        "bg-violet-100 text-violet-700 border-violet-200",
   "รถเช่า":          "bg-teal-100 text-teal-700 border-teal-200",
   "เคลม/รับกลับ":    "bg-rose-100 text-rose-700 border-rose-200",
@@ -50,6 +55,11 @@ export const statusBadgeClass = (status: unknown): string =>
 
 // ── สีป้ายสถานะการขาย (sale.sale_status) ────────────────────────────────────
 export const SALE_STATUS_BADGE: Record<string, string> = {
+  "มัดจำแล้ว":            "bg-amber-100 text-amber-700 border-amber-200",
+  "รอจัดส่ง":             "bg-orange-100 text-orange-700 border-orange-200",
+  "รอไฟแนนซ์":           "bg-red-100 text-red-700 border-red-200",
+  "ปิดการขาย/จัดส่งแล้ว": "bg-emerald-100 text-emerald-700 border-emerald-200",
+  // เก่า
   "ขายแล้ว":        "bg-emerald-100 text-emerald-700 border-emerald-200",
   "จอง":            "bg-amber-100 text-amber-700 border-amber-200",
   "รอผ่านไฟแนนซ์":  "bg-red-100 text-red-700 border-red-200",
