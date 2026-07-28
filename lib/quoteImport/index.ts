@@ -1,6 +1,7 @@
 // lib/quoteImport/index.ts — เดาผู้ผลิตจากข้อความ แล้วส่งให้ parser ของเจ้านั้น
 
 import { parseHeli } from "./heli";
+import { parseRockman } from "./rockman";
 import { parseStaxxSerialSheet } from "./staxx";
 import { QuoteParseResult, QuoteVendor } from "./types";
 
@@ -23,7 +24,9 @@ export function parseQuoteText(text: string): QuoteParseResult {
   switch (vendor) {
     case "HELI":
       return parseHeli(text);
-    // STAXX Proforma / ROCKMAN / HANGCHA — ทำในเฟสถัดไป
+    case "ROCKMAN":
+      return parseRockman(text);
+    // STAXX Proforma (ราคา) / HANGCHA (สแกน) — ทำในเฟสถัดไป
     default:
       return { vendor, vehicles: [], rawText: text };
   }

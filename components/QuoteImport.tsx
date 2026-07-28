@@ -50,7 +50,8 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
         const res = parseQuoteText(text);
         vendors.add(res.vendor);
         if (res.vendor === "unknown") { setNotice(`⚠️ "${f.name}" เดาผู้ผลิตไม่ได้`); continue; }
-        if (res.vendor !== "HELI") { setNotice(`ℹ️ "${f.name}" เป็น ${res.vendor} — ใบ PDF รองรับเฉพาะ HELI (STAXX ใช้ไฟล์ Excel Serial List)`); continue; }
+        if (res.vendor !== "HELI" && res.vendor !== "ROCKMAN") { setNotice(`ℹ️ "${f.name}" เป็น ${res.vendor} — ใบ PDF รองรับ HELI/ROCKMAN (STAXX ใช้ไฟล์ Excel Serial List)`); continue; }
+        if (res.vehicles.length === 0) { setNotice(`⚠️ "${f.name}" (${res.vendor}) อ่านไม่พบรายการรถ — ตรวจไฟล์`); continue; }
         all.push(...res.vehicles);
       } catch (e) {
         setNotice(`อ่าน "${f.name}" ไม่ได้: ${e instanceof Error ? e.message : "ผิดพลาด"}`);
