@@ -21,6 +21,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
   const [skipped, setSkipped] = useState(0);         // จำนวนที่ข้ามเพราะ SN ซ้ำ
   const [importedIds, setImportedIds] = useState<string[]>([]); // สำหรับปุ่มยกเลิกการนำเข้า
   const [done, setDone] = useState(false);           // บันทึกเสร็จแล้ว → แสดงหน้าสรุป
+  const [receivedDate, setReceivedDate] = useState(""); // วันรับรถเข้า — ใส่ให้ทั้งล็อตตอนบันทึก
 
   const existingIds = new Set(forklifts.map((f) => String(f.id)));
 
@@ -91,6 +92,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
     height: v.height || "", fuel: v.fuel || "",
     cost_price: v.cost_price || 0, stock_price: 0,
     status: "รอรับ", created_at: today(),
+    received_date: receivedDate || undefined, // วันรับรถเข้า (ทั้งล็อต) — ถ้าไม่กรอกเว้นว่าง
     vehicle_category: categorizeModel(v.model),
     pi_no: v.pi_no,
     custom_fields: {
@@ -172,9 +174,17 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
 
               {rows.length > 0 && (
                 <>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <p className="text-sm font-semibold text-slate-700">อ่านได้ {rows.length} คัน — ตรวจ/แก้ก่อนบันทึก</p>
                     {dupCount > 0 && <span className="text-xs text-red-600 font-semibold">⚠️ {dupCount} คัน SN ซ้ำกับที่มีในสต็อก</span>}
+                  </div>
+                  {/* วันรับรถเข้า — ใส่ให้ทั้งล็อตพร้อมกัน (ไม่กรอกก็ได้ ค่อยมาเติมทีหลัง) */}
+                  <div className="flex items-center gap-2 bg-emerald-50/60 border border-emerald-100 rounded-xl px-3 py-2.5">
+                    <label className="text-sm font-semibold text-slate-700 flex items-center gap-1.5 whitespace-nowrap">📅 วันรับรถเข้า (ทั้งล็อต)</label>
+                    <input type="date" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)}
+                      className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white" />
+                    {receivedDate && <button onClick={() => setReceivedDate("")} className="text-xs text-slate-400 hover:text-red-500">ล้าง</button>}
+                    <span className="text-[11px] text-slate-400">ใส่ให้รถทุกคันในล็อตนี้</span>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs border-collapse">
