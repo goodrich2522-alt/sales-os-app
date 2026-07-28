@@ -8,13 +8,14 @@ import {
   Type, ListOrdered, ArrowLeft, Clock, Hash, Camera, ImageOff, Eye,
   Bell, Download, Upload, FileText, ShoppingCart, User
 } from "lucide-react";
-import { Forklift } from "@/lib/types";
+import { Forklift, VehicleType } from "@/lib/types";
 import { useApp, FieldConfig } from "@/lib/AppContext";
 import { buildForkliftId, isPendingId } from "@/lib/productId";
 import { thaiMonthShort } from "@/lib/format";
 import { Lightbox } from "@/components/ui/Lightbox";
 import { Chip } from "@/components/ui/Chip";
 import { StatusBadge } from "@/components/ui/Badge";
+import { VEHICLE_CATS, CatFilter } from "@/lib/constants";
 import { parseForkliftCsv, assignIdsAndStamp, buildCsvTemplate } from "@/lib/forkliftCsv";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { apiEnabled } from "@/lib/api";
@@ -40,11 +41,6 @@ const FIELD_LABELS: Record<Exclude<DropdownField, "stockStatuses">, string> = {
 };
 
 // หมวดรถ 3 ไลน์ — สเปกกรอกเหมือนกันทุกไลน์
-const VEHICLE_CATS = [
-  { key: "Forklift", label: "โฟล์คลิฟท์", icon: "🚜" },
-  { key: "Stacker",  label: "สแตกเกอร์",  icon: "📦" },
-  { key: "Handlift", label: "แฮนด์ลิฟท์", icon: "🔧" },
-] as const;
 
 // แสดงน้ำหนักยก: ≥1000 กก. โชว์เป็นตัน อ่านง่ายกว่า
 const fmtCap = (v: string) => {
@@ -79,7 +75,7 @@ const emptyForm = {
   invoice_no: "",       // 10 เลขที่ใบกำกับภาษี
   detail_note: "",      // 11 รายละเอียด (หมายเหตุ)
   // ── สเปกรถ (เซลล์กรองด้วยค่าพวกนี้) ──
-  vehicle_category: "Forklift" as "Forklift" | "Stacker" | "Handlift",
+  vehicle_category: "Forklift" as VehicleType,
   brand: "HELI",        // ยี่ห้อ
   capacity_kg: "",      // น้ำหนักยก (กก.)
   height_m: "",         // ยกสูง (เมตร)
@@ -114,7 +110,7 @@ export default function StockMain() {
   const [bulkDone, setBulkDone]     = useState(0);     // จำนวนที่เพิ่งเพิ่มแบบล็อต (โชว์ในแบนเนอร์)
   const [showList, setShowList]     = useState(false);
   const [listSearch, setListSearch] = useState("");
-  const [listCat, setListCat]       = useState<"all" | "Forklift" | "Stacker" | "Handlift">("all");
+  const [listCat, setListCat]       = useState<CatFilter>("all");
   const [listStatus, setListStatus] = useState("all");
   const [listBrand, setListBrand]   = useState("all");                                       // กรองยี่ห้อ
   const [listSort, setListSort]     = useState<"recent" | "model" | "remain" | "sn">("recent"); // การเรียง
@@ -209,7 +205,9 @@ export default function StockMain() {
     // สเปกที่เซลล์ใช้ค้นหา — ถ้าไม่กรอก เซลล์จะหารถคันนี้ไม่เจอ
     if (!form.capacity_kg) e.capacity_kg = "เลือกน้ำหนักยก — เซลล์ใช้ค้นหา";
     if (!form.fuel) e.fuel = "เลือกพลังงาน — เซลล์ใช้ค้นหา";
-    if (!form.height_m && form.vehicle_category !== "Handlift") e.height_m = "เลือกยกสูง — เซลล์ใช้ค้นหา";
+    // รถลากมือ + รถลากไฟฟ้า ไม่มีความสูงยกแบบรถยก → ไม่บังคับ
+    const noHeight = form.vehicle_category === "Handlift" || form.vehicle_category === "Electric Pallet Truck";
+    if (!form.height_m && !noHeight) e.height_m = "เลือกยกสูง — เซลล์ใช้ค้นหา";
     return e;
   };
 
@@ -570,7 +568,7 @@ export default function StockMain() {
                   </FF>
 
                   {/* ยกสูง — ปุ่มเลือก (แฮนด์ลิฟท์ไม่บังคับ) */}
-                  <FF label={`ยกสูง${form.vehicle_category === "Handlift" ? " (แฮนด์ลิฟท์ไม่ต้องเลือกก็ได้)" : " *"}`} error={errors.height_m}>
+                  <FF label={`ยกสูง${form.vehicle_category === "Handlift" || form.vehicle_category === "Electric Pallet Truck" ? " (ไม่ต้องเลือกก็ได้)" : " *"}`} error={errors.height_m}>
                     <ChipGroup options={fieldConfig.heightOptions} value={form.height_m}
                       onChange={v => setForm({ ...form, height_m: v })} fmt={v => `${v} ม.`} error={errors.height_m} />
                   </FF>
@@ -861,11 +859,9 @@ export default function StockMain() {
               {/* แท็กกรอง: ชนิดสินค้า */}
               <div className="flex items-center gap-1.5 flex-wrap">
                 {([
-                  { key: "all", label: "ทุกชนิด" },
-                  { key: "Forklift", label: "🚜 Forklift" },
-                  { key: "Stacker", label: "📦 Stacker" },
-                  { key: "Handlift", label: "🔧 Handlift" },
-                ] as { key: "all" | "Forklift" | "Stacker" | "Handlift"; label: string }[]).map(({ key, label }) => (
+                  { key: "all" as CatFilter, label: "ทุกชนิด" },
+                  ...VEHICLE_CATS.map(c => ({ key: c.key as CatFilter, label: `${c.icon} ${c.label}` })),
+                ]).map(({ key, label }) => (
                   <Chip key={key} label={label} count={catCount(key)} active={listCat === key} onClick={() => setListCat(key)} />
                 ))}
               </div>

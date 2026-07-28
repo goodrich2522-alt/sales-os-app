@@ -1,6 +1,20 @@
 // lib/constants.ts — ค่าคงที่ที่ใช้ร่วมทั้งแอป (เฟส 1: รวมของซ้ำมาไว้ที่เดียว)
 // เดิมกระจายซ้ำในหน้า sales/stock/dashboard ค่าไม่ตรงกัน + สถานะใหม่ไม่มีสี → รวมที่นี่ที่เดียว
 
+import type { VehicleType } from "./types";
+
+// ── ชนิดรถ (vehicle_category) — label ไทย + icon ใช้ร่วม stock/sales ──────────
+// 5 ชนิด: รถยก / รถลากไฟฟ้า / รถลากมือ / รถยกสูง / รีชทรัค (จัดตามรหัสรุ่น ดู STOCK-SPEC-FIX-PLAN.md)
+export const VEHICLE_CATS: { key: VehicleType; label: string; icon: string }[] = [
+  { key: "Forklift",              label: "โฟล์คลิฟท์", icon: "🚜" },
+  { key: "Electric Pallet Truck", label: "รถลากไฟฟ้า", icon: "🔋" },
+  { key: "Handlift",              label: "แฮนด์ลิฟท์", icon: "🔧" },
+  { key: "Stacker",               label: "สแตกเกอร์",  icon: "📦" },
+  { key: "Reach Truck",           label: "รีชทรัค",    icon: "🏗️" },
+];
+/** ตัวเลือกกรองชนิดรถ (รวม "all") */
+export type CatFilter = "all" | VehicleType;
+
 // ── สีป้ายสถานะรถ (forklift.status) ─────────────────────────────────────────
 // ครอบคลุมทุกสถานะที่ใช้จริง รวมของใหม่ (สั่งผลิต/รถเช่า/เคลม/รับกลับ) ที่เดิมไม่มีสี
 export const STATUS_BADGE: Record<string, string> = {

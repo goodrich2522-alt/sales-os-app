@@ -1,7 +1,7 @@
 export type PaymentType = "เงินสด" | "ไฟแนนซ์";
 export type CustomerType = "บุคคลทั่วไป" | "นิติบุคคล" | "ราชการ";
 export type SaleStatus = "ขายแล้ว" | "จอง" | "รอผ่านไฟแนนซ์";
-export type VehicleType = "Forklift" | "Stacker" | "Handlift";
+export type VehicleType = "Forklift" | "Stacker" | "Handlift" | "Electric Pallet Truck" | "Reach Truck";
 export type ContactSource = "Line" | "Facebook" | "TikTok" | "โทร" | "Google" | "คนอื่นบอกต่อ";
 export type SaleType = "รถเช่า" | "รถขายเต็มคัน" | "รถมือสอง" | "งานซ่อม";
 
@@ -22,7 +22,7 @@ export interface Forklift {
   stock_price: number;
   status: string;
   created_at: string;
-  vehicle_category?: "Forklift" | "Stacker" | "Handlift";
+  vehicle_category?: VehicleType;
   // Extended fields
   pi_no?: string;
   vehicle_group?: string;

@@ -14,7 +14,7 @@ import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, Con
 import { useApp } from "@/lib/AppContext";
 import { driveImg } from "@/lib/img";
 import { isPendingId } from "@/lib/productId";
-import { STATUS_BADGE, SALE_STATUS_BADGE, CONTACT_SOURCE_COLORS } from "@/lib/constants";
+import { STATUS_BADGE, SALE_STATUS_BADGE, CONTACT_SOURCE_COLORS, VEHICLE_CATS } from "@/lib/constants";
 import { formatBaht } from "@/lib/format";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { apiEnabled } from "@/lib/api";
@@ -657,10 +657,8 @@ export default function SalesMain() {
         {/* Vehicle Category Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-1">
           {([
-            { key: "all",      label: "ทั้งหมด", icon: "📋" },
-            { key: "Forklift", label: "Forklift", icon: "🚜" },
-            { key: "Stacker",  label: "Stacker",  icon: "📦" },
-            { key: "Handlift", label: "Handlift", icon: "🔧" },
+            { key: "all" as const, label: "ทั้งหมด", icon: "📋" },
+            ...VEHICLE_CATS,
           ] as { key: "all" | VehicleType; label: string; icon: string }[]).map(({ key, label, icon }) => {
             const count = key === "all"
               ? available.length
@@ -681,7 +679,7 @@ export default function SalesMain() {
           <div className="bg-white border border-indigo-100 rounded-2xl p-4 flex flex-col gap-3 shadow-sm">
             <p className="text-xs font-semibold text-indigo-700 flex items-center gap-1.5">
               <Filter className="w-3.5 h-3.5" />
-              ตัวกรองสเปค {activeCategory === "Forklift" ? "🚜 Forklift" : activeCategory === "Stacker" ? "📦 Stacker" : "🔧 Handlift"}
+              ตัวกรองสเปค {(() => { const c = VEHICLE_CATS.find(v => v.key === activeCategory); return c ? `${c.icon} ${c.label}` : ""; })()}
             </p>
             <p className="text-[11px] text-slate-400 -mt-1">กดปุ่มเลือกสเปกที่ลูกค้าต้องการ — กดซ้ำเพื่อยกเลิก (เว้นว่าง = แสดงทั้งหมด)</p>
 
@@ -698,7 +696,7 @@ export default function SalesMain() {
                 { label: "รุ่นรถ", val: fSpecModel, set: setFSpecModel, ph: "เช่น CPCD30..." },
                 { label: "SN (ซีเรียลรถ)", val: fSpecSN, set: setFSpecSN, ph: "เช่น 010253N9305..." },
                 { label: "ความยาวงา (มม.)", val: fForkLength, set: setFForkLength, ph: "เช่น 1070..." },
-                ...((activeCategory === "Stacker" || activeCategory === "Handlift") ? [{ label: "ความกว้างงา", val: fForkWidth, set: setFForkWidth, ph: "เช่น 550..." }] : []),
+                ...(activeCategory !== "Forklift" ? [{ label: "ความกว้างงา", val: fForkWidth, set: setFForkWidth, ph: "เช่น 550..." }] : []),
               ].map(({ label, val, set, ph }) => (
                 <div key={label}>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">{label}</label>
