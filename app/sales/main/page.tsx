@@ -97,7 +97,7 @@ export default function SalesMain() {
   const handleRefresh = async () => { setRefreshing(true); await refresh(); setTimeout(() => setRefreshing(false), 400); };
   const [search, setSearch]       = useState("");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest"); // เรียงตามวันที่เข้าสต็อก
-  const [viewMode, setViewMode]   = useState<"card" | "table">("card");      // มุมมองสินค้า: การ์ด/ตาราง
+  const [viewMode, setViewMode]   = useState<"card" | "table" | "byModel">("card"); // มุมมอง: การ์ด/ตาราง/ตามรุ่น
   const [selected, setSelected]   = useState<Forklift | null>(null);
   const [editingSale, setEditingSale] = useState<Sale | null>(null); // ไม่ null = กำลังแก้ไขดีลเดิม
   const [form, setForm]           = useState(emptyCheckout);
@@ -251,6 +251,19 @@ export default function SalesMain() {
     const cmp = ta < tb ? -1 : ta > tb ? 1 : 0;
     return sortOrder === "newest" ? -cmp : cmp;
   });
+
+  // ── เฟส B: สรุปคงเหลือตามรุ่น (จากรายการที่กรองแล้ว) — เห็นว่ารุ่นไหนเหลือเยอะ/ใกล้หมด ──
+  const byModel = useMemo(() => {
+    const m = new Map<string, { brand: string; model: string; total: number; ready: number; capacity: string; fuel: string }>();
+    sorted.forEach((f) => {
+      const key = `${f.brand}|${f.model}`;
+      const g = m.get(key) ?? { brand: f.brand, model: f.model, total: 0, ready: 0, capacity: f.capacity || (f.capacity_kg ? `${f.capacity_kg} kg` : ""), fuel: f.fuel || "" };
+      g.total++;
+      if (String(f.status).trim() === "พร้อมขาย") g.ready++;
+      m.set(key, g);
+    });
+    return [...m.values()].sort((a, b) => b.ready - a.ready || b.total - a.total);
+  }, [sorted]);
 
   // ── งาน 4: ถ้าค้นด้วยรหัส/SN แล้วไม่เจอในรายการขาย แต่รถมีอยู่จริง (สถานะขายแล้ว/เช่า ฯลฯ)
   //    → บอกเซลล์ว่าเจอรถแต่ถูกซ่อนเพราะอะไร (กันเข้าใจผิดว่า "ข้อมูลหาย") ──
@@ -729,6 +742,10 @@ export default function SalesMain() {
               className={`px-3 py-1.5 flex items-center gap-1.5 transition ${viewMode === "table" ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>
               <TableIcon className="w-4 h-4" />ตาราง
             </button>
+            <button onClick={() => setViewMode("byModel")}
+              className={`px-3 py-1.5 flex items-center gap-1.5 transition ${viewMode === "byModel" ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>
+              <Package className="w-4 h-4" />ตามรุ่น
+            </button>
           </div>
         </div>
 
@@ -771,6 +788,34 @@ export default function SalesMain() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* ── มุมมองตามรุ่น: เห็นว่ารุ่นไหนเหลือเยอะ/ใกล้หมด → คลิกดูรายคัน ── */}
+        {viewMode === "byModel" && sorted.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {byModel.map((g) => {
+              const tone = g.ready === 0 ? "bg-slate-100 text-slate-500 border-slate-200"
+                : g.ready <= 2 ? "bg-red-50 text-red-700 border-red-200"
+                : "bg-emerald-50 text-emerald-700 border-emerald-200";
+              return (
+                <button key={`${g.brand}|${g.model}`}
+                  onClick={() => { setFSpecModel(g.model); setViewMode("table"); }}
+                  className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 p-4 text-left transition-all flex flex-col gap-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-800 text-sm truncate">{g.model}</p>
+                      <p className="text-xs text-slate-500">{g.brand}</p>
+                    </div>
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full border flex-shrink-0 ${tone}`}>
+                      {g.ready === 0 ? "หมด" : `เหลือ ${g.ready}`}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500">{[g.capacity, g.fuel].filter(Boolean).join(" · ") || "—"}</p>
+                  <p className="text-[11px] text-slate-400 border-t border-slate-50 pt-1.5">ทั้งหมด {g.total} คัน (รวมที่จอง/ขายแล้ว)</p>
+                </button>
+              );
+            })}
           </div>
         )}
 
