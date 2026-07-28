@@ -1182,14 +1182,15 @@ export default function SalesMain() {
                       </div>
                     )}
 
-                    {/* ── คำนวณกำไร (ราคาขาย − ต้นทุน − ของแถม − ค่าขนส่ง) ── */}
+                    {/* ── คำนวณกำไร (ราคาขาย − ต้นทุน − อุปกรณ์เสริม − ของแถม − ค่าขนส่ง) ── */}
                     {selected && (() => {
                       const isQ22K2 = /Q22K2/i.test(selected.model) && (String(selected.fuel || "").includes("ดีเซล") || /^CPCD/i.test(selected.model));
                       const sale = Number(form.actual_sale) || 0;
                       const cost = selected.cost_price || 0;
+                      const addOnTotal = addOns.reduce((s, a) => s + (Number(a.price) || 0), 0); // อุปกรณ์เสริม = ต้นทุนเพิ่ม (หักจากกำไร)
                       const ship = Number(shippingCost) || 0;
                       const free = freebie ? 2800 : 0;
-                      const profit = sale - cost - free - ship;
+                      const profit = sale - cost - addOnTotal - free - ship;
                       return (
                         <div className="border border-emerald-100 bg-emerald-50/40 rounded-xl p-3 flex flex-col gap-2">
                           <p className="text-xs font-bold text-emerald-700 flex items-center gap-1.5"><Target className="w-3.5 h-3.5" />คำนวณกำไร</p>
@@ -1207,6 +1208,7 @@ export default function SalesMain() {
                           <div className="border-t border-emerald-100 pt-2 text-sm flex flex-col gap-0.5">
                             <div className="flex justify-between text-slate-500"><span>ราคาขาย</span><span>฿{sale.toLocaleString()}</span></div>
                             <div className="flex justify-between text-slate-500"><span>− ต้นทุนสินค้า</span><span>฿{cost.toLocaleString()}</span></div>
+                            {addOnTotal > 0 && <div className="flex justify-between text-slate-500"><span>− อุปกรณ์เสริม ({addOns.length} รายการ)</span><span>฿{addOnTotal.toLocaleString()}</span></div>}
                             {free > 0 && <div className="flex justify-between text-slate-500"><span>− ของแถม</span><span>฿{free.toLocaleString()}</span></div>}
                             {ship > 0 && <div className="flex justify-between text-slate-500"><span>− ค่าขนส่ง</span><span>฿{ship.toLocaleString()}</span></div>}
                             <div className={`flex justify-between font-bold pt-1 ${profit >= 0 ? "text-emerald-700" : "text-red-600"}`}><span>= กำไร</span><span>฿{profit.toLocaleString()}</span></div>
