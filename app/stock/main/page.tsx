@@ -452,6 +452,20 @@ export default function StockMain() {
     return Math.round((new Date(d + "T00:00:00").getTime() - Date.now()) / 86400000);
   };
 
+  // ── เฟส 3: รถสั่งผลิตที่ต้องติดตาม (ใกล้ครบ ≤14 วัน หรือเกินกำหนด) ที่ยังไม่ส่งมอบ ──
+  const madeToOrderAlerts = useMemo(() => {
+    return sales
+      .filter(s => isPendingId(s.forklift_id) && (s.sale_status ?? "") !== "ปิดการขาย/จัดส่งแล้ว")
+      .map(s => {
+        const order = String(s.created_at || "").slice(0, 10);
+        const custom = (s.custom_fields?.["วันคาดรับรถสั่งผลิต"] as string) || "";
+        const eta = custom || addDaysStr(order, 90); // ไม่กรอกวันคาดจริง → ใช้ปลายช่วง 90 วัน
+        return { s, eta, left: daysUntil(eta), custom: !!custom };
+      })
+      .filter(x => x.left != null && x.left <= 14)
+      .sort((a, b) => (a.left ?? 0) - (b.left ?? 0)); // เกินมากสุดก่อน
+  }, [sales]);
+
   // Settings — standard dropdown handlers
   const saveOption = () => {
     if (!editingField || !newOption.trim()) return;
@@ -540,6 +554,30 @@ export default function StockMain() {
                 <span key={i} className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border ${r.ready === 0 ? "bg-red-100 text-red-700 border-red-200" : "bg-white text-amber-800 border-amber-200"}`}>
                   {r.label} <span className={`font-bold ${r.ready === 0 ? "text-red-600" : "text-amber-600"}`}>เหลือ {r.ready}</span>
                 </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── แจ้งเตือนติดตามรถสั่งผลิต (ใกล้ครบ/เกินกำหนด) ── */}
+        {madeToOrderAlerts.length > 0 && (
+          <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4">
+            <div className="flex items-center gap-2 mb-2.5">
+              <span className="text-base">🏭</span>
+              <h3 className="text-sm font-bold text-violet-800">ติดตามรถสั่งผลิต — {madeToOrderAlerts.length} รายการใกล้ครบ/เกินกำหนด</h3>
+            </div>
+            <div className="flex flex-col gap-2">
+              {madeToOrderAlerts.map(({ s, eta, left, custom }) => (
+                <button key={s.id} onClick={() => { openHistDetail(s); setShowSaleHistory(true); }}
+                  className="text-left bg-white border border-violet-100 rounded-xl p-3 hover:border-violet-300 transition-all flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-800 truncate">{s.forklift_brand} {s.forklift_model} <span className="text-slate-400 font-normal">· {s.forklift_unit_no || s.forklift_id}</span></p>
+                    <p className="text-xs text-slate-500 truncate">{s.customer_name || "ไม่ระบุลูกค้า"} · เซลล์ {s.sales_staff || "—"} · คาดรับ {eta}{custom ? "" : " (ประมาณ)"}</p>
+                  </div>
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${(left ?? 0) < 0 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
+                    {(left ?? 0) < 0 ? `เกิน ${-(left ?? 0)} วัน` : (left === 0 ? "ครบวันนี้" : `อีก ${left} วัน`)}
+                  </span>
+                </button>
               ))}
             </div>
           </div>
