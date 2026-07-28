@@ -29,7 +29,9 @@ export function parseHeli(rawText: string): QuoteParseResult {
   const date = text.match(/\b(\d{1,2}-[A-Z][a-z]{2}-\d{2,4})\b/)?.[1];
 
   // ── หา "รุ่น" ทั้งหมดในเอกสาร (HELI = CPCD/CPD/CBD/CDD/CQD + เลข) ──
-  const modelRe = /\b(C[PBDQ]C?D\d{2,3}[A-Z0-9-]*)/gi;
+  // ครอบคลุมทุก prefix HELI: รถยก CPCD/CPD/PCD · รถคลัง CBD/CDD/CQD · รถลากไฟฟ้า CBS (ลงท้าย S ไม่ใช่ D)
+  // เรียงยาว→สั้น (CPCD ก่อน CPD) ให้ match ถูกตัว
+  const modelRe = /\b((?:CPCD|CPD|PCD|CBD|CDD|CQD|CBS)\d{1,3}[A-Z0-9-]*)/gi;
   const models = [...new Set([...text.matchAll(modelRe)].map((m) => m[1].toUpperCase()))];
 
   // ── หา SN ทั้งหมด (HELI SN: 6 หลัก + 1 ตัวอักษร + 4 หลัก เช่น 010353N6726) ──
@@ -45,7 +47,7 @@ export function parseHeli(rawText: string): QuoteParseResult {
   const model = models[0];
   const num = model.match(/\d{2,3}/)?.[0];            // 35 → 3.5 ตัน
   const capacity = num ? `${(Number(num) / 10).toFixed(1)} ตัน` : undefined;
-  const fuel = fuelFromText(text) ?? (/^CPCD/.test(model) ? "ดีเซล" : /^(CPD|PCD|CBD|CDD|CQD)/.test(model) ? "ไฟฟ้า" : undefined);
+  const fuel = fuelFromText(text) ?? (/^CPCD/.test(model) ? "ดีเซล" : /^(CPD|PCD|CBD|CDD|CQD|CBS)/.test(model) ? "ไฟฟ้า" : undefined);
   const mast = text.match(/\b(M\d{3}|ZSM\d{3,4}|ZM\d{3})\b/)?.[1];
   const valve = text.match(/(\d+)\s*Valves?/i)?.[1];
   const cost = firstPrice(text);
