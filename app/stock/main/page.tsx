@@ -114,6 +114,9 @@ export default function StockMain() {
   const [listCat, setListCat]       = useState<CatFilter>("all");
   const [listStatus, setListStatus] = useState("all");
   const [listBrand, setListBrand]   = useState("all");                                       // กรองยี่ห้อ
+  const [listModel, setListModel]   = useState("all");                                       // กรองรุ่น
+  const [listMast, setListMast]     = useState("all");                                       // กรองเสา (MAST)
+  const [listFuel, setListFuel]     = useState("all");                                       // กรองพลังงาน
   const [listSort, setListSort]     = useState<"recent" | "model" | "remain" | "sn">("recent"); // การเรียง
   const [listView, setListView]     = useState<"list" | "table" | "byModel">("list");           // มุมมอง: รายคัน / ตาราง / รวมตามรุ่น
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -338,21 +341,30 @@ export default function StockMain() {
   // รายการสต็อกที่กรองแล้ว (สำหรับ modal) — ค้นหา + หมวด + ยี่ห้อ + สถานะ + เรียงลำดับ
   const hs = (v: unknown) => (v == null ? "" : String(v)).toLowerCase();
   const isAvailable = (s: unknown) => String(s ?? "") === "พร้อมขาย"; // "ยังเหลือในสต็อก"
+  const mastOf = (f: Forklift) => String((f.custom_fields as Record<string, unknown> | undefined)?.["MAST"] ?? "").trim();
   const listFiltered = useMemo(() => {
     const q = listSearch.trim().toLowerCase();
     const rows = forklifts.filter(f => {
       const okQ = !q || hs(f.id).includes(q) || hs(f.SN).includes(q) || hs(f.brand).includes(q) || hs(f.model).includes(q) || hs(f.pi_no).includes(q);
       const okCat = listCat === "all" || (f.vehicle_category ?? "Forklift") === listCat;
       const okBrand = listBrand === "all" || (f.brand || "(ไม่ระบุ)") === listBrand;
+      const okModel = listModel === "all" || f.model === listModel;
+      const okMast = listMast === "all" || String((f.custom_fields as Record<string, unknown> | undefined)?.["MAST"] ?? "").trim() === listMast;
+      const okFuel = listFuel === "all" || f.fuel === listFuel;
       const okStatus = listStatus === "all" || f.status === listStatus;
-      return okQ && okCat && okBrand && okStatus;
+      return okQ && okCat && okBrand && okModel && okMast && okFuel && okStatus;
     });
     const recent = (a: Forklift, b: Forklift) => String(b.created_at || "").localeCompare(String(a.created_at || ""));
     if (listSort === "model") rows.sort((a, b) => String(a.model || "").localeCompare(String(b.model || "")) || recent(a, b));
     else if (listSort === "sn") rows.sort((a, b) => String(a.SN || "").localeCompare(String(b.SN || "")) || recent(a, b));
     else rows.sort(recent); // recent / remain (remain ใช้ในมุมมอง byModel)
     return rows;
-  }, [forklifts, listSearch, listCat, listBrand, listStatus, listSort]);
+  }, [forklifts, listSearch, listCat, listBrand, listModel, listMast, listFuel, listStatus, listSort]);
+
+  // ตัวเลือก dropdown — ไล่ระดับ ยี่ห้อ→รุ่น→เสา (นับเฉพาะที่มีจริงในสต็อก)
+  const modelOpts = [...new Set(forklifts.filter(f => listBrand === "all" || (f.brand || "(ไม่ระบุ)") === listBrand).map(f => f.model).filter(Boolean))].sort();
+  const mastOpts  = [...new Set(forklifts.filter(f => (listBrand === "all" || (f.brand || "(ไม่ระบุ)") === listBrand) && (listModel === "all" || f.model === listModel)).map(mastOf).filter(Boolean))].sort();
+  const fuelOpts  = [...new Set(forklifts.map(f => f.fuel).filter(Boolean))].sort();
 
   const catCount = (c: string) => c === "all" ? forklifts.length : forklifts.filter(f => (f.vehicle_category ?? "Forklift") === c).length;
   // ยี่ห้อที่มีจริงในสต็อก (เรียงตามจำนวนมาก→น้อย) — ทำเป็นแท็กกรอง
@@ -876,12 +888,32 @@ export default function StockMain() {
                   <Chip key={key} label={label} count={catCount(key)} active={listCat === key} onClick={() => setListCat(key)} />
                 ))}
               </div>
-              {/* แท็กกรอง: ยี่ห้อ */}
+              {/* แท็กกรอง: ยี่ห้อ (เลือกแล้วรีเซ็ตรุ่น/เสา) */}
               <div className="flex items-center gap-1.5 flex-wrap">
-                <Chip label="ทุกยี่ห้อ" count={brandCount("all")} active={listBrand === "all"} onClick={() => setListBrand("all")} />
+                <Chip label="ทุกยี่ห้อ" count={brandCount("all")} active={listBrand === "all"} onClick={() => { setListBrand("all"); setListModel("all"); setListMast("all"); }} />
                 {brandList.map(([b, n]) => (
-                  <Chip key={b} label={b} count={n} active={listBrand === b} onClick={() => setListBrand(b)} />
+                  <Chip key={b} label={b} count={n} active={listBrand === b} onClick={() => { setListBrand(b); setListModel("all"); setListMast("all"); }} />
                 ))}
+              </div>
+              {/* กรอง dropdown: รุ่น → เสา → พลังงาน (ไล่ระดับ) */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <select value={listModel} onChange={e => { setListModel(e.target.value); setListMast("all"); }}
+                  className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 max-w-[180px]">
+                  <option value="all">ทุกรุ่น</option>
+                  {modelOpts.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                {mastOpts.length > 0 && (
+                  <select value={listMast} onChange={e => setListMast(e.target.value)}
+                    className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                    <option value="all">ทุกเสา</option>
+                    {mastOpts.map(m => <option key={m} value={m}>เสา {m}</option>)}
+                  </select>
+                )}
+                <select value={listFuel} onChange={e => setListFuel(e.target.value)}
+                  className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                  <option value="all">ทุกพลังงาน</option>
+                  {fuelOpts.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
               </div>
               {/* สถานะ + เรียง + มุมมอง */}
               <div className="flex items-center gap-2 flex-wrap">
@@ -956,7 +988,7 @@ export default function StockMain() {
                     : "bg-emerald-50 text-emerald-700 border-emerald-200";  // เหลือเยอะ
                 return (
                   <button key={`${g.brand}|${g.model}|${g.mast}`}
-                    onClick={() => { setListView("list"); setListSearch(g.model); }}
+                    onClick={() => { setListView("list"); setListSearch(""); setListBrand(g.brand || "all"); setListModel(g.model); setListMast(g.mast || "all"); }}
                     className="flex items-center gap-3 border border-slate-100 bg-slate-50 hover:bg-slate-100 rounded-xl p-3.5 text-left transition-colors">
                     <div className="bg-white border border-slate-200 rounded-xl p-2 flex-shrink-0 shadow-sm">
                       <Package className="w-4 h-4 text-emerald-600" />
