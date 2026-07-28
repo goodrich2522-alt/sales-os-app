@@ -109,14 +109,13 @@ export default function StockMain() {
   const [bulkStart, setBulkStart]   = useState("");   // เลขเริ่ม (จำนวนหลักที่พิมพ์ = จำนวนหลักที่เติม 0) เช่น "0001"
   const [bulkCount, setBulkCount]   = useState("");   // จำนวนรถในล็อต
   const [bulkDone, setBulkDone]     = useState(0);     // จำนวนที่เพิ่งเพิ่มแบบล็อต (โชว์ในแบนเนอร์)
-  const [showList, setShowList]     = useState(false);
   const [showImport, setShowImport] = useState(false);   // นำเข้าจากใบเสนอราคา (เฟส 4)
   const [listSearch, setListSearch] = useState("");
   const [listCat, setListCat]       = useState<CatFilter>("all");
   const [listStatus, setListStatus] = useState("all");
   const [listBrand, setListBrand]   = useState("all");                                       // กรองยี่ห้อ
   const [listSort, setListSort]     = useState<"recent" | "model" | "remain" | "sn">("recent"); // การเรียง
-  const [listView, setListView]     = useState<"list" | "byModel">("list");                    // มุมมอง: รายคัน / รวมตามรุ่น
+  const [listView, setListView]     = useState<"list" | "table" | "byModel">("list");           // มุมมอง: รายคัน / ตาราง / รวมตามรุ่น
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showSettings, setShowSettings]   = useState(false);
   const [detailItem, setDetailItem]       = useState<Forklift | null>(null); // รถที่กดดูรายละเอียด
@@ -430,7 +429,7 @@ export default function StockMain() {
               className="flex items-center gap-1.5 text-slate-600 hover:text-violet-700 hover:bg-violet-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-transparent hover:border-violet-200">
               <Settings className="w-4 h-4" /><span className="hidden sm:inline">จัดการตัวเลือก</span>
             </button>
-            <button onClick={() => setShowList(true)}
+            <button onClick={() => document.getElementById("stock-list")?.scrollIntoView({ behavior: "smooth" })}
               className="flex items-center gap-1.5 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-transparent hover:border-emerald-200">
               <List className="w-4 h-4" /><span className="hidden sm:inline">สต็อก ({forklifts.length})</span>
             </button>
@@ -843,11 +842,10 @@ export default function StockMain() {
       {/* ── Inventory List Modal ── */}
       {showImport && <QuoteImport onClose={() => setShowImport(false)} />}
 
-      {showList && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
-          onClick={e => e.target === e.currentTarget && setShowList(false)}>
-          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
-            <div className="px-6 py-4 border-b border-slate-100 flex-shrink-0 flex flex-col gap-3">
+      {/* ── รายการสต็อก (แสดงในหน้าหลักเลย ไม่ต้องเปิด modal) ── */}
+      <section id="stock-list" className="max-w-4xl mx-auto w-full px-4 pb-10">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col">
+            <div className="px-5 py-4 border-b border-slate-100 flex-shrink-0 flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-base font-bold text-slate-800">รายการสต็อก</h3>
@@ -857,10 +855,6 @@ export default function StockMain() {
                       : `แสดง ${listFiltered.length} จาก ${forklifts.length} คัน`}
                   </p>
                 </div>
-                <button onClick={() => setShowList(false)}
-                  className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all">
-                  <X className="w-5 h-5" />
-                </button>
               </div>
               {/* ค้นหา */}
               <input value={listSearch} onChange={e => setListSearch(e.target.value)}
@@ -900,14 +894,50 @@ export default function StockMain() {
                 <div className="ml-auto flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold">
                   <button onClick={() => setListView("list")}
                     className={`px-2.5 py-1.5 transition ${listView === "list" ? "bg-emerald-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>รายคัน</button>
+                  <button onClick={() => setListView("table")}
+                    className={`px-2.5 py-1.5 transition ${listView === "table" ? "bg-emerald-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>ตาราง</button>
                   <button onClick={() => setListView("byModel")}
                     className={`px-2.5 py-1.5 transition ${listView === "byModel" ? "bg-emerald-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>ตามรุ่น</button>
                 </div>
               </div>
             </div>
-            <div className="overflow-y-auto flex-1 min-h-0 p-4 flex flex-col gap-2">
+            <div className="overflow-auto max-h-[72vh] p-4 flex flex-col gap-2">
               {listFiltered.length === 0 && (
                 <div className="text-center py-12 text-slate-400 text-sm">ไม่พบรถตามเงื่อนไข</div>
+              )}
+
+              {/* ── มุมมองตาราง (คอลัมน์ครบ) ── */}
+              {listView === "table" && listFiltered.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-left text-slate-400 border-b border-slate-100">
+                        {["รหัส", "ยี่ห้อ/รุ่น", "SN", "PI", "พิกัด", "พลังงาน", "ความสูง", "สถานะ", "ราคาต้นทุน", "โลเคชั่น", "เซลล์ดูแล", "เติมเมื่อ"].map((h, i) => (
+                          <th key={i} className="px-2.5 py-2 font-semibold whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {listFiltered.map((item) => (
+                        <tr key={item.id} onClick={() => setDetailItem(item)}
+                          className="border-b border-slate-50 hover:bg-emerald-50/40 cursor-pointer transition-colors">
+                          <td className="px-2.5 py-2 whitespace-nowrap"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-500 bg-slate-100 border border-slate-200"}`}>#{item.id}</span></td>
+                          <td className="px-2.5 py-2"><span className="font-semibold text-slate-800">{item.brand}</span> <span className="text-slate-500">{item.model}</span></td>
+                          <td className="px-2.5 py-2 text-slate-500 whitespace-nowrap">{item.SN || "—"}</td>
+                          <td className="px-2.5 py-2 text-slate-500 whitespace-nowrap">{item.pi_no || "—"}</td>
+                          <td className="px-2.5 py-2 text-slate-600 whitespace-nowrap">{item.capacity || (item.capacity_kg ? `${item.capacity_kg} kg` : "—")}</td>
+                          <td className="px-2.5 py-2 text-slate-600 whitespace-nowrap">{item.fuel || "—"}</td>
+                          <td className="px-2.5 py-2 text-slate-600 whitespace-nowrap">{item.height || "—"}</td>
+                          <td className="px-2.5 py-2 whitespace-nowrap"><StatusBadge status={item.status} /></td>
+                          <td className="px-2.5 py-2 font-bold text-emerald-700 whitespace-nowrap">{item.cost_price ? `฿${item.cost_price.toLocaleString()}` : "—"}</td>
+                          <td className="px-2.5 py-2 text-slate-500 whitespace-nowrap">{item.location || "—"}</td>
+                          <td className="px-2.5 py-2 text-slate-500 whitespace-nowrap">{saleOwnerByFk.get(item.id) || (item.custom_fields?.["เซลล์ผู้ดูแล"] as string) || "—"}</td>
+                          <td className="px-2.5 py-2 text-slate-400 whitespace-nowrap">{fmtAdded(item.created_at) || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
 
               {/* ── มุมมองรวมตามรุ่น: เห็นทันทีว่ารุ่นไหนเหลือ/หมด ── */}
@@ -984,8 +1014,7 @@ export default function StockMain() {
               ))}
             </div>
           </div>
-        </div>
-      )}
+      </section>
 
       {/* ── ป๊อปอัพแจ้งเตือน: เซลล์ทำรายการขายเข้ามา ── */}
       {saleAlerts.length > 0 && (
