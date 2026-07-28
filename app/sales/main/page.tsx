@@ -8,7 +8,7 @@ import {
   Package, Trash2, History, RotateCcw, Pencil, Check, Camera,
   SlidersHorizontal, ImageOff, ZoomIn, ChevronLeft, Plus, ClipboardList,
   Settings, ChevronDown, Type, ListOrdered, ArrowLeft, Bell, Eye, ChevronUp, RefreshCw,
-  LayoutGrid, Table as TableIcon,
+  LayoutGrid, Table as TableIcon, Users,
 } from "lucide-react";
 import { PROVINCES, CONTACT_SOURCES } from "@/lib/mockData";
 import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, ContactSource, SaleType, InspectionRecord, SLOT_LABELS } from "@/lib/types";
@@ -117,6 +117,7 @@ export default function SalesMain() {
   const [editingTarget, setEditingTarget] = useState(false);
   const [targetInput, setTargetInput]     = useState("");
   const [historyTab, setHistoryTab]       = useState<SaleStatus | "all">("all");
+  const [historyView, setHistoryView]     = useState<"deals" | "customers">("deals"); // ดีลของฉัน / ลูกค้าของฉัน
   const [detailSale, setDetailSale]       = useState<Sale | null>(null);
   const [cancelBox, setCancelBox]         = useState(false);   // กล่องยกเลิกการจอง
   const [cancelReason, setCancelReason]   = useState("");      // เหตุผลการยกเลิก
@@ -298,6 +299,17 @@ export default function SalesMain() {
     setFSpecModel(""); setFSpecSN(""); setFForkLength(""); setFForkWidth("");
   };
   const mySales = salesUser ? sales.filter(s => s.sales_staff === salesUser.name) : [];
+  // ลูกค้าของฉัน — รวมดีลตามลูกค้า (ชื่อ+เบอร์) เห็นว่าลูกค้าแต่ละคนซื้ออะไรบ้าง
+  const myCustomers = useMemo(() => {
+    const m = new Map<string, { name: string; tel: string; province: string; deals: Sale[] }>();
+    mySales.forEach(s => {
+      const key = `${s.customer_name}|${s.customer_tel}`;
+      const g = m.get(key) ?? { name: s.customer_name || "ไม่ระบุชื่อ", tel: s.customer_tel || "", province: s.province || "", deals: [] };
+      g.deals.push(s);
+      m.set(key, g);
+    });
+    return [...m.values()].sort((a, b) => b.deals.length - a.deals.length);
+  }, [mySales]);
 
   // Notifications — sales with warranty/parts approaching
   const notifications = useMemo(() => {
@@ -576,7 +588,7 @@ export default function SalesMain() {
             </button>
             <button onClick={() => setShowHistory(true)}
               className="flex items-center gap-1.5 text-slate-600 hover:text-indigo-700 hover:bg-indigo-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-transparent hover:border-indigo-200">
-              <History className="w-4 h-4" /><span className="hidden sm:inline">ประวัติ ({mySales.length})</span>
+              <History className="w-4 h-4" /><span className="hidden sm:inline">การขายของฉัน ({mySales.length})</span>
             </button>
             <button onClick={() => { void signOutSupabase(); localStorage.removeItem("sales_user"); router.push("/sales/login"); }}
               className="flex items-center gap-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all">
@@ -1420,11 +1432,18 @@ export default function SalesMain() {
           onClick={e => e.target === e.currentTarget && setShowHistory(false)}>
           <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[82vh] flex flex-col shadow-2xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
-              <div><h3 className="text-base font-bold text-slate-800">ประวัติการขายของฉัน</h3><p className="text-xs text-slate-500 mt-0.5">{mySales.length} รายการ</p></div>
+              <div><h3 className="text-base font-bold text-slate-800">การขายของฉัน</h3><p className="text-xs text-slate-500 mt-0.5">{mySales.length} ดีล · {myCustomers.length} ลูกค้า</p></div>
               <button onClick={() => { setShowHistory(false); setDeleteConfirm(null); }} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all"><X className="w-5 h-5" /></button>
             </div>
 
-            {/* Category Tabs */}
+            {/* สลับ: ดีลของฉัน / ลูกค้าของฉัน */}
+            <div className="flex gap-2 px-4 pt-3 flex-shrink-0">
+              <button onClick={() => setHistoryView("deals")} className={`flex-1 px-3 py-2 rounded-lg text-sm font-bold transition ${historyView === "deals" ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>📋 ดีลของฉัน ({mySales.length})</button>
+              <button onClick={() => setHistoryView("customers")} className={`flex-1 px-3 py-2 rounded-lg text-sm font-bold transition ${historyView === "customers" ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>👥 ลูกค้าของฉัน ({myCustomers.length})</button>
+            </div>
+
+            {/* Category Tabs (เฉพาะมุมมองดีล) */}
+            {historyView === "deals" && (
             <div className="flex gap-1 px-4 pt-3 pb-2 border-b border-slate-100 flex-shrink-0 overflow-x-auto">
               {HISTORY_TABS.map(tab => {
                 const count = tab.key === "all" ? mySales.length : mySales.filter(s => (s.sale_status ?? "ขายแล้ว") === tab.key).length;
@@ -1437,8 +1456,10 @@ export default function SalesMain() {
                 );
               })}
             </div>
+            )}
 
-            {filteredHistory.length === 0 ? (
+            {/* มุมมองดีลของฉัน */}
+            {historyView === "deals" && (filteredHistory.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-slate-400"><History className="w-10 h-10 text-slate-300 mb-2" /><p className="text-sm">ยังไม่มีประวัติการขาย</p></div>
             ) : (
               <div className="overflow-y-auto flex-1 min-h-0 p-4 flex flex-col gap-2">
@@ -1522,7 +1543,41 @@ export default function SalesMain() {
                   </div>
                 ))}
               </div>
-            )}
+            ))}
+
+            {/* มุมมองลูกค้าของฉัน */}
+            {historyView === "customers" && (myCustomers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                <Users className="w-12 h-12 mb-3 opacity-40" />
+                <p className="text-sm">ยังไม่มีข้อมูลลูกค้า</p>
+              </div>
+            ) : (
+              <div className="overflow-y-auto flex-1 min-h-0 p-4 flex flex-col gap-2.5">
+                {myCustomers.map((c, i) => (
+                  <div key={i} className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-800 truncate">{c.name}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {c.tel ? `☎ ${c.tel}` : "ไม่มีเบอร์"}{c.province ? ` · ${c.province}` : ""}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs font-bold bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-full">
+                        {c.deals.length} ดีล
+                      </span>
+                    </div>
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      {c.deals.map((d, j) => (
+                        <button key={j} onClick={() => { setShowHistory(false); setDetailSale(d); }}
+                          className="text-[11px] bg-white border border-slate-200 rounded-lg px-2 py-1 text-slate-600 hover:border-indigo-300 hover:text-indigo-600 transition-colors">
+                          {d.forklift_brand} {d.forklift_model} · {d.sale_status ?? "ขายแล้ว"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
           </div>
         </div>
       )}
