@@ -359,11 +359,13 @@ export default function StockMain() {
   const brandCount = (b: string) => b === "all" ? forklifts.length : (brandList.find(([n]) => n === b)?.[1] ?? 0);
 
   // มุมมองรวมตามรุ่น — เห็นทันทีว่ารุ่นไหนเหลือ/หมด (จากรายการที่กรองแล้ว)
+  // รวมตาม รุ่น + เสา (MAST) — พิกัดยกอยู่ในชื่อรุ่นแล้ว (CPCD25=2.5ตัน) · เสาต่างกันแยกกลุ่ม
   const byModel = useMemo(() => {
-    const m = new Map<string, { model: string; brand: string; total: number; available: number; sold: number }>();
+    const m = new Map<string, { model: string; brand: string; mast: string; total: number; available: number; sold: number }>();
     listFiltered.forEach(f => {
-      const key = `${f.brand}|${f.model}`;
-      const g = m.get(key) ?? { model: f.model || "(ไม่ระบุรุ่น)", brand: f.brand || "", total: 0, available: 0, sold: 0 };
+      const mast = String((f.custom_fields as Record<string, unknown> | undefined)?.["MAST"] ?? "").trim();
+      const key = `${f.brand}|${f.model}|${mast}`;
+      const g = m.get(key) ?? { model: f.model || "(ไม่ระบุรุ่น)", brand: f.brand || "", mast, total: 0, available: 0, sold: 0 };
       g.total++;
       if (isAvailable(f.status)) g.available++;
       if (String(f.status) === "ปิดการขายแล้ว") g.sold++;
@@ -371,7 +373,7 @@ export default function StockMain() {
     });
     const rows = [...m.values()];
     if (listSort === "remain") rows.sort((a, b) => b.available - a.available); // เหลือเยอะขึ้นก่อน
-    else if (listSort === "model") rows.sort((a, b) => a.model.localeCompare(b.model));
+    else if (listSort === "model") rows.sort((a, b) => a.model.localeCompare(b.model) || a.mast.localeCompare(b.mast));
     else rows.sort((a, b) => b.total - a.total);
     return rows;
   }, [listFiltered, listSort]);
@@ -948,14 +950,14 @@ export default function StockMain() {
                     ? "bg-red-50 text-red-700 border-red-200"               // ใกล้หมด
                     : "bg-emerald-50 text-emerald-700 border-emerald-200";  // เหลือเยอะ
                 return (
-                  <button key={`${g.brand}|${g.model}`}
+                  <button key={`${g.brand}|${g.model}|${g.mast}`}
                     onClick={() => { setListView("list"); setListSearch(g.model); }}
                     className="flex items-center gap-3 border border-slate-100 bg-slate-50 hover:bg-slate-100 rounded-xl p-3.5 text-left transition-colors">
                     <div className="bg-white border border-slate-200 rounded-xl p-2 flex-shrink-0 shadow-sm">
                       <Package className="w-4 h-4 text-emerald-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-800 text-sm truncate">{g.model}</p>
+                      <p className="font-semibold text-slate-800 text-sm truncate">{g.model}{g.mast ? <span className="text-emerald-600"> · เสา {g.mast}</span> : ""}</p>
                       <p className="text-xs text-slate-500">{g.brand || "ไม่ระบุยี่ห้อ"} · ทั้งหมด {g.total} คัน · ขายแล้ว {g.sold}</p>
                     </div>
                     <span className={`text-xs font-bold px-2.5 py-1 rounded-full border flex-shrink-0 ${remainTone}`}>
