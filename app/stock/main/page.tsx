@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Package, Plus, LogOut, CheckCircle, AlertCircle, List, X,
   TrendingUp, Boxes, Trash2, Settings, Pencil, Check, ChevronDown,
-  Clock, Hash, Camera, ImageOff, Eye, Bell, MapPin,
+  Clock, Hash, Camera, ImageOff, Eye, Bell, MapPin, History,
   Download, Upload, FileText, ShoppingCart, User
 } from "lucide-react";
 import { Forklift, Sale } from "@/lib/types";
@@ -48,6 +48,9 @@ const fmtCap = (v: string) => {
   const n = Number(v);
   return n >= 1000 ? `${n / 1000} ตัน` : `${v} กก.`;
 };
+
+// ยอดเงินย่อ — หลักล้านโชว์ "ล." (ใช้ในกราฟสรุปรายเซลล์)
+const fmtM = (n: number) => Math.abs(n) >= 1_000_000 ? (n / 1_000_000).toFixed(1) + " ล." : (Number(n) || 0).toLocaleString("th-TH");
 
 // แปลงเวลาเติม → "10 ก.ค. 69 · 14:30 น." (พ.ศ. + เวลา) · ถ้าเป็นแค่วันที่ (ของเก่า) ไม่โชว์เวลา
 function fmtAdded(iso?: string) {
@@ -96,7 +99,7 @@ export default function StockMain() {
   const [histSearch, setHistSearch]       = useState("");
   const [histView, setHistView]           = useState<"deals" | "summary">("deals"); // รายดีล / สรุปรายเซลล์
   const [histDetail, setHistDetail]       = useState<Sale | null>(null); // ดีลที่กางดูรายละเอียด
-  const [histEdit, setHistEdit]           = useState<{ sale_status: string; delivery_date: string; remark: string; eta: string } | null>(null); // eta = วันคาดรับรถสั่งผลิต
+  const [histEdit, setHistEdit]           = useState<{ sale_status: string; delivery_date: string; remark: string; eta: string; sn: string } | null>(null); // eta=วันคาดรับ · sn=SN จริงรถสั่งผลิต
 
   // ── แจ้งเตือนเซลล์ทำรายการขาย — คงค้างจนแอดมินอ่าน + กดยืนยันตัดออกจากสต็อก (เก็บ ack ใน localStorage) ──
   type SaleAlert = { id: string; staff: string; status: string; title: string; sub: string };
@@ -455,15 +458,37 @@ export default function StockMain() {
     setHistEdit({
       sale_status: s.sale_status ?? "ขายแล้ว", delivery_date: s.delivery_date ?? "", remark: s.remark ?? "",
       eta: (s.custom_fields?.["วันคาดรับรถสั่งผลิต"] as string) ?? "",
+      sn: s.forklift_unit_no ?? "",
     });
   };
   const saveHistEdit = () => {
     if (!histDetail || !histEdit) return;
-    const cf = { ...(histDetail.custom_fields ?? {}) };
+    // เก็บ diff เป็น audit log (ง) — ใครแก้อะไรเมื่อไหร่
+    const changes: string[] = [];
+    if (histEdit.sale_status !== (histDetail.sale_status ?? "ขายแล้ว")) changes.push(`สถานะ→${histEdit.sale_status}`);
+    if (histEdit.delivery_date !== (histDetail.delivery_date ?? "")) changes.push(`วันส่งมอบ→${histEdit.delivery_date || "-"}`);
+    if (histEdit.eta.trim() !== ((histDetail.custom_fields?.["วันคาดรับรถสั่งผลิต"] as string) ?? "")) changes.push(`วันคาดรับ→${histEdit.eta.trim() || "-"}`);
+    if (histEdit.remark !== (histDetail.remark ?? "")) changes.push("แก้หมายเหตุ");
+    const snChanged = !!histEdit.sn.trim() && histEdit.sn.trim() !== (histDetail.forklift_unit_no ?? "");
+    if (snChanged) changes.push(`เติม SN→${histEdit.sn.trim()}`); // ก: รถสั่งผลิตมาถึง เติม SN จริง
+
+    const cf: Record<string, string> = { ...(histDetail.custom_fields ?? {}) };
     if (histEdit.eta.trim()) cf["วันคาดรับรถสั่งผลิต"] = histEdit.eta.trim(); else delete cf["วันคาดรับรถสั่งผลิต"];
+    if (changes.length) {
+      const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+      const line = `${stamp} · ${username || "สต็อก"}: ${changes.join(", ")}`;
+      cf["ประวัติแก้ไข"] = [(histDetail.custom_fields?.["ประวัติแก้ไข"] as string) || "", line].filter(Boolean).join("\n");
+    }
     const u: Sale = { ...histDetail, sale_status: histEdit.sale_status as Sale["sale_status"], delivery_date: histEdit.delivery_date, remark: histEdit.remark,
+      forklift_unit_no: snChanged ? histEdit.sn.trim() : histDetail.forklift_unit_no,
       custom_fields: Object.keys(cf).length ? cf : undefined };
     updateSale(u); setHistDetail(u);
+    // เติม SN ลง forklift ด้วย (ก) — โชว์ SN จริงแทนรหัสชั่วคราว PI#N
+    if (snChanged) {
+      const fk = forklifts.find(f => f.id === histDetail.forklift_id);
+      if (fk) updateForklift({ ...fk, SN: histEdit.sn.trim() });
+    }
+    setHistEdit({ ...histEdit, sn: snChanged ? histEdit.sn.trim() : histEdit.sn });
   };
 
   // ── helper รถสั่งผลิต (เฟส 2) ──
@@ -492,6 +517,7 @@ export default function StockMain() {
       .filter(x => x.left != null && x.left <= 14)
       .sort((a, b) => (a.left ?? 0) - (b.left ?? 0)); // เกินมากสุดก่อน
   }, [sales]);
+  const overdueMTO = madeToOrderAlerts.filter(x => (x.left ?? 0) < 0); // เกินกำหนดแล้ว → เด้งกระดิ่ง (ข)
 
   // Settings — standard dropdown handlers
   const saveOption = () => {
@@ -530,8 +556,8 @@ export default function StockMain() {
             <button onClick={() => setShowAlerts(true)}
               className="relative flex items-center text-slate-600 hover:text-rose-600 hover:bg-rose-50 p-2 rounded-lg transition-all border border-transparent hover:border-rose-200">
               <Bell className="w-5 h-5" />
-              {pendingAlerts.length > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{pendingAlerts.length}</span>
+              {(pendingAlerts.length + overdueMTO.length) > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{pendingAlerts.length + overdueMTO.length}</span>
               )}
             </button>
             <button onClick={() => setShowSaleHistory(true)}
@@ -930,10 +956,27 @@ export default function StockMain() {
               </div>
             )}
             <div className="overflow-y-auto p-3 flex flex-col gap-2.5">
+              {/* ข: รถสั่งผลิตเกินกำหนด เด้งในกระดิ่ง */}
+              {overdueMTO.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-xs font-bold text-violet-700">🏭 รถสั่งผลิตเกินกำหนด ({overdueMTO.length})</p>
+                  {overdueMTO.map(({ s, eta, left }) => (
+                    <button key={s.id} onClick={() => { setShowAlerts(false); openHistDetail(s); setShowSaleHistory(true); }}
+                      className="text-left bg-violet-50 border border-violet-200 rounded-xl p-2.5 hover:border-violet-300">
+                      <p className="text-xs font-bold text-slate-800 truncate">{s.forklift_brand} {s.forklift_model}</p>
+                      <p className="text-[11px] text-slate-500 truncate">{s.customer_name || "ลูกค้า"} · เซลล์ {s.sales_staff || "—"}</p>
+                      <p className="text-[11px] font-bold text-red-600">เกินกำหนด {-(left ?? 0)} วัน (คาดรับ {eta})</p>
+                    </button>
+                  ))}
+                  {pendingAlerts.length > 0 && <div className="h-px bg-slate-100 my-1" />}
+                </div>
+              )}
               {pendingAlerts.length === 0 ? (
+                overdueMTO.length === 0 && (
                 <div className="text-center py-10 text-slate-400 text-sm flex flex-col items-center gap-2">
                   <CheckCircle className="w-8 h-8 opacity-40" />ไม่มีรายการค้าง
                 </div>
+                )
               ) : pendingAlerts.map(al => {
                 const green = al.status.includes("ขาย") || al.status.includes("ปิด");
                 const amber = al.status.includes("จอง") || al.status.includes("มัดจำ") || al.status.includes("จัดส่ง");
@@ -1004,7 +1047,20 @@ export default function StockMain() {
               <div className="overflow-y-auto flex-1 min-h-0 p-3">
                 {staffSummary.length === 0 ? (
                   <div className="text-center py-16 text-slate-400 text-sm">ไม่มีข้อมูล</div>
-                ) : (
+                ) : (<>
+                  {/* ค: กราฟแท่งยอดขายรายเซลล์ (เทียบสัดส่วน) */}
+                  <div className="mb-4 flex flex-col gap-1.5">
+                    {(() => { const max = Math.max(...staffSummary.map(g => g.revenue), 1); return staffSummary.slice(0, 10).map((g, i) => (
+                      <div key={g.staff} className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500 w-24 truncate flex-shrink-0" title={g.staff}>{i + 1}. {g.staff}</span>
+                        <div className="flex-1 bg-slate-100 rounded-full h-4 overflow-hidden">
+                          <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-blue-500 flex items-center justify-end pr-1.5" style={{ width: `${Math.max((g.revenue / max) * 100, 3)}%` }}>
+                            <span className="text-[9px] font-bold text-white whitespace-nowrap">฿{fmtM(g.revenue)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )); })()}
+                  </div>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-left text-xs text-slate-400 border-b border-slate-100">
@@ -1032,7 +1088,7 @@ export default function StockMain() {
                       </tr>
                     </tfoot>
                   </table>
-                )}
+                </>)}
               </div>
             )}
 
@@ -1108,6 +1164,11 @@ export default function StockMain() {
                           <input type="date" value={histEdit.eta} onChange={e => setHistEdit({ ...histEdit, eta: e.target.value })}
                             className="mt-1 w-full border border-violet-200 rounded-lg px-3 py-2 text-sm text-slate-800 bg-white" />
                         </label>
+                        <label className="text-xs text-violet-700">SN จริง (เติมเมื่อรถผลิตเสร็จมาถึง)
+                          <input value={histEdit.sn} onChange={e => setHistEdit({ ...histEdit, sn: e.target.value })}
+                            placeholder="กรอก SN ที่ติดมากับรถ"
+                            className="mt-1 w-full border border-violet-200 rounded-lg px-3 py-2 text-sm text-slate-800 bg-white" />
+                        </label>
                         {eta && left != null && (
                           <p className={`text-xs font-bold ${left < 0 ? "text-red-600" : left <= 14 ? "text-amber-600" : "text-violet-700"}`}>
                             {left < 0 ? `⚠️ เกินกำหนดแล้ว ${-left} วัน — ควรติดตาม` : left === 0 ? "📦 ครบกำหนดวันนี้" : `⏳ อีก ${left} วันถึงกำหนดรับ`}
@@ -1132,6 +1193,18 @@ export default function StockMain() {
                     </label>
                     <button onClick={saveHistEdit} className="mt-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-sm">บันทึกการแก้ไข</button>
                   </div>
+
+                  {/* ประวัติการแก้ไข (audit log) — ง */}
+                  {(histDetail.custom_fields?.["ประวัติแก้ไข"] as string)?.trim() && (
+                    <div className="border-t border-slate-100 pt-3">
+                      <p className="text-xs font-bold text-slate-500 mb-1.5 flex items-center gap-1.5"><History className="w-3.5 h-3.5" />ประวัติการแก้ไข</p>
+                      <div className="bg-slate-50 border border-slate-100 rounded-lg p-2.5 flex flex-col gap-1 max-h-32 overflow-y-auto">
+                        {(histDetail.custom_fields!["ประวัติแก้ไข"] as string).split("\n").reverse().map((l, i) => (
+                          <p key={i} className="text-[11px] text-slate-600 leading-snug">{l}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
