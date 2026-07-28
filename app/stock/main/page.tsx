@@ -841,6 +841,7 @@ export default function StockMain() {
           ["เสา (MAST)", cf["MAST"] ?? ""],
           ["Valve / คอนโทรล", cf["Valve"] ?? it.control_type ?? ""],
           ["ขนาดงา", cf["ขนาดงา"] ?? ""],
+          ["ชนิดล้อ", cf["ชนิดล้อ"] ?? ""],
           ["ความยาวงา", it.fork_length ? `${it.fork_length} มม.` : ""],
           ["พลังงาน", it.fuel],
         ];
@@ -854,7 +855,7 @@ export default function StockMain() {
           ["เติมเข้าสต็อกเมื่อ", fmtAdded(it.created_at)],
         ];
         // custom_fields ที่โชว์ในสเปก/ข้อมูลแล้ว + คีย์ internal → ไม่ต้องโชว์ซ้ำใน "ข้อมูลเพิ่มเติม"
-        const SHOWN_CF = new Set(["ประเภทสินค้า","MAST","Valve","ขนาดงา","เซลล์ผู้ดูแล","รายละเอียด (ลูกค้า)","เลขที่ใบกำกับภาษี","ชีตต้นทาง"]);
+        const SHOWN_CF = new Set(["ประเภทสินค้า","MAST","Valve","ขนาดงา","ชนิดล้อ","เซลล์ผู้ดูแล","รายละเอียด (ลูกค้า)","เลขที่ใบกำกับภาษี","ชีตต้นทาง"]);
         const customs = Object.entries(cf).filter(([k, v]) => String(v ?? "").trim() && !SHOWN_CF.has(k));
         const Section = ({ title, rows }: { title: string; rows: [string, string][] }) => {
           const shown = rows.filter(([, v]) => String(v ?? "").trim());
