@@ -8,14 +8,14 @@ import {
   Clock, Hash, Camera, ImageOff, Eye, Bell, MapPin,
   Download, Upload, FileText, ShoppingCart, User
 } from "lucide-react";
-import { Forklift } from "@/lib/types";
+import { Forklift, Sale } from "@/lib/types";
 import { useApp, FieldConfig } from "@/lib/AppContext";
 import { isPendingId } from "@/lib/productId";
 import { thaiMonthShort } from "@/lib/format";
 import { Lightbox } from "@/components/ui/Lightbox";
 import { Chip } from "@/components/ui/Chip";
 import { StatusBadge } from "@/components/ui/Badge";
-import { VEHICLE_CATS, CatFilter } from "@/lib/constants";
+import { VEHICLE_CATS, CatFilter, SALE_STATUS_BADGE } from "@/lib/constants";
 import { QuoteImport } from "@/components/QuoteImport";
 import { parseForkliftCsv, assignIdsAndStamp, buildCsvTemplate } from "@/lib/forkliftCsv";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
@@ -65,7 +65,7 @@ function fmtAdded(iso?: string) {
 export default function StockMain() {
   const router = useRouter();
   const {
-    forklifts, addForkliftsBulk, updateForklift, deleteForklift, inspections, sales,
+    forklifts, addForkliftsBulk, updateForklift, deleteForklift, inspections, sales, updateSale,
     exportData, importData,
     fieldConfig, updateFieldOptions,
     removeCustomFieldDef, renameCustomFieldDef,
@@ -89,6 +89,13 @@ export default function StockMain() {
   const [detailLightbox, setDetailLightbox] = useState<{ imgs: string[]; idx: number } | null>(null);
   const [locEdit, setLocEdit]             = useState(""); // แก้สถานที่ที่รถอยู่ (ใน detail modal)
   const [locSaved, setLocSaved]           = useState(false);
+  // ── ประวัติการขาย (เฟส 1): ดีลทุกเซลล์ ──
+  const [showSaleHistory, setShowSaleHistory] = useState(false);
+  const [histStaff, setHistStaff]         = useState("all"); // กรองรายเซลล์
+  const [histStatus, setHistStatus]       = useState("all");
+  const [histSearch, setHistSearch]       = useState("");
+  const [histDetail, setHistDetail]       = useState<Sale | null>(null); // ดีลที่กางดูรายละเอียด
+  const [histEdit, setHistEdit]           = useState<{ sale_status: string; delivery_date: string; remark: string } | null>(null);
 
   // ── แจ้งเตือนเซลล์ทำรายการขาย — คงค้างจนแอดมินอ่าน + กดยืนยันตัดออกจากสต็อก (เก็บ ack ใน localStorage) ──
   type SaleAlert = { id: string; staff: string; status: string; title: string; sub: string };
@@ -381,6 +388,49 @@ export default function StockMain() {
   const agingOver90 = agingRows.filter(r => (r.days ?? 0) > 90).length;
   const agingOver180 = agingRows.filter(r => (r.days ?? 0) > 180).length;
 
+  // ── ประวัติการขาย: รายชื่อเซลล์ + ดีลกรองแล้ว (ล่าสุดบน) ──
+  const histStaffOptions = useMemo(() => [...new Set(sales.map(s => s.sales_staff).filter(Boolean))].sort(), [sales]);
+  const histFiltered = useMemo(() => {
+    const q = histSearch.trim().toLowerCase();
+    return sales
+      .filter(s => {
+        const okStaff = histStaff === "all" || s.sales_staff === histStaff;
+        const okStatus = histStatus === "all" || (s.sale_status ?? "ขายแล้ว") === histStatus;
+        const okQ = !q || [s.customer_name, s.customer_tel, s.forklift_unit_no, s.forklift_brand, s.forklift_model, s.sales_staff].some(v => String(v ?? "").toLowerCase().includes(q));
+        return okStaff && okStatus && okQ;
+      })
+      .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || ""))); // ล่าสุดบน
+  }, [sales, histStaff, histStatus, histSearch]);
+
+  // Export ประวัติการขายเป็น Excel (ตามที่กรองอยู่ — ทั้งหมด/รายเซลล์)
+  const exportSaleHistory = async () => {
+    if (histFiltered.length === 0) return;
+    const XLSX = await import("xlsx");
+    const rows = histFiltered.map(s => ({
+      "วันที่": s.created_at ?? "", "สถานะ": s.sale_status ?? "ขายแล้ว", "เซลล์": s.sales_staff ?? "",
+      "SN": s.forklift_unit_no ?? "", "ยี่ห้อ/รุ่น": `${s.forklift_brand ?? ""} ${s.forklift_model ?? ""}`.trim(),
+      "ลูกค้า": s.customer_name ?? "", "เบอร์โทร": s.customer_tel ?? "", "จังหวัด": s.province ?? "",
+      "การชำระ": s.payment_type ?? "", "ราคาขาย": Number(s.actual_sale) || 0, "มัดจำ": Number(s.deposit) || 0,
+      "ค่าขนส่ง": Number(s.shipping_cost) || 0, "วันส่งมอบ": s.delivery_date ?? "", "หมายเหตุ": s.remark ?? "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [12, 16, 14, 14, 20, 18, 12, 10, 12, 12, 10, 10, 12, 20].map(w => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "ประวัติการขาย");
+    const who = histStaff === "all" ? "ทุกเซลล์" : histStaff;
+    XLSX.writeFile(wb, `ประวัติการขาย_${who}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+  // เปิดกางรายละเอียดดีล + เตรียมช่องแก้ไข
+  const openHistDetail = (s: Sale) => {
+    setHistDetail(s);
+    setHistEdit({ sale_status: s.sale_status ?? "ขายแล้ว", delivery_date: s.delivery_date ?? "", remark: s.remark ?? "" });
+  };
+  const saveHistEdit = () => {
+    if (!histDetail || !histEdit) return;
+    const u = { ...histDetail, sale_status: histEdit.sale_status as Sale["sale_status"], delivery_date: histEdit.delivery_date, remark: histEdit.remark };
+    updateSale(u); setHistDetail(u);
+  };
+
   // Settings — standard dropdown handlers
   const saveOption = () => {
     if (!editingField || !newOption.trim()) return;
@@ -421,6 +471,10 @@ export default function StockMain() {
               {pendingAlerts.length > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{pendingAlerts.length}</span>
               )}
+            </button>
+            <button onClick={() => setShowSaleHistory(true)}
+              className="flex items-center gap-1.5 text-slate-600 hover:text-indigo-700 hover:bg-indigo-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-transparent hover:border-indigo-200">
+              <ShoppingCart className="w-4 h-4" /><span className="hidden sm:inline">ประวัติการขาย</span>
             </button>
             <button onClick={() => setShowSettings(true)}
               className="flex items-center gap-1.5 text-slate-600 hover:text-violet-700 hover:bg-violet-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-transparent hover:border-violet-200">
@@ -821,6 +875,110 @@ export default function StockMain() {
               })}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── ประวัติการขาย (เฟส 1): ดีลทุกเซลล์ · ล่าสุดบน · กรองรายเซลล์ · แก้ไขได้ ── */}
+      {showSaleHistory && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+          onClick={e => e.target === e.currentTarget && setShowSaleHistory(false)}>
+          <div className="bg-white rounded-3xl w-full max-w-3xl max-h-[88vh] flex flex-col shadow-2xl">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+              <div>
+                <h3 className="text-base font-bold text-slate-800">ประวัติการขาย</h3>
+                <p className="text-xs text-slate-500 mt-0.5">ดีลทั้งหมด {histFiltered.length} รายการ (ล่าสุดบน)</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={exportSaleHistory} disabled={histFiltered.length === 0}
+                  className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg px-3 py-2 disabled:opacity-40 disabled:cursor-not-allowed">
+                  <Download className="w-4 h-4" /><span className="hidden sm:inline">Export</span>
+                </button>
+                <button onClick={() => setShowSaleHistory(false)} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2"><X className="w-5 h-5" /></button>
+              </div>
+            </div>
+            <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap gap-2 flex-shrink-0">
+              <input value={histSearch} onChange={e => setHistSearch(e.target.value)} placeholder="ค้นหา ลูกค้า / SN / รุ่น / เซลล์..."
+                className="flex-1 min-w-[160px] border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white text-slate-800" />
+              <select value={histStaff} onChange={e => setHistStaff(e.target.value)} className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                <option value="all">ทุกเซลล์</option>
+                {histStaffOptions.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <select value={histStatus} onChange={e => setHistStatus(e.target.value)} className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                <option value="all">ทุกสถานะ</option>
+                {Object.keys(SALE_STATUS_BADGE).map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div className="overflow-y-auto flex-1 min-h-0 p-3 flex flex-col gap-2">
+              {histFiltered.length === 0 ? (
+                <div className="text-center py-16 text-slate-400 text-sm">ไม่พบดีลตามเงื่อนไข</div>
+              ) : histFiltered.map(s => (
+                <button key={s.id} onClick={() => openHistDetail(s)}
+                  className="text-left bg-slate-50 border border-slate-100 rounded-xl p-3 hover:border-indigo-200 hover:bg-white transition-all">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-xs text-slate-400">{s.created_at}</span>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${SALE_STATUS_BADGE[s.sale_status ?? "ขายแล้ว"] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>{s.sale_status ?? "ขายแล้ว"}</span>
+                  </div>
+                  <p className="font-bold text-slate-800 text-sm">{s.forklift_brand} {s.forklift_model} <span className="text-slate-400 font-normal">· {s.forklift_unit_no}</span></p>
+                  <p className="text-xs text-slate-500">{s.customer_name || "ไม่ระบุลูกค้า"}{s.province ? ` · ${s.province}` : ""}</p>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-xs text-slate-400">เซลล์: {s.sales_staff || "—"}</span>
+                    <span className="text-sm font-bold text-indigo-700">฿{Number(s.actual_sale || 0).toLocaleString("th-TH")}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* รายละเอียดดีล + แก้ไข (ฝ่ายสต็อก) */}
+          {histDetail && histEdit && (
+            <div className="fixed inset-0 bg-black/50 z-[60] flex items-end sm:items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setHistDetail(null)}>
+              <div className="bg-white rounded-3xl w-full max-w-lg max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+                <div className="px-6 py-4 bg-gradient-to-r from-indigo-600 to-blue-700 flex items-center justify-between flex-shrink-0">
+                  <div>
+                    <h3 className="text-base font-bold text-white">รายละเอียดดีล</h3>
+                    <p className="text-xs text-indigo-200">{histDetail.forklift_unit_no} — {histDetail.forklift_brand} {histDetail.forklift_model}</p>
+                  </div>
+                  <button onClick={() => setHistDetail(null)} className="text-white/70 hover:text-white hover:bg-white/20 rounded-xl p-2"><X className="w-5 h-5" /></button>
+                </div>
+                <div className="overflow-y-auto flex-1 min-h-0 p-5 flex flex-col gap-3 text-sm">
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      ["ลูกค้า", histDetail.customer_name], ["เบอร์โทร", histDetail.customer_tel],
+                      ["ประเภทลูกค้า", histDetail.customer_type], ["จังหวัด", histDetail.province],
+                      ["การชำระ", histDetail.payment_type], ["บริษัทไฟแนนซ์", histDetail.finance_company],
+                      ["ราคาขาย", histDetail.actual_sale ? `฿${Number(histDetail.actual_sale).toLocaleString()}` : ""],
+                      ["มัดจำ", histDetail.deposit ? `฿${Number(histDetail.deposit).toLocaleString()}` : ""],
+                      ["ค่าขนส่ง", histDetail.shipping_cost ? `฿${Number(histDetail.shipping_cost).toLocaleString()}` : ""],
+                      ["เซลล์", histDetail.sales_staff], ["วันที่ทำรายการ", histDetail.created_at],
+                    ] as [string, string][]).filter(([, v]) => String(v ?? "").trim()).map(([k, v]) => (
+                      <div key={k} className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2"><p className="text-[11px] text-slate-400">{k}</p><p className="font-semibold text-slate-700 break-words">{v}</p></div>
+                    ))}
+                  </div>
+                  {histDetail.add_ons?.length ? (
+                    <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                      <p className="text-[11px] text-slate-400 mb-1">อุปกรณ์เสริม</p>
+                      {histDetail.add_ons.map((a, i) => <p key={i} className="text-xs text-slate-700">{a.name} — ฿{Number(a.price).toLocaleString()}</p>)}
+                    </div>
+                  ) : null}
+                  <div className="border-t border-slate-100 pt-3 flex flex-col gap-2">
+                    <p className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><Pencil className="w-3.5 h-3.5" />แก้ไข (ฝ่ายสต็อก)</p>
+                    <label className="text-xs text-slate-500">สถานะ
+                      <select value={histEdit.sale_status} onChange={e => setHistEdit({ ...histEdit, sale_status: e.target.value })} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white text-slate-800">
+                        {Object.keys(SALE_STATUS_BADGE).map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </label>
+                    <label className="text-xs text-slate-500">วันส่งมอบ
+                      <input type="date" value={histEdit.delivery_date} onChange={e => setHistEdit({ ...histEdit, delivery_date: e.target.value })} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800" />
+                    </label>
+                    <label className="text-xs text-slate-500">หมายเหตุ
+                      <textarea value={histEdit.remark} onChange={e => setHistEdit({ ...histEdit, remark: e.target.value })} rows={2} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800" />
+                    </label>
+                    <button onClick={saveHistEdit} className="mt-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-sm">บันทึกการแก้ไข</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
