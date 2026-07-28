@@ -24,8 +24,12 @@ function sb() {
 }
 
 /** โหมดผู้ขนส่ง = ล็อกอินด้วยชื่อเล่น+เบอร์ ไม่มี Supabase session → แตะตารางตรงไม่ได้ (RLS) */
+// โหมดผู้ขนส่ง = ต้องอยู่หน้า /transporter จริงๆ ด้วย — ไม่ใช่แค่มี transporter_name ค้างใน localStorage
+// (เดิมเช็คแค่ localStorage ทำให้หน้าขาย/สต็อกที่เคยเปิดหน้าผู้ขนส่งมาก่อน โหลด RPC ที่ตัดราคาทุน/ดีลออก)
 const isTransporterMode = () =>
-  typeof window !== "undefined" && !!localStorage.getItem("transporter_name");
+  typeof window !== "undefined" &&
+  window.location.pathname.includes("/transporter") &&
+  !!localStorage.getItem("transporter_name");
 
 /** โหลดข้อมูลผ่าน RPC เฉพาะที่ผู้ขนส่งจำเป็นต้องใช้ (ไม่มีราคาทุน/ข้อมูลลูกค้า) */
 async function bootstrapTransporter(): Promise<BootstrapData> {
