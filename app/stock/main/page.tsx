@@ -328,6 +328,23 @@ export default function StockMain() {
     return rows;
   }, [listFiltered, listSort]);
 
+  // ── แจ้งเตือนเตรียมสั่งสินค้า — forklift เหลือ < 3 · ชนิดอื่น (ยกเว้นรีชทรัค) เหลือ < 15 ──
+  const reorderAlerts = useMemo(() => {
+    const g = new Map<string, { label: string; cat: string; ready: number; threshold: number }>();
+    forklifts.forEach(f => {
+      const cat = f.vehicle_category ?? "Forklift";
+      if (cat === "Reach Truck") return;               // รีชทรัคไม่ต้องแจ้ง
+      const isFork = cat === "Forklift";
+      const mast = String((f.custom_fields as Record<string, unknown> | undefined)?.["MAST"] ?? "").trim();
+      const key = isFork ? `${f.brand}|${f.model}|${mast}` : `${f.brand}|${f.model}`;
+      const label = isFork && mast ? `${f.brand} ${f.model} · เสา ${mast}` : `${f.brand} ${f.model}`;
+      const row = g.get(key) ?? { label, cat, ready: 0, threshold: isFork ? 3 : 15 };
+      if (String(f.status).trim() === "พร้อมขาย") row.ready++;
+      g.set(key, row);
+    });
+    return [...g.values()].filter(r => r.ready < r.threshold).sort((a, b) => a.ready - b.ready);
+  }, [forklifts]);
+
   // Settings — standard dropdown handlers
   const saveOption = () => {
     if (!editingField || !newOption.trim()) return;
@@ -396,6 +413,24 @@ export default function StockMain() {
         {waiting > 0 && (
           <div className="-mt-2 text-xs text-slate-500 flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5 text-blue-500" />มีรถรอรับเข้าคลังอีก <b className="text-blue-700">{waiting}</b> คัน (ยังไม่ขึ้นหน้าขาย)
+          </div>
+        )}
+
+        {/* ── แจ้งเตือนเตรียมสั่งสินค้า (สต็อกใกล้หมด) ── */}
+        {reorderAlerts.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+            <div className="flex items-center gap-2 mb-2.5">
+              <AlertCircle className="w-4 h-4 text-amber-600" />
+              <h3 className="text-sm font-bold text-amber-800">เตรียมสั่งสินค้า — {reorderAlerts.length} รุ่นใกล้หมด</h3>
+            </div>
+            <p className="text-[11px] text-amber-600 mb-2.5">เกณฑ์: โฟล์คลิฟท์เหลือ &lt; 3 · ชนิดอื่นเหลือ &lt; 15 (รีชทรัคไม่นับ)</p>
+            <div className="flex flex-wrap gap-1.5">
+              {reorderAlerts.map((r, i) => (
+                <span key={i} className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border ${r.ready === 0 ? "bg-red-100 text-red-700 border-red-200" : "bg-white text-amber-800 border-amber-200"}`}>
+                  {r.label} <span className={`font-bold ${r.ready === 0 ? "text-red-600" : "text-amber-600"}`}>เหลือ {r.ready}</span>
+                </span>
+              ))}
+            </div>
           </div>
         )}
 

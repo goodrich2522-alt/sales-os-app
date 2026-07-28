@@ -40,10 +40,6 @@ const WeeklyBreakdownChart = dynamic(
   () => import("@/components/charts/Charts").then((m) => ({ default: m.WeeklyBreakdownChart })),
   { ssr: false, loading: () => <ChartSkeleton /> }
 );
-const SaleTypeChart = dynamic(
-  () => import("@/components/charts/Charts").then((m) => ({ default: m.SaleTypeChart })),
-  { ssr: false, loading: () => <ChartSkeleton /> }
-);
 
 const MONTHS_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 
@@ -134,10 +130,24 @@ export default function Dashboard() {
     })).sort((a, b) => b.count - a.count);
   }, [sales]);
 
+  // ข้อมูลรถต่อคัน (เสา/ชนิด) — ใช้แยกรุ่นขายดีของ forklift ตามความสูงเสา (MAST)
+  const fkMeta = useMemo(() => {
+    const m = new Map<string, { mast: string; cat: string }>();
+    forklifts.forEach(f => m.set(f.id, {
+      mast: String((f.custom_fields as Record<string, unknown> | undefined)?.["MAST"] ?? "").trim(),
+      cat: f.vehicle_category ?? "Forklift",
+    }));
+    return m;
+  }, [forklifts]);
+
   const liveTopModels = useMemo(() => {
     const map: Record<string, number> = {};
     sales.forEach(s => {
-      const key = `${s.forklift_brand} ${s.forklift_model}`;
+      const meta = fkMeta.get(s.forklift_id);
+      const isForklift = (meta?.cat ?? s.vehicle_type) === "Forklift";
+      const mast = meta?.mast ?? "";
+      // forklift → แยกตามความสูงเสา (เช่น CPCD25-Q22K2 · เสา M400) · ชนิดอื่นรวมตามรุ่น
+      const key = isForklift && mast ? `${s.forklift_brand} ${s.forklift_model} · เสา ${mast}` : `${s.forklift_brand} ${s.forklift_model}`;
       map[key] = (map[key] ?? 0) + 1;
     });
     const total = sales.length || 1;
@@ -145,7 +155,7 @@ export default function Dashboard() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6)
       .map(([model, count]) => ({ model, count, pct: Math.round((count / total) * 100) }));
-  }, [sales]);
+  }, [sales, fkMeta]);
 
   const contactSourceData = useMemo(() => {
     const ALL_SOURCES = ["Line", "Facebook", "TikTok", "โทร", "Google", "คนอื่นบอกต่อ"];
@@ -160,25 +170,6 @@ export default function Dashboard() {
       count: map[src] ?? 0,
       pct: Math.round(((map[src] ?? 0) / total) * 100),
     })).sort((a, b) => b.count - a.count);
-  }, [sales]);
-
-  const saleTypeData = useMemo(() => {
-    const COLORS: Record<string, string> = {
-      "รถขายเต็มคัน": "#6366F1",
-      "รถมือสอง":     "#10B981",
-      "รถเช่า":       "#F59E0B",
-      "งานซ่อม":      "#EF4444",
-    };
-    const map: Record<string, { count: number; revenue: number }> = {};
-    sales.forEach(s => {
-      const t = s.sale_type ?? "รถขายเต็มคัน";
-      if (!map[t]) map[t] = { count: 0, revenue: 0 };
-      map[t].count++;
-      map[t].revenue += s.actual_sale;
-    });
-    return Object.entries(map)
-      .sort((a, b) => b[1].count - a[1].count)
-      .map(([type, d]) => ({ type, count: d.count, revenue: d.revenue, color: COLORS[type] ?? "#64748B" }));
   }, [sales]);
 
   // ── สรุปจากข้อมูลจริง (sales) ────────────────────────────────────────────────
@@ -529,32 +520,6 @@ export default function Dashboard() {
               <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                 <span className="text-xs text-slate-500">รวมทั้งหมด</span>
                 <span className="text-sm font-bold text-slate-700">{sales.length} คัน</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Sale Type Chart */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-          <SectionHeader icon={<BarChart3 className="w-4 h-4 text-violet-600" />} title="สัดส่วนประเภทการขาย" sub="ประเภทสินค้าที่ขายดีสุด — อัปเดตจากข้อมูลจริง" iconBg="bg-violet-50" />
-          <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 h-52">
-              <SaleTypeChart data={saleTypeData} />
-            </div>
-            <div className="flex flex-col gap-2 justify-center">
-              {saleTypeData.map((d) => (
-                <div key={d.type} className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl p-3">
-                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-800 truncate">{d.type}</p>
-                    <p className="text-xs text-slate-500">฿{fmtM(d.revenue)}</p>
-                  </div>
-                  <span className="text-sm font-bold text-slate-700 flex-shrink-0 bg-white border border-slate-200 px-2 py-0.5 rounded-lg">{d.count} คัน</span>
-                </div>
-              ))}
-              <div className="mt-1 pt-3 border-t border-slate-100 flex items-center justify-between">
-                <span className="text-xs text-slate-500">รวม</span>
-                <span className="text-sm font-bold text-slate-700">{saleTypeData.reduce((a, b) => a + b.count, 0)} คัน</span>
               </div>
             </div>
           </div>
