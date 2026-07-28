@@ -21,7 +21,7 @@ export function categorizeModel(model: string): VehicleType {
   if (/^(CPCD|CPD)/i.test(m)) return "Forklift";
   if (/^(CBD|CBS)/i.test(m)) return "Electric Pallet Truck";
   if (/^CQD/i.test(m)) return "Reach Truck";
-  if (/^(CDD|EPS|PS|WMS|WDS|SDA|DGB|PTS|PD|BFG)/i.test(m)) return "Stacker";
+  if (/^(CDD|EPS|PS|WMS|WDS|SDA|DG|PTS|PD|BFG)/i.test(m)) return "Stacker"; // DG = ครอบคลุม DGB + DG series (lift table)
   return "Handlift"; // BF/AC/PWH/WS/CNS/WH/HLD/HLS/EHLS ...
 }
 
