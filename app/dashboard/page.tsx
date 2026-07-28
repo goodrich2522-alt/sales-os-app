@@ -71,15 +71,33 @@ export default function Dashboard() {
   const [dashChecking, setDashChecking] = useState(false);
   const [dashNotice, setDashNotice] = useState(""); // แจ้งเหตุที่เข้าไม่ได้ (รออนุมัติ/ถูกระงับ/ยังไม่ลงทะเบียน)
 
-  const { sales, forklifts } = useApp();
-  const staffNames = Array.from(new Set(sales.map((s) => s.sales_staff).filter(Boolean)));
+  const { sales: allSales, forklifts } = useApp();
+  const staffNames = Array.from(new Set(allSales.map((s) => s.sales_staff).filter(Boolean)));
   const [selectedStaff, setSelectedStaff] = useState("");
   useEffect(() => {
-    if (!selectedStaff) { const first = sales.find((s) => s.sales_staff)?.sales_staff; if (first) setSelectedStaff(first); }
-  }, [sales, selectedStaff]);
+    if (!selectedStaff) { const first = allSales.find((s) => s.sales_staff)?.sales_staff; if (first) setSelectedStaff(first); }
+  }, [allSales, selectedStaff]);
   const [drillMonth, setDrillMonth] = useState<string | null>(null);
   const [globalDrillMonth, setGlobalDrillMonth] = useState<string | null>(null);
   const [regionModal, setRegionModal] = useState<string | null>(null);
+
+  // ── ตัวกรองปี + แบรนด์ (กรองทั้งแดชบอร์ด) ──────────────────────────────────────
+  // แก้บั๊กเดิม: กราฟรายเดือนรวมยอดคนละปีเข้าเดือนเดียวกัน (ใช้ getMonth ล้วน) → กรองปีก่อน เดือนเลยไม่ปนปี
+  const [dashYear, setDashYear] = useState("");        // "" = ยังไม่ตั้ง → effect เลือกปีล่าสุดให้
+  const [dashBrand, setDashBrand] = useState("all");
+  const years = useMemo(() => {
+    const ys = new Set<string>();
+    allSales.forEach((s) => { const d = new Date(s.created_at); if (!isNaN(d.getTime())) ys.add(String(d.getFullYear())); });
+    return [...ys].sort((a, b) => b.localeCompare(a)); // ใหม่ → เก่า
+  }, [allSales]);
+  useEffect(() => { if (!dashYear && years.length) setDashYear(years[0]); }, [years, dashYear]);
+  const brandOptions = useMemo(() => [...new Set(allSales.map((s) => s.forklift_brand || "อื่นๆ"))].sort(), [allSales]);
+  // กรองตามปี (ใช้กับกราฟสัดส่วนแบรนด์ — ให้เห็นทุกแบรนด์ในปีนั้น ไม่ถูก brand filter บีบเหลือ 1)
+  const yearSales = useMemo(() => dashYear
+    ? allSales.filter((s) => { const d = new Date(s.created_at); return !isNaN(d.getTime()) && String(d.getFullYear()) === dashYear; })
+    : allSales, [allSales, dashYear]);
+  // กรองปี + แบรนด์ → ใช้กับ aggregation ที่เหลือทั้งหมด (ชื่อ sales เดิม เพื่อไม่ต้องแก้โค้ดด้านล่าง)
+  const sales = useMemo(() => dashBrand === "all" ? yearSales : yearSales.filter((s) => (s.forklift_brand || "อื่นๆ") === dashBrand), [yearSales, dashBrand]);
 
   useEffect(() => {
     // เข้าค้างไว้ได้เฉพาะเมื่อ session Supabase ยังไม่หมดอายุ — ไม่งั้นให้ล็อกอินใหม่
@@ -176,10 +194,10 @@ export default function Dashboard() {
   const realBrandShare = useMemo(() => {
     const COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4", "#EC4899", "#64748B"];
     const map: Record<string, number> = {};
-    sales.forEach((s) => { const b = s.forklift_brand || "อื่นๆ"; map[b] = (map[b] ?? 0) + 1; });
-    const total = sales.length || 1;
+    yearSales.forEach((s) => { const b = s.forklift_brand || "อื่นๆ"; map[b] = (map[b] ?? 0) + 1; }); // ใช้ทั้งปี ไม่ถูก brand filter บีบ
+    const total = yearSales.length || 1;
     return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([name, count], i) => ({ name, value: count, pct: Math.round((count / total) * 100), color: COLORS[i % COLORS.length] }));
-  }, [sales]);
+  }, [yearSales]);
   const totalRevenue = sales.reduce((a, s) => a + (s.actual_sale || 0), 0);
   const totalUnits = sales.length;
   const monthsWithData = realMonthly.filter((m) => m.units > 0).length || 1;
@@ -299,6 +317,25 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6 flex flex-col gap-5">
+        {/* ── ตัวกรอง: ปี + แบรนด์ (มีผลทั้งแดชบอร์ด) ── */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5 mr-1"><Calendar className="w-3.5 h-3.5" />ปี</span>
+          {years.map((y) => (
+            <button key={y} onClick={() => setDashYear(y)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-bold border transition-all ${dashYear === y ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200 hover:border-indigo-300"}`}>
+              {Number(y) + 543}
+            </button>
+          ))}
+          <span className="mx-1 h-5 w-px bg-slate-200" />
+          <span className="text-xs font-semibold text-slate-500 mr-1">แบรนด์</span>
+          <select value={dashBrand} onChange={(e) => setDashBrand(e.target.value)}
+            className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+            <option value="all">ทุกแบรนด์</option>
+            {brandOptions.map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
+          <span className="ml-auto text-xs text-slate-400">{totalUnits} ดีล · ฿{fmtM(totalRevenue)}</span>
+        </div>
+
         {/* KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard icon={<DollarSign className="w-5 h-5" />} label="รายได้รวม"    value={`฿${fmtM(totalRevenue)}`} sub="จากดีลจริง"   color="text-blue-700"    iconBg="bg-blue-600"    accent="border-l-blue-500" />
