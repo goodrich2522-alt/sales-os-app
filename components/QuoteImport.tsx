@@ -3,7 +3,7 @@
 // อ่าน PDF ในเบราว์เซอร์ (ไฟล์ไม่ออกนอกเครื่อง) → parse → คนตรวจ/แก้ → บันทึกเข้าสต็อก
 // รอบแรกรองรับ HELI (text layer) · เจ้าอื่นทยอยเพิ่ม
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useApp } from "@/lib/AppContext";
 import { readPdfText, looksScanned, parseQuoteText, detectVendor, parseQuoteExcel, readExcelRows, isExcelFile, normalizeStaxxModel, ParsedVehicle } from "@/lib/quoteImport";
 import { categorizeModel } from "@/lib/constants";
@@ -23,16 +23,6 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
   const [done, setDone] = useState(false);           // บันทึกเสร็จแล้ว → แสดงหน้าสรุป
 
   const existingIds = new Set(forklifts.map((f) => String(f.id)));
-
-  // ราคาทุนจากสต็อก แยกตามรุ่น (เอาค่าล่าสุด) — ใช้เติมให้รถนำเข้ารุ่นเดียวกันที่ยังไม่มีราคา
-  const costByModel = useMemo(() => {
-    const m = new Map<string, number>();
-    [...forklifts]
-      .filter((f) => Number(f.cost_price) > 0 && f.model)
-      .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")))
-      .forEach((f) => m.set(String(f.model).trim().toUpperCase(), Number(f.cost_price))); // ล่าสุดทับ
-    return m;
-  }, [forklifts]);
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -83,16 +73,9 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
     } else {
       staxxRows = staxxSN.length ? staxxSN : staxxPF;
     }
-    // เติมราคาทุนจากฐานข้อมูล (รถรุ่นเดียวกันในสต็อก) ให้คันที่ parser ยังไม่ได้ราคา
-    const finalRows = [...others, ...staxxRows].map((v) => {
-      if (v.cost_price) return v;
-      const dbCost = costByModel.get(String(v.model).trim().toUpperCase());
-      return dbCost
-        ? { ...v, cost_price: dbCost, flags: [...(v.flags ?? []), "ราคาทุนดึงจากสต็อก (รุ่นเดียวกัน) — ตรวจ/แก้ได้"] }
-        : v;
-    });
+    // ราคาทุนอิงตามเอกสารแต่ละชุดเท่านั้น (ไม่ดึงจากสต็อกเดิม เพราะต้นทุนขึ้นลงตามตลาด)
     setVendor([...vendors].join(", "));
-    setRows(finalRows);
+    setRows([...others, ...staxxRows]);
     setBusy(false);
   };
 
