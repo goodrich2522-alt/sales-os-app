@@ -143,7 +143,7 @@
 - ☐ 4.5 **ท่ออ่าน** — ✅ text layer เสร็จ (pdf.js ในเครื่อง) · ☐ สแกน (HANGCHA) → Ollama local ยังไม่ต่อ
 - ☐ 4.6 **normalize ต่อเจ้า** `lib/quoteParser/` (เบากว่าเดิมเพราะ VLM คืนโครงสร้างแล้ว):
   - ☑ `heli.ts` (27 ก.ค.) — Sales Contract text layer · จับ รุ่น/SN/พิกัด(จากเลขรุ่น)/พลังงาน/MAST/Valve/ราคาทุน/PI · ทดสอบกับใบจริง CPCD35-Q22K2 ถูก 100% · รองรับหลาย SN ต่อใบ · id=SN (SN-RULES)
-  - ☑ `staxx.ts` (27 ก.ค.) — อ่าน **Serial No. List (Excel)** ของ STAXX: จับคอลัมน์เอง (PI/รุ่น/QTY/Serial) · แตกช่วง SN "51596-1~51596-12" → รายคัน · พิกัดจากรุ่น (เลข×100 kg) · ทดสอบไฟล์จริง 290 คันถูก · (Proforma PDF ราคา USD ยังไม่ต่อ) · ☐ ROCKMAN ยังไม่ทำ
+  - ☑ `staxx.ts` (27 ก.ค.) — (ก) **Serial No. List (Excel)**: จับคอลัมน์เอง · แตกช่วง SN "51596-1~51596-12"→รายคัน · พิกัดจากรุ่น (เลข×100 kg) · ทดสอบ 290 คันถูก · (ข) **Proforma PDF**: `parseStaxxProforma` ดึงราคา FOB USD (ทดสอบ 32 รายการถูก) + `normalizeStaxxModel` merge ราคาเข้ารถ Excel SN ตามรุ่น (เก็บ custom_fields "ราคา FOB (USD)" — ไม่ใช่ราคาทุนบาท)
   - ☑ `rockman.ts` (27 ก.ค.) — QO (cnc-moving) ฟอนต์ไทยแตก → ดึงเฉพาะอังกฤษ/ตัวเลข: รุ่น(PD-400-1500)/พิกัด(400kg)/ความสูง(1500mm)/เลขเอกสาร · ราคากรอกเอง · ไม่มี SN
   - `hangcha.ts` — รับ Markdown จาก Typhoon → จับ รุ่น/ราคา/PI/สเปก
   - `detect.ts` เดาเจ้า + `common.ts` ตัวช่วยร่วม
