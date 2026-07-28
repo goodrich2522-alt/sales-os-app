@@ -8,7 +8,7 @@ import {
   Package, Trash2, History, RotateCcw, Pencil, Check, Camera,
   SlidersHorizontal, ImageOff, ZoomIn, ChevronLeft, Plus, ClipboardList,
   Settings, ChevronDown, Type, ListOrdered, ArrowLeft, Bell, Eye, ChevronUp, RefreshCw,
-  LayoutGrid, Table as TableIcon, Users,
+  LayoutGrid, Table as TableIcon, Users, Download,
 } from "lucide-react";
 import { PROVINCES, CONTACT_SOURCES } from "@/lib/mockData";
 import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, ContactSource, SaleType, InspectionRecord, SLOT_LABELS } from "@/lib/types";
@@ -307,6 +307,39 @@ export default function SalesMain() {
     setFSpecModel(""); setFSpecSN(""); setFForkLength(""); setFForkWidth("");
   };
   const mySales = salesUser ? sales.filter(s => s.sales_staff === salesUser.name) : [];
+
+  // ส่งออกรายงานการขายของเซลล์คนนี้เป็นไฟล์ Excel (.xlsx) — โหลด xlsx ตอนกดเท่านั้น
+  const exportMySalesExcel = async () => {
+    if (mySales.length === 0) return;
+    const XLSX = await import("xlsx");
+    const rows = mySales.map(s => ({
+      "วันที่": s.created_at ?? "",
+      "สถานะ": s.sale_status ?? "ขายแล้ว",
+      "SN": s.forklift_unit_no ?? "",
+      "ยี่ห้อ/รุ่น": `${s.forklift_brand ?? ""} ${s.forklift_model ?? ""}`.trim(),
+      "ลูกค้า": s.customer_name ?? "",
+      "เบอร์โทร": s.customer_tel ?? "",
+      "จังหวัด": s.province ?? "",
+      "ประเภทลูกค้า": s.customer_type ?? "",
+      "การชำระ": s.payment_type ?? "",
+      "บริษัทไฟแนนซ์": s.finance_company ?? "",
+      "ราคาขาย": Number(s.actual_sale) || 0,
+      "มัดจำ": Number(s.deposit) || 0,
+      "อุปกรณ์เสริม": (s.add_ons ?? []).map(a => `${a.name} (${Number(a.price).toLocaleString()})`).join(", "),
+      "มูลค่าอุปกรณ์เสริม": (s.add_ons ?? []).reduce((t, a) => t + (Number(a.price) || 0), 0),
+      "ของแถม": s.freebie ? "มี" : "",
+      "ค่าขนส่ง": Number(s.shipping_cost) || 0,
+      "วันส่งมอบ": s.delivery_date ?? "",
+      "หมายเหตุ": s.remark ?? "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [10, 16, 14, 20, 18, 12, 10, 12, 12, 14, 12, 10, 24, 14, 8, 10, 12, 20].map(w => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "การขาย");
+    const stamp = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `รายงานการขาย_${salesUser?.name ?? "เซลล์"}_${stamp}.xlsx`);
+  };
+
   // ลูกค้าของฉัน — รวมดีลตามลูกค้า (ชื่อ+เบอร์) เห็นว่าลูกค้าแต่ละคนซื้ออะไรบ้าง
   const myCustomers = useMemo(() => {
     const m = new Map<string, { name: string; tel: string; province: string; deals: Sale[] }>();
@@ -356,7 +389,8 @@ export default function SalesMain() {
     return { receiver, deliverer, all: [...receiver, ...deliverer], receiverNames: names(recvRecs), delivererNames: names(delivRecs) };
   }, [detailSale, inspections]);
 
-  const validate = () => {
+  // ตรวจฟอร์มตามสถานะ — บางสถานะยังไม่ต้องมีสลิป/วันส่งมอบ (เช่น รอไฟแนนซ์ ยังไม่จ่าย)
+  const validate = (status: SaleStatus) => {
     const e: Record<string, string> = {};
     if (!form.customer_name.trim()) e.customer_name = "กรุณากรอกชื่อลูกค้า";
     if (!form.customer_tel.trim()) e.customer_tel = "กรุณากรอกเบอร์โทร";
@@ -365,8 +399,11 @@ export default function SalesMain() {
     if (!form.payment_type) e.payment_type = "กรุณาเลือกประเภทการชำระ";
     if (form.payment_type === "ไฟแนนซ์" && !form.finance_company) e.finance_company = "กรุณาเลือกบริษัทไฟแนนซ์";
     if (!form.actual_sale || isNaN(Number(form.actual_sale))) e.actual_sale = "กรุณากรอกราคาขาย";
-    if (!form.delivery_date) e.delivery_date = "กรุณาระบุวันส่งมอบ";
-    if (!paymentProof) e.payment_proof = "กรุณาแนบรูปหลักฐานการชำระเงิน (บังคับ)";
+    // วันส่งมอบ + สลิป: บังคับเฉพาะตอนปิดการขาย/รอจัดส่ง (เงินเข้าแล้ว) · มัดจำต้องมีสลิปมัดจำ · รอไฟแนนซ์ยังไม่ต้อง
+    const needDelivery = status === "ปิดการขาย/จัดส่งแล้ว" || status === "รอจัดส่ง";
+    const needProof    = status === "ปิดการขาย/จัดส่งแล้ว" || status === "รอจัดส่ง" || status === "มัดจำแล้ว";
+    if (needDelivery && !form.delivery_date) e.delivery_date = "กรุณาระบุวันส่งมอบ";
+    if (needProof && !paymentProof) e.payment_proof = "กรุณาแนบรูปหลักฐานการชำระเงิน (บังคับ)";
     return e;
   };
 
@@ -478,8 +515,13 @@ export default function SalesMain() {
 
   // ตรวจฟอร์มแล้วบันทึกดีลด้วยสถานะที่เลือก (ใช้ร่วมทุกปุ่ม)
   const submitSale = (status: SaleStatus) => {
-    const errs = validate();
-    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    const errs = validate(status);
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      // โชว์กล่องสรุปที่ยังกรอกไม่ครบ ใกล้ปุ่ม — กันกดปุ่มแล้วไม่รู้ว่าติดตรงไหน
+      setTimeout(() => document.getElementById("sale-error-summary")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+      return;
+    }
     commitSale(status);
   };
   const handleSell = (e: React.FormEvent) => { e.preventDefault(); submitSale("ปิดการขาย/จัดส่งแล้ว"); };
@@ -1247,6 +1289,16 @@ export default function SalesMain() {
                           <Pencil className="w-3.5 h-3.5 flex-shrink-0" />กำลังแก้ไขดีลเดิม — เลือกสถานะที่ต้องการบันทึกทับ (เปลี่ยนสถานะได้)
                         </p>
                       )}
+                      {/* สรุปช่องที่ยังกรอกไม่ครบ — เด้งใกล้ปุ่มเวลากดแล้วไม่ผ่าน */}
+                      {Object.keys(errors).length > 0 && (
+                        <div id="sale-error-summary" className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5 flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-bold mb-0.5">ยังปิดการขายไม่ได้ — กรอกให้ครบก่อน:</p>
+                            <p>{Object.entries(errors).map(([, msg]) => msg).join(" · ")}</p>
+                          </div>
+                        </div>
+                      )}
                       <button type="submit" className={`w-full text-white font-bold py-3.5 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 ${editingSale ? "bg-gradient-to-r from-violet-600 to-fuchsia-700 hover:from-violet-500 hover:to-fuchsia-600" : "bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600"}`}>
                         <CheckCircle className="w-4 h-4" />{editingSale ? "บันทึกการแก้ไข" : "ปิดการขาย / จัดส่งแล้ว"}
                       </button>
@@ -1469,7 +1521,13 @@ export default function SalesMain() {
           <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[82vh] flex flex-col shadow-2xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
               <div><h3 className="text-base font-bold text-slate-800">การขายของฉัน</h3><p className="text-xs text-slate-500 mt-0.5">{mySales.length} ดีล · {myCustomers.length} ลูกค้า</p></div>
-              <button onClick={() => { setShowHistory(false); setDeleteConfirm(null); }} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all"><X className="w-5 h-5" /></button>
+              <div className="flex items-center gap-2">
+                <button onClick={exportMySalesExcel} disabled={mySales.length === 0}
+                  className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg px-3 py-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                  <Download className="w-4 h-4" /><span className="hidden sm:inline">Export Excel</span>
+                </button>
+                <button onClick={() => { setShowHistory(false); setDeleteConfirm(null); }} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all"><X className="w-5 h-5" /></button>
+              </div>
             </div>
 
             {/* สลับ: ดีลของฉัน / ลูกค้าของฉัน */}

@@ -135,7 +135,7 @@ export default function StockMain() {
           staff: s.sales_staff || "เซลล์",
           status: String(s.sale_status ?? "ขายแล้ว"),
           title: `${s.forklift_brand} ${s.forklift_model}`.trim() || s.forklift_unit_no || "รถ",
-          sub: `${s.customer_name || "ลูกค้า"} · ฿${Number(s.actual_sale || 0).toLocaleString("th-TH")}`,
+          sub: `ตัดออกจากสต็อก · ${s.forklift_unit_no || ""} · ${s.customer_name || "ลูกค้า"} · ฿${Number(s.actual_sale || 0).toLocaleString("th-TH")}`,
         });
         const news = fresh.map(toAlert);
         setSaleAlerts(a => [...news, ...a].slice(0, 5));
