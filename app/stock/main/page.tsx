@@ -82,7 +82,7 @@ export default function StockMain() {
   const [listMast, setListMast]     = useState("all");                                       // กรองเสา (MAST)
   const [listFuel, setListFuel]     = useState("all");                                       // กรองพลังงาน
   const [listSort, setListSort]     = useState<"recent" | "model" | "remain" | "sn">("recent"); // การเรียง
-  const [listView, setListView]     = useState<"list" | "table" | "byModel">("list");           // มุมมอง: รายคัน / ตาราง / รวมตามรุ่น
+  const [listView, setListView]     = useState<"list" | "table" | "byModel" | "aging">("list");  // มุมมอง: รายคัน / ตาราง / รวมตามรุ่น / ค้างนาน
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showSettings, setShowSettings]   = useState(false);
   const [detailItem, setDetailItem]       = useState<Forklift | null>(null); // รถที่กดดูรายละเอียด
@@ -270,9 +270,29 @@ export default function StockMain() {
   const fuelOpts  = [...new Set(forklifts.map(f => f.fuel).filter(Boolean))].sort();
 
   // ส่งออกรายการสินค้าเป็น Excel (.xlsx) — ตามที่กรองอยู่ (ถ้าไม่กรองก็ทั้งหมด) เรียงตามที่แสดง
+  //  · มุมมองค้างนาน → ส่งออกรายงาน Aging (พร้อมขาย + จำนวนวันค้าง)
   const exportProductsExcel = async () => {
     if (listFiltered.length === 0) return;
     const XLSX = await import("xlsx");
+    if (listView === "aging") {
+      const arows = agingRows.map(({ f, days }, i) => ({
+        "อันดับ": i + 1,
+        "รหัส (SN)": f.id ?? "",
+        "SN": f.SN ?? "",
+        "ยี่ห้อ": f.brand || "(ไม่ระบุ)",
+        "รุ่น": mastOf(f) ? `${f.model} · เสา ${mastOf(f)}` : (f.model ?? ""),
+        "ชนิด": f.vehicle_category ?? "Forklift",
+        "วันรับรถ": f.received_date ?? "",
+        "ค้างสต็อก (วัน)": days ?? "",
+        "โลเคชั่น": f.location ?? "",
+      }));
+      const aws = XLSX.utils.json_to_sheet(arows);
+      aws["!cols"] = [8, 16, 14, 12, 22, 14, 12, 14, 16].map(w => ({ wch: w }));
+      const awb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(awb, aws, "รถค้างสต็อก");
+      XLSX.writeFile(awb, `รายงานรถค้างสต็อก_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      return;
+    }
     const rows = listFiltered.map(f => ({
       "รหัส (SN)": f.id ?? "",
       "SN": f.SN ?? "",
@@ -344,6 +364,22 @@ export default function StockMain() {
     });
     return [...g.values()].filter(r => r.ready < r.threshold).sort((a, b) => a.ready - b.ready);
   }, [forklifts]);
+
+  // ── FIFO เฟส 3: รายงานรถค้างสต็อกนาน (Aging) — เฉพาะพร้อมขาย เรียงค้างนานสุดก่อน ──
+  const daysInStock = (f: Forklift): number | null => {
+    const d = String(f.received_date || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+    const ms = Date.now() - new Date(d + "T00:00:00").getTime();
+    return ms > 0 ? Math.floor(ms / 86400000) : 0;
+  };
+  const agingRows = useMemo(() => {
+    return listFiltered
+      .filter(f => String(f.status).trim() === "พร้อมขาย")
+      .map(f => ({ f, days: daysInStock(f) }))
+      .sort((a, b) => (b.days ?? -1) - (a.days ?? -1)); // ค้างนานสุดก่อน · ไม่มีวันรับ = ท้ายสุด
+  }, [listFiltered]);
+  const agingOver90 = agingRows.filter(r => (r.days ?? 0) > 90).length;
+  const agingOver180 = agingRows.filter(r => (r.days ?? 0) > 180).length;
 
   // Settings — standard dropdown handlers
   const saveOption = () => {
@@ -572,12 +608,58 @@ export default function StockMain() {
                     className={`px-2.5 py-1.5 transition ${listView === "table" ? "bg-emerald-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>ตาราง</button>
                   <button onClick={() => setListView("byModel")}
                     className={`px-2.5 py-1.5 transition ${listView === "byModel" ? "bg-emerald-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>ตามรุ่น</button>
+                  <button onClick={() => setListView("aging")}
+                    className={`px-2.5 py-1.5 transition ${listView === "aging" ? "bg-amber-500 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>ค้างนาน</button>
                 </div>
               </div>
             </div>
             <div className="overflow-auto max-h-[72vh] p-4 flex flex-col gap-2">
               {listFiltered.length === 0 && (
                 <div className="text-center py-12 text-slate-400 text-sm">ไม่พบรถตามเงื่อนไข</div>
+              )}
+
+              {/* ── มุมมองค้างนาน (Aging) — พร้อมขาย เรียงค้างสต็อกนานสุดก่อน ── */}
+              {listView === "aging" && listFiltered.length > 0 && (
+                agingRows.length === 0 ? (
+                  <div className="text-center py-12 text-slate-400 text-sm">ไม่มีรถ &ldquo;พร้อมขาย&rdquo; ในเงื่อนไขนี้</div>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-2 mb-1">
+                      <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg font-semibold">พร้อมขาย {agingRows.length} คัน</span>
+                      {agingOver90 > 0 && <span className="text-xs bg-amber-100 text-amber-700 px-2.5 py-1 rounded-lg font-semibold">ค้าง &gt; 90 วัน: {agingOver90}</span>}
+                      {agingOver180 > 0 && <span className="text-xs bg-red-100 text-red-700 px-2.5 py-1 rounded-lg font-semibold">ค้าง &gt; 180 วัน: {agingOver180}</span>}
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-left text-slate-400 border-b border-slate-100">
+                            {["#", "รหัส", "ยี่ห้อ/รุ่น", "SN", "วันรับรถ", "ค้างสต็อก", "โลเคชั่น"].map((h, i) => (
+                              <th key={i} className="px-2.5 py-2 font-semibold whitespace-nowrap">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {agingRows.map(({ f, days }, i) => {
+                            const tone = days == null ? "" : days > 180 ? "bg-red-50" : days > 90 ? "bg-amber-50" : "";
+                            const dtone = days == null ? "text-slate-400" : days > 180 ? "text-red-600" : days > 90 ? "text-amber-600" : "text-slate-600";
+                            const mast = String((f.custom_fields as Record<string, unknown> | undefined)?.["MAST"] ?? "").trim();
+                            return (
+                              <tr key={f.id} onClick={() => setDetailItem(f)} className={`border-b border-slate-50 hover:bg-emerald-50/60 cursor-pointer transition-colors ${tone}`}>
+                                <td className="px-2.5 py-2 text-slate-400 font-bold">{i + 1}</td>
+                                <td className="px-2.5 py-2 whitespace-nowrap"><span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md text-slate-500 bg-slate-100 border border-slate-200">#{f.id}</span></td>
+                                <td className="px-2.5 py-2"><span className="font-semibold text-slate-800">{f.brand}</span> <span className="text-slate-500">{f.model}{mast ? ` · เสา ${mast}` : ""}</span></td>
+                                <td className="px-2.5 py-2 text-slate-500 whitespace-nowrap">{f.SN || "—"}</td>
+                                <td className="px-2.5 py-2 text-slate-500 whitespace-nowrap">{f.received_date || "—"}</td>
+                                <td className={`px-2.5 py-2 whitespace-nowrap font-bold ${dtone}`}>{days == null ? "ไม่ระบุวันรับ" : `${days} วัน`}</td>
+                                <td className="px-2.5 py-2 text-slate-500 whitespace-nowrap">{f.location || "—"}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )
               )}
 
               {/* ── มุมมองตาราง (คอลัมน์ครบ) ── */}
