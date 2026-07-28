@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Package, Plus, LogOut, CheckCircle, AlertCircle, List, X,
   TrendingUp, Boxes, Trash2, Settings, Pencil, Check, ChevronDown,
-  Clock, Hash, Camera, ImageOff, Eye,
+  Clock, Hash, Camera, ImageOff, Eye, Bell,
   Download, Upload, FileText, ShoppingCart, User
 } from "lucide-react";
 import { Forklift } from "@/lib/types";
@@ -88,12 +88,12 @@ export default function StockMain() {
   const [detailItem, setDetailItem]       = useState<Forklift | null>(null); // รถที่กดดูรายละเอียด
   const [detailLightbox, setDetailLightbox] = useState<{ imgs: string[]; idx: number } | null>(null);
 
-  // ── แจ้งเตือนเด้งเมื่อเซลล์ทำรายการขายใหม่เข้ามา (realtime) ──
+  // ── แจ้งเตือนเซลล์ทำรายการขาย — คงค้างจนแอดมินอ่าน + กดยืนยันตัดออกจากสต็อก (เก็บ ack ใน localStorage) ──
   type SaleAlert = { id: string; staff: string; status: string; title: string; sub: string };
-  const [saleAlerts, setSaleAlerts] = useState<SaleAlert[]>([]);
-  const prevSaleIdsRef = useRef<Set<string>>(new Set());
-  const alertReadyRef  = useRef(false);
-  const dismissAlert = (id: string) => setSaleAlerts(a => a.filter(x => x.id !== id));
+  const ACK_KEY = "stock_sale_acks";
+  const [ackedIds, setAckedIds]   = useState<Set<string>>(new Set());
+  const [ackReady, setAckReady]   = useState(false);
+  const [showAlerts, setShowAlerts] = useState(false);
 
   // Settings modal state
   const [editingField, setEditingField]   = useState<DropdownField | null>(null);
@@ -118,32 +118,41 @@ export default function StockMain() {
     })();
   }, [router]);
 
-  // เปิดใช้แจ้งเตือนหลังโหลดข้อมูลชุดแรกเสร็จ (กันเด้งรัวตอนเปิดหน้า)
+  // โหลดรายการที่ "รับทราบแล้ว" · ครั้งแรกที่เปิด (ยังไม่มี key) ถือว่าดีลเก่าทั้งหมดรับทราบแล้ว กันสแปมของเก่า
   useEffect(() => {
-    const t = setTimeout(() => { alertReadyRef.current = true; }, 2500);
-    return () => clearTimeout(t);
-  }, []);
+    if (ackReady) return;
+    const raw = localStorage.getItem(ACK_KEY);
+    if (raw) { setAckedIds(new Set(JSON.parse(raw) as string[])); setAckReady(true); return; }
+    if (sales.length === 0) return; // รอข้อมูลโหลดก่อนตั้ง baseline
+    const base = sales.map(s => s.id);
+    localStorage.setItem(ACK_KEY, JSON.stringify(base));
+    setAckedIds(new Set(base));
+    setAckReady(true);
+  }, [sales, ackReady]);
 
-  // ตรวจดีลใหม่จาก sales — id ที่ไม่เคยเห็น = เซลล์เพิ่งทำรายการเข้ามา → เด้งป๊อปอัพ
-  useEffect(() => {
-    const prev = prevSaleIdsRef.current;
-    if (alertReadyRef.current) {
-      const fresh = sales.filter(s => !prev.has(s.id));
-      if (fresh.length > 0) {
-        const toAlert = (s: typeof sales[number]): SaleAlert => ({
-          id: s.id,
-          staff: s.sales_staff || "เซลล์",
-          status: String(s.sale_status ?? "ขายแล้ว"),
-          title: `${s.forklift_brand} ${s.forklift_model}`.trim() || s.forklift_unit_no || "รถ",
-          sub: `ตัดออกจากสต็อก · ${s.forklift_unit_no || ""} · ${s.customer_name || "ลูกค้า"} · ฿${Number(s.actual_sale || 0).toLocaleString("th-TH")}`,
-        });
-        const news = fresh.map(toAlert);
-        setSaleAlerts(a => [...news, ...a].slice(0, 5));
-        news.forEach(n => setTimeout(() => dismissAlert(n.id), 12000)); // เด้งค้าง 12 วิ
-      }
-    }
-    prevSaleIdsRef.current = new Set(sales.map(s => s.id));
-  }, [sales]);
+  // ดีลที่ยังไม่รับทราบ = แจ้งเตือนคงค้าง (ใหม่สุดก่อน) — โชว์จนแอดมินกดยืนยัน
+  const pendingAlerts: SaleAlert[] = useMemo(() => {
+    if (!ackReady) return [];
+    return sales.filter(s => !ackedIds.has(s.id)).slice(0, 50).map(s => ({
+      id: s.id,
+      staff: s.sales_staff || "เซลล์",
+      status: String(s.sale_status ?? "ขายแล้ว"),
+      title: `${s.forklift_brand} ${s.forklift_model}`.trim() || s.forklift_unit_no || "รถ",
+      sub: `${s.forklift_unit_no || ""} · ${s.customer_name || "ลูกค้า"} · ฿${Number(s.actual_sale || 0).toLocaleString("th-TH")}`,
+    }));
+  }, [sales, ackedIds, ackReady]);
+
+  // ยืนยันตัดออกจากสต็อก (รับทราบ) — เก็บถาวรใน localStorage เพื่อไม่เด้งซ้ำ
+  const confirmAlert = (id: string) => setAckedIds(prev => {
+    const next = new Set(prev); next.add(id);
+    localStorage.setItem(ACK_KEY, JSON.stringify([...next]));
+    return next;
+  });
+  const confirmAllAlerts = () => setAckedIds(prev => {
+    const next = new Set(prev); pendingAlerts.forEach(a => next.add(a.id));
+    localStorage.setItem(ACK_KEY, JSON.stringify([...next]));
+    return next;
+  });
 
   const handleLogout = () => { void signOutSupabase(); localStorage.removeItem("stock_user"); router.push("/stock/login"); };
 
@@ -317,6 +326,14 @@ export default function StockMain() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* กระดิ่งแจ้งเตือน — เด้ง badge เมื่อมีดีลรอยืนยันตัดออกจากสต็อก */}
+            <button onClick={() => setShowAlerts(true)}
+              className="relative flex items-center text-slate-600 hover:text-rose-600 hover:bg-rose-50 p-2 rounded-lg transition-all border border-transparent hover:border-rose-200">
+              <Bell className="w-5 h-5" />
+              {pendingAlerts.length > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{pendingAlerts.length}</span>
+              )}
+            </button>
             <button onClick={() => setShowSettings(true)}
               className="flex items-center gap-1.5 text-slate-600 hover:text-violet-700 hover:bg-violet-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-transparent hover:border-violet-200">
               <Settings className="w-4 h-4" /><span className="hidden sm:inline">จัดการตัวเลือก</span>
@@ -599,35 +616,55 @@ export default function StockMain() {
           </div>
       </section>
 
-      {/* ── ป๊อปอัพแจ้งเตือน: เซลล์ทำรายการขายเข้ามา ── */}
-      {saleAlerts.length > 0 && (
-        <div className="fixed z-[70] bottom-4 right-4 left-4 sm:left-auto sm:w-96 flex flex-col gap-2.5 pointer-events-none">
-          <style>{`@keyframes salepop{0%{opacity:0;transform:translateY(16px) scale(.96)}100%{opacity:1;transform:none}}`}</style>
-          {saleAlerts.map(al => {
-            const green = al.status.includes("ขาย");
-            const amber = al.status.includes("จอง");
-            const c = green ? { bar: "bg-emerald-500", chip: "bg-emerald-100 text-emerald-700", ic: "text-emerald-600" }
-                    : amber ? { bar: "bg-amber-500",   chip: "bg-amber-100 text-amber-700",     ic: "text-amber-600" }
-                    :         { bar: "bg-rose-500",    chip: "bg-rose-100 text-rose-700",       ic: "text-rose-600" };
-            return (
-              <div key={al.id} style={{ animation: "salepop .35s ease-out" }}
-                className="pointer-events-auto bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex">
-                <div className={`w-1.5 flex-shrink-0 ${c.bar}`} />
-                <div className="flex-1 min-w-0 p-3.5">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="flex items-center gap-1.5 text-xs font-bold text-slate-700"><ShoppingCart className={`w-4 h-4 ${c.ic}`} />เซลล์ทำรายการใหม่</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${c.chip}`}>{al.status}</span>
-                      <button onClick={() => dismissAlert(al.id)} className="text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg p-1 transition-all"><X className="w-3.5 h-3.5" /></button>
+      {/* ── กล่องแจ้งเตือนคงค้าง: เซลล์ทำรายการขาย → แอดมินอ่าน + กดยืนยันตัดออกจากสต็อก ── */}
+      {showAlerts && (
+        <div className="fixed inset-0 z-[70] flex items-start justify-center sm:justify-end p-4 sm:p-6" onClick={() => setShowAlerts(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm max-h-[80vh] flex flex-col mt-14" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4 text-rose-500" />
+                <h3 className="text-sm font-bold text-slate-800">รายการรอยืนยันตัดออกจากสต็อก</h3>
+              </div>
+              <button onClick={() => setShowAlerts(false)} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg p-1.5"><X className="w-4 h-4" /></button>
+            </div>
+            {pendingAlerts.length > 0 && (
+              <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+                <span className="text-xs text-slate-500">{pendingAlerts.length} รายการใหม่</span>
+                <button onClick={confirmAllAlerts} className="text-xs font-bold text-emerald-700 hover:text-emerald-900">✓ ยืนยันทั้งหมด</button>
+              </div>
+            )}
+            <div className="overflow-y-auto p-3 flex flex-col gap-2.5">
+              {pendingAlerts.length === 0 ? (
+                <div className="text-center py-10 text-slate-400 text-sm flex flex-col items-center gap-2">
+                  <CheckCircle className="w-8 h-8 opacity-40" />ไม่มีรายการค้าง
+                </div>
+              ) : pendingAlerts.map(al => {
+                const green = al.status.includes("ขาย") || al.status.includes("ปิด");
+                const amber = al.status.includes("จอง") || al.status.includes("มัดจำ") || al.status.includes("จัดส่ง");
+                const c = green ? { bar: "bg-emerald-500", chip: "bg-emerald-100 text-emerald-700", ic: "text-emerald-600" }
+                        : amber ? { bar: "bg-amber-500",   chip: "bg-amber-100 text-amber-700",     ic: "text-amber-600" }
+                        :         { bar: "bg-rose-500",    chip: "bg-rose-100 text-rose-700",       ic: "text-rose-600" };
+                return (
+                  <div key={al.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden flex">
+                    <div className={`w-1.5 flex-shrink-0 ${c.bar}`} />
+                    <div className="flex-1 min-w-0 p-3">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-slate-700"><ShoppingCart className={`w-3.5 h-3.5 ${c.ic}`} />เซลล์ทำรายการ</span>
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${c.chip}`}>{al.status}</span>
+                      </div>
+                      <p className="font-bold text-slate-800 text-sm truncate">{al.title}</p>
+                      <p className="text-xs text-slate-500 truncate">{al.sub}</p>
+                      <p className="text-[11px] text-slate-400 mt-1">โดย {al.staff}</p>
+                      <button onClick={() => confirmAlert(al.id)}
+                        className="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5" />ยืนยันตัดออกจากสต็อก
+                      </button>
                     </div>
                   </div>
-                  <p className="font-bold text-slate-800 text-sm truncate">{al.title}</p>
-                  <p className="text-xs text-slate-500 truncate">{al.sub}</p>
-                  <p className="text-[11px] text-slate-400 mt-1">โดย {al.staff}</p>
-                </div>
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 
