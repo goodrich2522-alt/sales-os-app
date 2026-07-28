@@ -2,7 +2,7 @@
 
 import { parseHeli } from "./heli";
 import { parseRockman } from "./rockman";
-import { parseStaxxSerialSheet } from "./staxx";
+import { parseStaxxSerialSheet, parseStaxxProforma, normalizeStaxxModel } from "./staxx";
 import { QuoteParseResult, QuoteVendor } from "./types";
 
 export * from "./types";
@@ -26,11 +26,15 @@ export function parseQuoteText(text: string): QuoteParseResult {
       return parseHeli(text);
     case "ROCKMAN":
       return parseRockman(text);
-    // STAXX Proforma (ราคา) / HANGCHA (สแกน) — ทำในเฟสถัดไป
+    case "STAXX":
+      return parseStaxxProforma(text);   // Proforma PDF → รุ่น+ราคา FOB (SN มาจาก Excel แยก)
+    // HANGCHA (สแกน) — กรอกมือ
     default:
       return { vendor, vehicles: [], rawText: text };
   }
 }
+
+export { normalizeStaxxModel };
 
 /** อ่าน Serial No. List (Excel) → รายการรถ STAXX พร้อม SN */
 export function parseQuoteExcel(rows: string[][]): QuoteParseResult {

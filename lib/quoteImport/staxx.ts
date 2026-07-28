@@ -2,7 +2,34 @@
 // STAXX ต่างจาก HELI: ใบ Proforma ไม่มี SN (สั่งผลิต) · SN จริงมาทีหลังใน Excel เป็น "ช่วง"
 // รูปแบบ Excel: PI No. | รุ่น (Item/Model No.) | QTY | Serial No. (เช่น 51596-1~51596-12)
 
-import { ParsedVehicle } from "./types";
+import { ParsedVehicle, QuoteParseResult } from "./types";
+
+/** normalize รหัสรุ่น STAXX ให้เทียบข้ามไฟล์ได้ (Excel "AC50 (685)-H" ↔ Proforma "AC50") */
+export function normalizeStaxxModel(m: string): string {
+  return String(m || "")
+    .replace(/\([^)]*\)/g, "")            // ตัดวงเล็บ+เนื้อใน (685PD)
+    .replace(/\s+/g, "")                   // ตัดช่องว่าง
+    .replace(/-(?:[A-Z]+|III|II|I)$/i, "") // ตัด suffix ตัวอักษร/โรมัน (-H/-III) แต่เก็บ -เลข (EPS400-1500)
+    .toUpperCase();
+}
+
+/** อ่านใบ Proforma (NINGBO STAXX) → รุ่น+ราคา FOB(USD)+จำนวน · text แตกแต่ตัวเลข/รุ่นอ่านได้ */
+export function parseStaxxProforma(rawText: string): QuoteParseResult {
+  const t = rawText.replace(/\s+/g, " ");
+  const pi = t.match(/\b(NBPI\d+|PI\d{6,})\b/)?.[1];
+  const chunks = t.split(/(?=\b0\d{5}\s)/).filter((c) => /^0\d{5}\s/.test(c)); // แต่ละรายการขึ้นด้วยรหัส 6 หลัก
+  const vehicles: ParsedVehicle[] = [];
+  for (const c of chunks) {
+    const norm = c.replace(/(\d)\s+(\d)/g, "$1$2").replace(/([A-Z])\s+(\d)/gi, "$1$2"); // ประกอบเลข/รุ่นที่ถูกตัด
+    const model = norm.match(/\b((?:EPS|PS|WMS|WDS|SDA|AC|BF|BFD|BFL|PWH|CNS|DG)\d{2,4}(?:-\d{2,4})?)/i)?.[1];
+    if (!model) continue;
+    const prices = [...c.matchAll(/\$\s*([\d.,]+)/g)].map((m) => Number(m[1].replace(/,/g, "")));
+    const qty = Number(c.match(/\$\s*[\d.,]+\s+(\d+)\s+\$/)?.[1] || "0") || undefined;
+    const fob = prices[prices.length - 2];   // ...FOB, qty, amount → FOB = ตัวก่อนสุดท้าย
+    vehicles.push({ brand: "STAXX", model, vendor: "STAXX", pi_no: pi, fobUsd: fob, qty });
+  }
+  return { vendor: "STAXX", pi_no: pi, vehicles, rawText };
+}
 
 /** พิกัดยก (kg) จากรหัสรุ่น STAXX — hand pallet เลข 2 หลักแรก×100 · stacker เลขในรุ่น */
 function staxxCapacityKg(model: string): string | undefined {

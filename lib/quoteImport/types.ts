@@ -15,7 +15,9 @@ export interface ParsedVehicle {
   valve?: string;
   fork_length?: string;     // ความยาวงา (มม.)
   height?: string;
-  cost_price?: number;      // ราคาทุน (ก่อน VAT)
+  cost_price?: number;      // ราคาทุน (ก่อน VAT · บาท)
+  fobUsd?: number;          // ราคา FOB (USD) จาก Proforma STAXX — ไม่ใช่ราคาทุนบาท
+  qty?: number;             // จำนวนตาม Proforma (ก่อนแตกเป็นรายคัน)
   pi_no?: string;           // เลขสัญญา/PI/Contract
   vendor: QuoteVendor;
   /** ฟิลด์ที่ parser ไม่มั่นใจ (ค่าว่าง/รูปแบบแปลก) — หน้าตรวจทานติดธงให้คนดู */

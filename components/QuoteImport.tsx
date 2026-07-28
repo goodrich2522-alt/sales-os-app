@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 import { useApp } from "@/lib/AppContext";
-import { readPdfText, looksScanned, parseQuoteText, detectVendor, parseQuoteExcel, readExcelRows, isExcelFile, ParsedVehicle } from "@/lib/quoteImport";
+import { readPdfText, looksScanned, parseQuoteText, detectVendor, parseQuoteExcel, readExcelRows, isExcelFile, normalizeStaxxModel, ParsedVehicle } from "@/lib/quoteImport";
 import { categorizeModel } from "@/lib/constants";
 import { today } from "@/lib/format";
 import { Forklift } from "@/lib/types";
@@ -57,8 +57,24 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
         setNotice(`อ่าน "${f.name}" ไม่ได้: ${e instanceof Error ? e.message : "ผิดพลาด"}`);
       }
     }
+    // ── merge ราคา FOB จาก Proforma STAXX → รถ Excel SN (จับคู่ตามรุ่น) ──
+    const staxxSN = all.filter((v) => v.vendor === "STAXX" && v.SN);           // Excel: มี SN ไม่มีราคา
+    const staxxPF = all.filter((v) => v.vendor === "STAXX" && !v.SN && v.fobUsd); // Proforma: มีราคาไม่มี SN
+    const others = all.filter((v) => v.vendor !== "STAXX");
+    let staxxRows: ParsedVehicle[];
+    if (staxxSN.length && staxxPF.length) {
+      const fobMap = new Map(staxxPF.map((v) => [normalizeStaxxModel(v.model), v.fobUsd!]));
+      staxxRows = staxxSN.map((v) => {
+        const fob = fobMap.get(normalizeStaxxModel(v.model));
+        return fob ? { ...v, fobUsd: fob, flags: [...(v.flags ?? []), `ราคา FOB $${fob} — เติมราคาทุนบาทเอง`] } : v;
+      });
+      const hit = staxxRows.filter((v) => v.fobUsd).length;
+      setNotice(`✅ จับคู่ราคา FOB จาก Proforma ให้ ${hit}/${staxxRows.length} คัน (ราคา FOB เป็น USD ไม่ใช่ราคาทุนบาท)`);
+    } else {
+      staxxRows = staxxSN.length ? staxxSN : staxxPF;
+    }
     setVendor([...vendors].join(", "));
-    setRows(all);
+    setRows([...others, ...staxxRows]);
     setBusy(false);
   };
 
@@ -79,6 +95,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
     custom_fields: {
       ...(v.mast ? { MAST: v.mast } : {}),
       ...(v.valve ? { Valve: v.valve } : {}),
+      ...(v.fobUsd ? { "ราคา FOB (USD)": String(v.fobUsd) } : {}),
       ชีตต้นทาง: "ใบเสนอราคา",
     },
   } as Forklift);
