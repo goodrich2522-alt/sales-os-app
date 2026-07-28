@@ -763,8 +763,8 @@ export default function SalesMain() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-slate-400 border-b border-slate-100">
-                  {["รหัส", "ยี่ห้อ/รุ่น", "SN", "พิกัด", "พลังงาน", "สถานะ", "ราคาต้นทุน", ""].map((h) => (
-                    <th key={h} className="px-3 py-2.5 font-semibold whitespace-nowrap">{h}</th>
+                  {["รหัส", "ยี่ห้อ/รุ่น", "SN", "PI", "พิกัด", "พลังงาน", "สถานะ", "ราคาต้นทุน", "วันรับรถ", "โลเคชั่น", "เซลล์ดูแล", ""].map((h, i) => (
+                    <th key={i} className="px-3 py-2.5 font-semibold whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -777,10 +777,14 @@ export default function SalesMain() {
                     </td>
                     <td className="px-3 py-2.5"><span className="font-semibold text-slate-800">{item.brand}</span> <span className="text-slate-500">{item.model}</span></td>
                     <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{item.SN || "—"}</td>
+                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{item.pi_no || "—"}</td>
                     <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{item.capacity || (item.capacity_kg ? `${item.capacity_kg} kg` : "—")}</td>
                     <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{item.fuel || "—"}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap"><span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${STATUS_BADGE[item.status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>{item.status}</span></td>
                     <td className="px-3 py-2.5 font-bold text-indigo-700 whitespace-nowrap">฿{fmt(item.cost_price)}</td>
+                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{item.received_date || "—"}</td>
+                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{item.location || "—"}</td>
+                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{(item.custom_fields?.["เซลล์ผู้ดูแล"] as string) || "—"}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       <span className="inline-flex items-center gap-1 text-indigo-600 font-semibold text-xs">ปิดการขาย<ChevronRight className="w-3.5 h-3.5" /></span>
                     </td>
