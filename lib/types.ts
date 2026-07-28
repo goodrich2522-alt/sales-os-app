@@ -78,6 +78,9 @@ export interface Sale {
   contact_source?: ContactSource;
   sale_type?: SaleType;
   payment_proof?: string; // รูปหลักฐานการชำระเงิน (บังคับ) — เก็บ URL หลังอัปโหลด
+  add_ons?: { name: string; price: number }[]; // อุปกรณ์เสริมติดตั้ง (เฟส 4)
+  freebie?: boolean;      // ของแถมเซ็ท 2,800 (เฉพาะรถน้ำมัน Q22K2 · เฟส 5)
+  shipping_cost?: number; // ค่าขนส่งจากซัพพลายเออร์ (เฟส 5)
 }
 
 // ── รูปตรวจรถ 6 ช่องบังคับ (ผู้รับรถ/ผู้ส่งมอบรถ ต้องถ่ายครบทุกช่อง) ──

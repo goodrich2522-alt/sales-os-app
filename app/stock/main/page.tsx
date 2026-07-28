@@ -329,6 +329,11 @@ export default function StockMain() {
   const financing  = countStatus("รอผ่านไฟแนนซ์");                                    // ติดไฟแนนซ์
   const sold       = countStatus("ปิดการขายแล้ว");                                    // ขายไปแล้ว
   const waiting    = countStatus("รอรับ");                                            // รอรับเข้าคลัง
+  // คลิก StatCard → กรองรายการตามสถานะ + เลื่อนไปที่รายการสต็อก
+  const showStatus = (status: string) => {
+    setListStatus(status); setListView("list");
+    setTimeout(() => document.getElementById("stock-list")?.scrollIntoView({ behavior: "smooth" }), 60);
+  };
 
   // รายการสต็อกที่กรองแล้ว (สำหรับ modal) — ค้นหา + หมวด + ยี่ห้อ + สถานะ + เรียงลำดับ
   const hs = (v: unknown) => (v == null ? "" : String(v)).toLowerCase();
@@ -446,10 +451,10 @@ export default function StockMain() {
       <main className="max-w-4xl mx-auto px-4 py-6 flex flex-col gap-5">
         {/* Stats — แยกตามสถานะให้ฝ่ายสต็อกเห็นชัดทุกกอง */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="เหลือ (พร้อมขาย)" value={available} icon={<TrendingUp className="w-4 h-4" />} color="text-emerald-700" bg="bg-emerald-50 border-emerald-100" iconBg="bg-emerald-100 text-emerald-600" />
-          <StatCard label="จอง"              value={reserved}  icon={<Boxes className="w-4 h-4" />}       color="text-amber-700"   bg="bg-amber-50 border-amber-100"   iconBg="bg-amber-100 text-amber-600" />
-          <StatCard label="ติดไฟแนนซ์"       value={financing} icon={<Clock className="w-4 h-4" />}       color="text-rose-700"    bg="bg-rose-50 border-rose-100"     iconBg="bg-rose-100 text-rose-600" />
-          <StatCard label="ขายไปแล้ว"        value={sold}      icon={<CheckCircle className="w-4 h-4" />} color="text-indigo-700"  bg="bg-indigo-50 border-indigo-100" iconBg="bg-indigo-100 text-indigo-600" />
+          <StatCard label="เหลือ (พร้อมขาย)" value={available} onClick={() => showStatus("พร้อมขาย")} icon={<TrendingUp className="w-4 h-4" />} color="text-emerald-700" bg="bg-emerald-50 border-emerald-100" iconBg="bg-emerald-100 text-emerald-600" />
+          <StatCard label="จอง"              value={reserved}  onClick={() => showStatus("จอง")} icon={<Boxes className="w-4 h-4" />}       color="text-amber-700"   bg="bg-amber-50 border-amber-100"   iconBg="bg-amber-100 text-amber-600" />
+          <StatCard label="ติดไฟแนนซ์"       value={financing} onClick={() => showStatus("รอผ่านไฟแนนซ์")} icon={<Clock className="w-4 h-4" />}       color="text-rose-700"    bg="bg-rose-50 border-rose-100"     iconBg="bg-rose-100 text-rose-600" />
+          <StatCard label="ขายไปแล้ว"        value={sold}      onClick={() => showStatus("ปิดการขายแล้ว")} icon={<CheckCircle className="w-4 h-4" />} color="text-indigo-700"  bg="bg-indigo-50 border-indigo-100" iconBg="bg-indigo-100 text-indigo-600" />
         </div>
         {waiting > 0 && (
           <div className="-mt-2 text-xs text-slate-500 flex items-center gap-1.5">
@@ -1338,15 +1343,15 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function StatCard({ label, value, icon, color, bg, iconBg }: {
-  label: string; value: number; icon: React.ReactNode; color: string; bg: string; iconBg: string;
+function StatCard({ label, value, icon, color, bg, iconBg, onClick }: {
+  label: string; value: number; icon: React.ReactNode; color: string; bg: string; iconBg: string; onClick?: () => void;
 }) {
   return (
-    <div className={`${bg} border rounded-2xl p-4 flex flex-col gap-2`}>
+    <button onClick={onClick} className={`${bg} border rounded-2xl p-4 flex flex-col gap-2 text-left transition-all ${onClick ? "hover:shadow-md hover:-translate-y-0.5 cursor-pointer" : "cursor-default"}`}>
       <div className={`${iconBg} rounded-lg p-1.5 w-fit`}>{icon}</div>
       <p className={`text-2xl font-bold ${color}`}>{value}</p>
       <p className="text-xs text-slate-600 font-medium">{label}</p>
-    </div>
+    </button>
   );
 }
 

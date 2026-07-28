@@ -70,6 +70,9 @@ const HISTORY_TABS: { key: SaleStatus | "all"; label: string }[] = [
   { key: "ปิดการขาย/จัดส่งแล้ว",   label: "ปิด/ส่งแล้ว" },
 ];
 
+// อุปกรณ์เสริมติดตั้ง (Add-On) — ราคาเติมเอง (เฟส 4)
+const ADDON_OPTIONS = ["Side Shifter", "Fork Positioner", "Bale Clamp", "Rotator", "Boom", "Carpet Ram", "Paper Roll Clamp", "Brick Clamp", "Hingfork", "Bucket"];
+
 function daysUntil(dateStr: string): number {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const target = new Date(dateStr); target.setHours(0, 0, 0, 0);
@@ -117,6 +120,8 @@ export default function SalesMain() {
   const [detailSale, setDetailSale]       = useState<Sale | null>(null);
   const [cancelBox, setCancelBox]         = useState(false);   // กล่องยกเลิกการจอง
   const [cancelReason, setCancelReason]   = useState("");      // เหตุผลการยกเลิก
+  const [addOns, setAddOns]               = useState<{ name: string; price: number }[]>([]); // อุปกรณ์เสริม (เฟส 4)
+  const [newAddon, setNewAddon]           = useState({ name: "", price: "" });
   const [showNotif, setShowNotif]         = useState(true);
   const [detailLightboxIdx, setDetailLightboxIdx] = useState<number | null>(null);
 
@@ -261,16 +266,16 @@ export default function SalesMain() {
 
   // ── เฟส B: สรุปคงเหลือตามรุ่น (จากรายการที่กรองแล้ว) — เห็นว่ารุ่นไหนเหลือเยอะ/ใกล้หมด ──
   const byModel = useMemo(() => {
-    const m = new Map<string, { brand: string; model: string; mast: string; total: number; ready: number; capacity: string; fuel: string }>();
-    sorted.forEach((f) => {
+    const m = new Map<string, { brand: string; model: string; mast: string; ready: number; capacity: string; fuel: string }>();
+    // นับเฉพาะรถ "พร้อมขาย" จริง (พร้อมปิดการขายได้) — ไม่รวมจอง/ขายแล้ว/สั่งผลิต
+    sorted.filter((f) => String(f.status).trim() === "พร้อมขาย").forEach((f) => {
       const mast = String((f.custom_fields as Record<string, unknown> | undefined)?.["MAST"] ?? "").trim();
       const key = `${f.brand}|${f.model}|${mast}`;
-      const g = m.get(key) ?? { brand: f.brand, model: f.model, mast, total: 0, ready: 0, capacity: f.capacity || (f.capacity_kg ? `${f.capacity_kg} kg` : ""), fuel: f.fuel || "" };
-      g.total++;
-      if (String(f.status).trim() === "พร้อมขาย") g.ready++;
+      const g = m.get(key) ?? { brand: f.brand, model: f.model, mast, ready: 0, capacity: f.capacity || (f.capacity_kg ? `${f.capacity_kg} kg` : ""), fuel: f.fuel || "" };
+      g.ready++;
       m.set(key, g);
     });
-    return [...m.values()].sort((a, b) => b.ready - a.ready || b.total - a.total);
+    return [...m.values()].sort((a, b) => b.ready - a.ready);
   }, [sorted]);
 
   // ── งาน 4: ถ้าค้นด้วยรหัส/SN แล้วไม่เจอในรายการขาย แต่รถมีอยู่จริง (สถานะขายแล้ว/เช่า ฯลฯ)
@@ -379,6 +384,7 @@ export default function SalesMain() {
       contact_source: (form.contact_source as ContactSource) || undefined,
       sale_type: (form.sale_type as SaleType) || undefined,
       payment_proof: paymentProof || undefined,
+      add_ons: addOns.length ? addOns : undefined,
       created_at: editingSale ? editingSale.created_at : new Date().toISOString().slice(0, 10),
     };
   };
@@ -424,6 +430,7 @@ export default function SalesMain() {
     setCustomNotifItems(sale.custom_notifications ?? []);
     setShowCustomNotifs((sale.custom_notifications ?? []).length > 0);
     setPaymentProof(sale.payment_proof ?? "");
+    setAddOns(sale.add_ons ?? []);
     setErrors({}); setSubmitted(false); setLightboxIdx(null);
     setDetailSale(null); // ปิดหน้ารายละเอียดถ้าเปิดอยู่
   };
@@ -432,6 +439,7 @@ export default function SalesMain() {
     setSelected(null); setEditingSale(null); setForm(emptyCheckout); setErrors({}); setSaleCustomVals({});
     setSubmitted(false); setCustomNotifItems([]); setShowCustomNotifs(false);
     setNewNotifLabel(""); setNewNotifDate(""); setPaymentProof("");
+    setAddOns([]); setNewAddon({ name: "", price: "" }); setCancelBox(false); setCancelReason("");
   };
 
   // เปิดฟอร์มปิดการขายของรถคันหนึ่ง (ใช้ร่วมทั้งมุมมองการ์ดและตาราง)
@@ -825,7 +833,7 @@ export default function SalesMain() {
                     </span>
                   </div>
                   <p className="text-xs text-slate-500">{[g.capacity, g.fuel].filter(Boolean).join(" · ") || "—"}</p>
-                  <p className="text-[11px] text-slate-400 border-t border-slate-50 pt-1.5">ทั้งหมด {g.total} คัน (รวมที่จอง/ขายแล้ว)</p>
+                  <p className="text-[11px] text-slate-400 border-t border-slate-50 pt-1.5">พร้อมขาย {g.ready} คัน</p>
                 </button>
               );
             })}
@@ -1176,6 +1184,29 @@ export default function SalesMain() {
                         </div>
                       </div>
                     )}
+
+                    {/* ── อุปกรณ์เสริม (Add-On) — ติดตั้งพร้อมรถ · ราคาเติมเอง ── */}
+                    <div className="border border-slate-200 rounded-xl p-3 flex flex-col gap-2">
+                      <p className="text-xs font-bold text-slate-600 flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" />อุปกรณ์เสริม (ถ้ามี)</p>
+                      {addOns.map((a, i) => (
+                        <div key={i} className="flex items-center gap-2 text-sm bg-slate-50 rounded-lg px-2.5 py-1.5">
+                          <span className="flex-1 text-slate-700">{a.name}</span>
+                          <span className="text-indigo-600 font-bold">฿{a.price.toLocaleString()}</span>
+                          <button type="button" onClick={() => setAddOns(addOns.filter((_, j) => j !== i))} className="text-slate-300 hover:text-red-600"><X className="w-3.5 h-3.5" /></button>
+                        </div>
+                      ))}
+                      <div className="flex gap-1.5">
+                        <select value={newAddon.name} onChange={e => setNewAddon({ ...newAddon, name: e.target.value })}
+                          className="flex-1 min-w-0 border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
+                          <option value="">เลือกอุปกรณ์...</option>
+                          {ADDON_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                        <input type="number" value={newAddon.price} onChange={e => setNewAddon({ ...newAddon, price: e.target.value })}
+                          placeholder="ราคา" className="w-20 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                        <button type="button" onClick={() => { if (newAddon.name && newAddon.price) { setAddOns([...addOns, { name: newAddon.name, price: Number(newAddon.price) }]); setNewAddon({ name: "", price: "" }); } }}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 text-sm font-bold flex-shrink-0">เพิ่ม</button>
+                      </div>
+                    </div>
 
                     {/* ── Action buttons (Part 3) ── */}
                     <div className="flex flex-col gap-2 pt-2">
