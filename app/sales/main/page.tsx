@@ -115,6 +115,8 @@ export default function SalesMain() {
   const [targetInput, setTargetInput]     = useState("");
   const [historyTab, setHistoryTab]       = useState<SaleStatus | "all">("all");
   const [detailSale, setDetailSale]       = useState<Sale | null>(null);
+  const [cancelBox, setCancelBox]         = useState(false);   // กล่องยกเลิกการจอง
+  const [cancelReason, setCancelReason]   = useState("");      // เหตุผลการยกเลิก
   const [showNotif, setShowNotif]         = useState(true);
   const [detailLightboxIdx, setDetailLightboxIdx] = useState<number | null>(null);
 
@@ -259,10 +261,11 @@ export default function SalesMain() {
 
   // ── เฟส B: สรุปคงเหลือตามรุ่น (จากรายการที่กรองแล้ว) — เห็นว่ารุ่นไหนเหลือเยอะ/ใกล้หมด ──
   const byModel = useMemo(() => {
-    const m = new Map<string, { brand: string; model: string; total: number; ready: number; capacity: string; fuel: string }>();
+    const m = new Map<string, { brand: string; model: string; mast: string; total: number; ready: number; capacity: string; fuel: string }>();
     sorted.forEach((f) => {
-      const key = `${f.brand}|${f.model}`;
-      const g = m.get(key) ?? { brand: f.brand, model: f.model, total: 0, ready: 0, capacity: f.capacity || (f.capacity_kg ? `${f.capacity_kg} kg` : ""), fuel: f.fuel || "" };
+      const mast = String((f.custom_fields as Record<string, unknown> | undefined)?.["MAST"] ?? "").trim();
+      const key = `${f.brand}|${f.model}|${mast}`;
+      const g = m.get(key) ?? { brand: f.brand, model: f.model, mast, total: 0, ready: 0, capacity: f.capacity || (f.capacity_kg ? `${f.capacity_kg} kg` : ""), fuel: f.fuel || "" };
       g.total++;
       if (String(f.status).trim() === "พร้อมขาย") g.ready++;
       m.set(key, g);
@@ -448,6 +451,17 @@ export default function SalesMain() {
   const handleBook = (e: React.MouseEvent) => { e.preventDefault(); submitSale("มัดจำแล้ว"); };
   const handleShipping = (e: React.MouseEvent) => { e.preventDefault(); submitSale("รอจัดส่ง"); };
   const handleFinance = (e: React.MouseEvent) => { e.preventDefault(); submitSale("รอไฟแนนซ์"); };
+
+  // ยกเลิกการจอง (รถที่ยังไม่ปิดขาด) — คืนรถสู่สต็อก + เก็บเหตุผลไว้ใน remark
+  const cancelBooking = () => {
+    if (!detailSale) return;
+    const reason = cancelReason.trim() || "ไม่ระบุเหตุผล";
+    updateSale({ ...detailSale, remark: `${detailSale.remark ? detailSale.remark + " · " : ""}ยกเลิกการจอง: ${reason}` });
+    deleteSale(detailSale.id);
+    setUndoToast(`ยกเลิกการจอง ${detailSale.forklift_unit_no} — รถกลับสู่สต็อก (${reason})`);
+    setTimeout(() => setUndoToast(null), 4000);
+    setDetailSale(null); setCancelBox(false); setCancelReason("");
+  };
 
   const handleUpdateTarget = () => {
     const n = Number(targetInput.replace(/,/g, ""));
@@ -798,12 +812,12 @@ export default function SalesMain() {
                 : g.ready <= 2 ? "bg-red-50 text-red-700 border-red-200"
                 : "bg-emerald-50 text-emerald-700 border-emerald-200";
               return (
-                <button key={`${g.brand}|${g.model}`}
+                <button key={`${g.brand}|${g.model}|${g.mast}`}
                   onClick={() => { setFSpecModel(g.model); setViewMode("table"); }}
                   className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 p-4 text-left transition-all flex flex-col gap-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="font-bold text-slate-800 text-sm truncate">{g.model}</p>
+                      <p className="font-bold text-slate-800 text-sm truncate">{g.model}{g.mast ? <span className="text-indigo-600"> · เสา {g.mast}</span> : ""}</p>
                       <p className="text-xs text-slate-500">{g.brand}</p>
                     </div>
                     <span className={`text-xs font-bold px-2.5 py-1 rounded-full border flex-shrink-0 ${tone}`}>
@@ -1241,6 +1255,35 @@ export default function SalesMain() {
                   <span className="text-xs bg-violet-100 text-violet-700 px-2.5 py-1 rounded-full font-semibold">{detailSale.sale_type}</span>
                 )}
               </div>
+
+              {/* ── ยกเลิกการจอง — เฉพาะดีลที่ยังไม่ปิดขาด (ไม่ผ่านไฟแนนซ์/ลูกค้ายกเลิก) ── */}
+              {!["ปิดการขาย/จัดส่งแล้ว", "ขายแล้ว"].includes(detailSale.sale_status ?? "") && (
+                <div className="border border-rose-100 bg-rose-50/50 rounded-xl p-3">
+                  {!cancelBox ? (
+                    <button onClick={() => setCancelBox(true)} className="text-sm font-semibold text-rose-600 flex items-center gap-1.5 hover:text-rose-700">
+                      <RotateCcw className="w-4 h-4" />ยกเลิกการจอง — คืนรถสู่สต็อก
+                    </button>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-xs font-bold text-rose-700">เหตุผลการยกเลิก</p>
+                      <select value={cancelReason} onChange={e => setCancelReason(e.target.value)}
+                        className="w-full border border-rose-200 rounded-lg px-2.5 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-300">
+                        <option value="">— เลือกเหตุผล —</option>
+                        <option value="ไม่ผ่านไฟแนนซ์">ไม่ผ่านไฟแนนซ์</option>
+                        <option value="ลูกค้ายกเลิกการสั่งซื้อ">ลูกค้ายกเลิกการสั่งซื้อ</option>
+                        <option value="รถมีปัญหา/เปลี่ยนคัน">รถมีปัญหา / เปลี่ยนคัน</option>
+                        <option value="อื่นๆ">อื่นๆ</option>
+                      </select>
+                      <div className="flex gap-2">
+                        <button onClick={cancelBooking} disabled={!cancelReason}
+                          className="flex-1 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white text-sm font-bold py-2 rounded-lg transition-colors">ยืนยันยกเลิก</button>
+                        <button onClick={() => { setCancelBox(false); setCancelReason(""); }}
+                          className="px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-semibold py-2 rounded-lg transition-colors">ปิด</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <DetailRow label="รถ" value={`${detailSale.forklift_brand} ${detailSale.forklift_model} (${detailSale.forklift_unit_no})`} />
               <DetailRow label="พนักงานขาย" value={detailSale.sales_staff} />
