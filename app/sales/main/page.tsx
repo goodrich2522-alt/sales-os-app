@@ -122,6 +122,8 @@ export default function SalesMain() {
   const [cancelReason, setCancelReason]   = useState("");      // เหตุผลการยกเลิก
   const [addOns, setAddOns]               = useState<{ name: string; price: number }[]>([]); // อุปกรณ์เสริม (เฟส 4)
   const [newAddon, setNewAddon]           = useState({ name: "", price: "" });
+  const [freebie, setFreebie]             = useState(false);   // ของแถมเซ็ท 2,800 (เฟส 5)
+  const [shippingCost, setShippingCost]   = useState("");      // ค่าขนส่งจากซัพพลายเออร์
   const [showNotif, setShowNotif]         = useState(true);
   const [detailLightboxIdx, setDetailLightboxIdx] = useState<number | null>(null);
 
@@ -385,6 +387,8 @@ export default function SalesMain() {
       sale_type: (form.sale_type as SaleType) || undefined,
       payment_proof: paymentProof || undefined,
       add_ons: addOns.length ? addOns : undefined,
+      freebie: freebie || undefined,
+      shipping_cost: shippingCost ? Number(shippingCost) : undefined,
       created_at: editingSale ? editingSale.created_at : new Date().toISOString().slice(0, 10),
     };
   };
@@ -431,6 +435,8 @@ export default function SalesMain() {
     setShowCustomNotifs((sale.custom_notifications ?? []).length > 0);
     setPaymentProof(sale.payment_proof ?? "");
     setAddOns(sale.add_ons ?? []);
+    setFreebie(sale.freebie ?? false);
+    setShippingCost(sale.shipping_cost ? String(sale.shipping_cost) : "");
     setErrors({}); setSubmitted(false); setLightboxIdx(null);
     setDetailSale(null); // ปิดหน้ารายละเอียดถ้าเปิดอยู่
   };
@@ -440,6 +446,7 @@ export default function SalesMain() {
     setSubmitted(false); setCustomNotifItems([]); setShowCustomNotifs(false);
     setNewNotifLabel(""); setNewNotifDate(""); setPaymentProof("");
     setAddOns([]); setNewAddon({ name: "", price: "" }); setCancelBox(false); setCancelReason("");
+    setFreebie(false); setShippingCost("");
   };
 
   // เปิดฟอร์มปิดการขายของรถคันหนึ่ง (ใช้ร่วมทั้งมุมมองการ์ดและตาราง)
@@ -566,10 +573,6 @@ export default function SalesMain() {
               title="ทดสอบการแจ้งเตือน"
               className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border transition-all ${testNotifActive ? "bg-amber-100 text-amber-700 border-amber-300" : "text-slate-500 border-dashed border-slate-300 hover:border-amber-300 hover:text-amber-600"}`}>
               <Bell className="w-3.5 h-3.5" />ทดสอบ
-            </button>
-            <button onClick={() => setShowSettings(true)}
-              className="flex items-center gap-1.5 text-slate-600 hover:text-indigo-700 hover:bg-indigo-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-transparent hover:border-indigo-200">
-              <Settings className="w-4 h-4" /><span className="hidden sm:inline">จัดการตัวเลือก</span>
             </button>
             <button onClick={() => setShowHistory(true)}
               className="flex items-center gap-1.5 text-slate-600 hover:text-indigo-700 hover:bg-indigo-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-transparent hover:border-indigo-200">
@@ -1184,6 +1187,39 @@ export default function SalesMain() {
                         </div>
                       </div>
                     )}
+
+                    {/* ── คำนวณกำไร (ราคาขาย − ต้นทุน − ของแถม − ค่าขนส่ง) ── */}
+                    {selected && (() => {
+                      const isQ22K2 = /Q22K2/i.test(selected.model) && (String(selected.fuel || "").includes("ดีเซล") || /^CPCD/i.test(selected.model));
+                      const sale = Number(form.actual_sale) || 0;
+                      const cost = selected.cost_price || 0;
+                      const ship = Number(shippingCost) || 0;
+                      const free = freebie ? 2800 : 0;
+                      const profit = sale - cost - free - ship;
+                      return (
+                        <div className="border border-emerald-100 bg-emerald-50/40 rounded-xl p-3 flex flex-col gap-2">
+                          <p className="text-xs font-bold text-emerald-700 flex items-center gap-1.5"><Target className="w-3.5 h-3.5" />คำนวณกำไร</p>
+                          {isQ22K2 && (
+                            <label className="flex items-start gap-2 text-sm text-slate-700 cursor-pointer">
+                              <input type="checkbox" checked={freebie} onChange={e => setFreebie(e.target.checked)} className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                              <span>มีของแถม (กรองเครื่อง/เกียร์/อากาศ + น้ำมันเครื่อง/เกียร์) — หักต้นทุน ฿2,800</span>
+                            </label>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-slate-600 flex-shrink-0">ค่าขนส่ง (จากซัพพลายเออร์)</span>
+                            <input type="number" value={shippingCost} onChange={e => setShippingCost(e.target.value)} placeholder="0"
+                              className="w-24 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
+                          </div>
+                          <div className="border-t border-emerald-100 pt-2 text-sm flex flex-col gap-0.5">
+                            <div className="flex justify-between text-slate-500"><span>ราคาขาย</span><span>฿{sale.toLocaleString()}</span></div>
+                            <div className="flex justify-between text-slate-500"><span>− ต้นทุนสินค้า</span><span>฿{cost.toLocaleString()}</span></div>
+                            {free > 0 && <div className="flex justify-between text-slate-500"><span>− ของแถม</span><span>฿{free.toLocaleString()}</span></div>}
+                            {ship > 0 && <div className="flex justify-between text-slate-500"><span>− ค่าขนส่ง</span><span>฿{ship.toLocaleString()}</span></div>}
+                            <div className={`flex justify-between font-bold pt-1 ${profit >= 0 ? "text-emerald-700" : "text-red-600"}`}><span>= กำไร</span><span>฿{profit.toLocaleString()}</span></div>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* ── อุปกรณ์เสริม (Add-On) — ติดตั้งพร้อมรถ · ราคาเติมเอง ── */}
                     <div className="border border-slate-200 rounded-xl p-3 flex flex-col gap-2">
