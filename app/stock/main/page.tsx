@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Package, Plus, LogOut, CheckCircle, AlertCircle, List, X,
   TrendingUp, Boxes, Trash2, Settings, Pencil, Check, ChevronDown,
-  Clock, Hash, Camera, ImageOff, Eye, Bell,
+  Clock, Hash, Camera, ImageOff, Eye, Bell, MapPin,
   Download, Upload, FileText, ShoppingCart, User
 } from "lucide-react";
 import { Forklift } from "@/lib/types";
@@ -65,7 +65,7 @@ function fmtAdded(iso?: string) {
 export default function StockMain() {
   const router = useRouter();
   const {
-    forklifts, addForkliftsBulk, deleteForklift, inspections, sales,
+    forklifts, addForkliftsBulk, updateForklift, deleteForklift, inspections, sales,
     exportData, importData,
     fieldConfig, updateFieldOptions,
     removeCustomFieldDef, renameCustomFieldDef,
@@ -87,6 +87,8 @@ export default function StockMain() {
   const [showSettings, setShowSettings]   = useState(false);
   const [detailItem, setDetailItem]       = useState<Forklift | null>(null); // รถที่กดดูรายละเอียด
   const [detailLightbox, setDetailLightbox] = useState<{ imgs: string[]; idx: number } | null>(null);
+  const [locEdit, setLocEdit]             = useState(""); // แก้สถานที่ที่รถอยู่ (ใน detail modal)
+  const [locSaved, setLocSaved]           = useState(false);
 
   // ── แจ้งเตือนเซลล์ทำรายการขาย — คงค้างจนแอดมินอ่าน + กดยืนยันตัดออกจากสต็อก (เก็บ ack ใน localStorage) ──
   type SaleAlert = { id: string; staff: string; status: string; title: string; sub: string };
@@ -117,6 +119,9 @@ export default function StockMain() {
       }
     })();
   }, [router]);
+
+  // เปิดรถคันไหน → เติมสถานที่เดิมลงช่องแก้ไข
+  useEffect(() => { setLocEdit(detailItem?.location ?? ""); setLocSaved(false); }, [detailItem]);
 
   // โหลดรายการที่ "รับทราบแล้ว" · ครั้งแรกที่เปิด (ยังไม่มี key) ถือว่าดีลเก่าทั้งหมดรับทราบแล้ว กันสแปมของเก่า
   useEffect(() => {
@@ -729,7 +734,6 @@ export default function StockMain() {
           ["เลขที่ใบกำกับภาษี", cf["เลขที่ใบกำกับภาษี"] ?? ""],
           ["วันรับรถ", it.received_date ?? ""],
           ["ราคาทุน", it.cost_price ? `฿${it.cost_price.toLocaleString()}` : ""],
-          ["โลเคชั่น", it.location ?? ""],
           ["เติมเข้าสต็อกเมื่อ", fmtAdded(it.created_at)],
         ];
         // custom_fields ที่โชว์ในสเปก/ข้อมูลแล้ว + คีย์ internal → ไม่ต้องโชว์ซ้ำใน "ข้อมูลเพิ่มเติม"
@@ -772,6 +776,21 @@ export default function StockMain() {
               <div className="overflow-y-auto flex-1 min-h-0 p-5 flex flex-col gap-5">
                 <Section title="สเปกรถ" rows={spec} />
                 <Section title="ข้อมูลสต็อก / จัดซื้อ" rows={info} />
+                {/* สถานที่ที่รถอยู่ — แก้ไขได้ (ทั้งสต็อก/เซลล์ใช้ดูตำแหน่งเพื่อส่งมอบ) */}
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />สถานที่ที่รถอยู่</p>
+                  <div className="flex gap-2">
+                    <input list="stock-loc-list" value={locEdit} onChange={e => { setLocEdit(e.target.value); setLocSaved(false); }}
+                      placeholder="เช่น คลังขอนแก่น / โชว์รูมชลบุรี / ลานหน้าโรงงาน"
+                      className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                    <datalist id="stock-loc-list">{fieldConfig.locations.map(l => <option key={l} value={l} />)}</datalist>
+                    <button onClick={() => { const u = { ...it, location: locEdit.trim() }; updateForklift(u); setDetailItem(u); setLocSaved(true); }}
+                      disabled={locEdit.trim() === (it.location ?? "").trim()}
+                      className="px-4 py-2 rounded-xl text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
+                      {locSaved ? "บันทึกแล้ว ✓" : "บันทึก"}
+                    </button>
+                  </div>
+                </div>
                 {customs.length > 0 && <Section title="ข้อมูลเพิ่มเติม" rows={customs as [string, string][]} />}
                 {/* รูปตรวจรับ-ส่งรถ */}
                 <div>

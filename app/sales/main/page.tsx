@@ -8,7 +8,7 @@ import {
   Package, Trash2, History, RotateCcw, Pencil, Check, Camera,
   SlidersHorizontal, ImageOff, ZoomIn, ChevronLeft, Plus, ClipboardList,
   Settings, ChevronDown, Type, ListOrdered, ArrowLeft, Bell, Eye, ChevronUp, RefreshCw,
-  LayoutGrid, Table as TableIcon, Users, Download,
+  LayoutGrid, Table as TableIcon, Users, Download, MapPin,
 } from "lucide-react";
 import { PROVINCES, CONTACT_SOURCES } from "@/lib/mockData";
 import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, ContactSource, SaleType, InspectionRecord, SLOT_LABELS } from "@/lib/types";
@@ -93,7 +93,7 @@ function labeledPhotos(recs: InspectionRecord[]): LabeledPhoto[] {
 export default function SalesMain() {
   const router = useRouter();
   const {
-    forklifts, sales, addSale, updateSale, deleteSale, inspections, fieldConfig, refresh,
+    forklifts, sales, addSale, updateSale, deleteSale, updateForklift, inspections, fieldConfig, refresh,
     updateFieldOptions,
     addSaleExtraFieldDef, removeSaleExtraFieldDef, renameSaleExtraFieldDef,
     addSaleExtraFieldOption, removeSaleExtraFieldOption, editSaleExtraFieldOption,
@@ -121,6 +121,8 @@ export default function SalesMain() {
   const [detailSale, setDetailSale]       = useState<Sale | null>(null);
   const [cancelBox, setCancelBox]         = useState(false);   // กล่องยกเลิกการจอง
   const [cancelReason, setCancelReason]   = useState("");      // เหตุผลการยกเลิก
+  const [locEdit, setLocEdit]             = useState(""); // สถานที่ที่รถอยู่ (จุดรับ/ส่ง) — แก้ในโมดัลปิดการขาย
+  const [locSaved, setLocSaved]           = useState(false);
   const [addOns, setAddOns]               = useState<{ name: string; price: number }[]>([]); // อุปกรณ์เสริม (เฟส 4)
   const [newAddon, setNewAddon]           = useState({ name: "", price: "" });
   const [freebie, setFreebie]             = useState(false);   // ของแถมเซ็ท 2,800 (เฟส 5)
@@ -222,6 +224,9 @@ export default function SalesMain() {
     })();
   }, [router]);
 
+  // เปิดโมดัลปิดการขายรถคันไหน → เติมสถานที่เดิมลงช่องแก้ไข
+  useEffect(() => { setLocEdit(selected?.location ?? ""); setLocSaved(false); }, [selected]);
+
   // อ่านค่าความสูงเสา (MAST) จาก custom_fields อย่างปลอดภัย
   const mastOf = (f: typeof forklifts[number]) => String((f.custom_fields as Record<string, unknown> | undefined)?.["MAST"] ?? "").trim();
 
@@ -288,6 +293,28 @@ export default function SalesMain() {
     });
     return [...m.values()].sort((a, b) => b.ready - a.ready);
   }, [sorted]);
+
+  // ── FIFO เฟส 1: หาคัน "เข้าคลังก่อนสุด" ในแต่ละกลุ่ม (ยี่ห้อ|รุ่น|เสา) ที่ยังพร้อมขาย = ควรขายก่อน ──
+  // อิงวันรับรถ (received_date) · ไม่มีวันรับรถ = ถือว่าใหม่สุด (ต่อท้าย)
+  const fifoOldestIds = useMemo(() => {
+    const oldest = new Map<string, { id: string; dkey: string }>();
+    forklifts.filter((f) => String(f.status).trim() === "พร้อมขาย").forEach((f) => {
+      const mast = String((f.custom_fields as Record<string, unknown> | undefined)?.["MAST"] ?? "").trim();
+      const key = `${f.brand}|${f.model}|${mast}`;
+      const dkey = String(f.received_date || "").slice(0, 10) || "9999-99-99"; // ไม่มีวันรับ → ใหม่สุด
+      const cur = oldest.get(key);
+      if (!cur || dkey < cur.dkey) oldest.set(key, { id: f.id, dkey });
+    });
+    return new Set([...oldest.values()].map((v) => v.id));
+  }, [forklifts]);
+
+  // จำนวนวันที่รถค้างสต็อก (นับจากวันรับรถถึงวันนี้) — null ถ้าไม่มีวันรับรถ
+  const daysInStock = (f: Forklift): number | null => {
+    const d = String(f.received_date || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+    const ms = Date.now() - new Date(d + "T00:00:00").getTime();
+    return ms > 0 ? Math.floor(ms / 86400000) : 0;
+  };
 
   // ── งาน 4: ถ้าค้นด้วยรหัส/SN แล้วไม่เจอในรายการขาย แต่รถมีอยู่จริง (สถานะขายแล้ว/เช่า ฯลฯ)
   //    → บอกเซลล์ว่าเจอรถแต่ถูกซ่อนเพราะอะไร (กันเข้าใจผิดว่า "ข้อมูลหาย") ──
@@ -915,6 +942,15 @@ export default function SalesMain() {
                       <p className="font-bold text-slate-800 text-base">{item.brand}</p>
                       <p className="text-sm text-slate-600 font-medium">{item.model}</p>
                       <p className="text-xs text-slate-400 mt-0.5">{item.SN}</p>
+                      {item.status === "พร้อมขาย" && (() => {
+                        const days = daysInStock(item);
+                        return (
+                          <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                            {fifoOldestIds.has(item.id) && <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded-full">🟢 ควรขายก่อน (FIFO)</span>}
+                            {days != null && <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${days > 180 ? "bg-red-100 text-red-700" : days > 90 ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}>ค้างสต็อก {days} วัน</span>}
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${STATUS_BADGE[item.status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>{item.status}</span>
@@ -970,6 +1006,22 @@ export default function SalesMain() {
                   <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3">
                     <p className="text-xs text-indigo-500 font-medium">ราคาต้นทุน</p>
                     <p className="font-bold text-indigo-700">฿{fmt(selected.cost_price)}</p>
+                  </div>
+
+                  {/* สถานที่ที่รถอยู่ (จุดรับ/ส่ง) — แก้ได้ ช่วยจัดส่งลูกค้า */}
+                  <div className="bg-teal-50 border border-teal-100 rounded-xl p-3">
+                    <p className="text-xs text-teal-600 font-medium flex items-center gap-1.5 mb-1.5"><MapPin className="w-3.5 h-3.5" />สถานที่ที่รถอยู่ (จุดรับ/ส่ง)</p>
+                    <div className="flex gap-2">
+                      <input list="sales-loc-list" value={locEdit} onChange={e => { setLocEdit(e.target.value); setLocSaved(false); }}
+                        placeholder="เช่น คลังขอนแก่น / โชว์รูมชลบุรี"
+                        className="flex-1 border border-teal-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-teal-400" />
+                      <datalist id="sales-loc-list">{(fieldConfig.locations ?? []).map(l => <option key={l} value={l} />)}</datalist>
+                      <button type="button" onClick={() => { const u = { ...selected, location: locEdit.trim() }; updateForklift(u); setSelected(u); setLocSaved(true); }}
+                        disabled={locEdit.trim() === (selected.location ?? "").trim()}
+                        className="px-3.5 py-2 rounded-lg text-sm font-bold bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
+                        {locSaved ? "✓" : "บันทึก"}
+                      </button>
+                    </div>
                   </div>
 
                   {/* ข้อมูลรถจากสต็อก (ดึงอัตโนมัติ ไม่ต้องกรอก) */}

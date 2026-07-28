@@ -54,9 +54,9 @@ export async function bootstrap(): Promise<BootstrapData> {
   if (isTransporterMode()) return bootstrapTransporter();
   const c = sb();
   const [fk, sl, ins, cfg] = await Promise.all([
-    c.from("forklifts").select("*").limit(5000),
-    c.from("sales").select("*").limit(5000),
-    c.from("inspections").select("*").limit(5000),
+    c.from("forklifts").select("*").limit(20000),
+    c.from("sales").select("*").limit(20000),
+    c.from("inspections").select("*").limit(20000),
     c.from("app_config").select("data").eq("id", 1).maybeSingle(),
   ]);
   if (fk.error) throw fk.error;
