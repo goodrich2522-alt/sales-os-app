@@ -58,3 +58,5 @@ data/*
 local-data/
 DATA-SYNC-PLAN.md
 sync-rules.md
+ocr-server/.env
+excem pr/

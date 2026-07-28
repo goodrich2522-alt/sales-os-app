@@ -1,0 +1,43 @@
+# ocr-server/docker-compose.yml — เซิร์ฟเวอร์ Typhoon OCR 1.5 (SCB 10X) สำหรับอ่านใบเสนอราคา HANGCHA (สแกน)
+# ข้อมูลไม่ออกนอกองค์กร — โมเดลรันในเครื่องนี้ 100% · ดูวิธีตั้งค่าใน README.md
+#
+# 2 service:
+#   ollama  — เสิร์ฟโมเดล typhoon-ocr (ภายใน ไม่เปิดออกเน็ต)
+#   proxy   — FastAPI ครอบ Ollama: ใส่ auth token + จำกัด origin + แปลง PDF→รูป (แอป static เรียกตัวนี้)
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: typhoon-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama       # เก็บโมเดลไว้ ไม่ต้องโหลดใหม่ทุกครั้ง
+    # เปิดเฉพาะภายใน docker network — ไม่ publish port ออกเครื่อง (ให้ proxy เรียกเท่านั้น)
+    expose:
+      - "11434"
+    # ↓ เปิดคอมเมนต์บล็อกนี้ถ้าเครื่องมี GPU NVIDIA (เร็วขึ้นมาก · ต้องมี nvidia-container-toolkit)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  proxy:
+    build: ./proxy
+    container_name: typhoon-proxy
+    restart: unless-stopped
+    depends_on:
+      - ollama
+    ports:
+      - "8080:8080"                        # แอปเรียกที่ http(s)://<เซิร์ฟเวอร์>:8080/ocr
+    environment:
+      OLLAMA_URL: "http://ollama:11434"
+      OCR_MODEL: "scb10x/typhoon-ocr1.5-3b"
+      # ⚠️ เปลี่ยน 2 ค่านี้ก่อนใช้จริง (ดู README)
+      OCR_API_TOKEN: "${OCR_API_TOKEN:?ต้องตั้ง OCR_API_TOKEN ใน .env}"
+      ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:-https://goodrich2522-alt.github.io}"
+
+volumes:
+  ollama-models:

@@ -134,7 +134,7 @@
 ### รายการงาน
 
 - ☑ 4.1 (27 ก.ค.) ดูตัวอย่างจริง 4 เจ้า + จำแนกชนิดไฟล์ (3 text layer · HANGCHA สแกน)
-- ☐ 4.2 **ตั้งเซิร์ฟเวอร์ Typhoon OCR** (นอก repo) — Ollama/vLLM เสิร์ฟ `typhoon-ocr1.5-2b` · endpoint รับรูป+prompt คืน Markdown/JSON · auth โทเคน · จำกัด origin · Docker ให้ deploy ซ้ำได้
+- ☑ 4.2 **ตั้งเซิร์ฟเวอร์ Typhoon OCR** (27 ก.ค.) — สร้างชุด deploy ที่ [`ocr-server/`](ocr-server/) : docker-compose (Ollama + proxy) · FastAPI proxy (`/ocr` รับ PDF/รูป → คืน Markdown · auth โทเคน · จำกัด origin · PDF→รูปด้วย PyMuPDF) · README คู่มือ setup ครบ · **รอทีม deploy บนเซิร์ฟเวอร์บริษัท**
 - ☐ 4.3 **ฝัง pdf.js ในแอป** — อ่าน text layer + render หน้า PDF เป็นรูปเพื่อส่ง OCR (โหลด worker แบบ dynamic)
 - ☐ 4.4 **หน้าอัปโหลด** — ลากไฟล์มาวาง · เดาชนิด (text layer/สแกน) · เดาผู้ผลิตจากคำเฉพาะ ("NINGBO STAXX"/"HELI SOUTHEAST"/"cnc-moving"/"HANGCHA")
 - ☐ 4.5 **ท่ออ่าน** — text layer → pdf.js ในเครื่อง · สแกน → ส่งรูปไป Typhoon OCR รับ Markdown/JSON
