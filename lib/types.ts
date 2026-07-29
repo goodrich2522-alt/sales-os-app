@@ -2,8 +2,8 @@ export type PaymentType = "เงินสด" | "ไฟแนนซ์";
 export type CustomerType = "บุคคลทั่วไป" | "นิติบุคคล" | "ราชการ";
 // 4 สถานะใหม่ (ตามลำดับขั้น) + คงค่าเก่าไว้เพื่อดีลที่บันทึกไปแล้ว
 export type SaleStatus =
-  | "มัดจำแล้ว" | "รอจัดส่ง" | "รอไฟแนนซ์" | "ปิดการขาย/จัดส่งแล้ว"
-  | "ขายแล้ว" | "จอง" | "รอผ่านไฟแนนซ์"; // (เก่า — backward compat)
+  | "จอง/รอโอน" | "จอง/โอนมัดจำแล้ว" | "รอจัดส่ง" | "รอไฟแนนซ์" | "ปิดการขาย/จัดส่งแล้ว"
+  | "มัดจำแล้ว" | "ขายแล้ว" | "จอง" | "รอผ่านไฟแนนซ์"; // (เก่า — backward compat)
 export type VehicleType = "Forklift" | "Stacker" | "Handlift" | "Electric Pallet Truck" | "Reach Truck";
 export type ContactSource = "Line" | "Facebook" | "TikTok" | "โทร" | "Google" | "คนอื่นบอกต่อ";
 export type SaleType = "รถเช่า" | "รถขายเต็มคัน" | "รถมือสอง" | "งานซ่อม";

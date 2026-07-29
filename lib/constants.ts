@@ -56,6 +56,8 @@ export const statusBadgeClass = (status: unknown): string =>
 
 // ── สีป้ายสถานะการขาย (sale.sale_status) ────────────────────────────────────
 export const SALE_STATUS_BADGE: Record<string, string> = {
+  "จอง/รอโอน":           "bg-yellow-100 text-yellow-800 border-yellow-200",
+  "จอง/โอนมัดจำแล้ว":     "bg-amber-100 text-amber-700 border-amber-200",
   "มัดจำแล้ว":            "bg-amber-100 text-amber-700 border-amber-200",
   "รอจัดส่ง":             "bg-orange-100 text-orange-700 border-orange-200",
   "รอไฟแนนซ์":           "bg-red-100 text-red-700 border-red-200",

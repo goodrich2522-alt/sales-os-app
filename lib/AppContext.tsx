@@ -308,9 +308,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const forkliftStatusForSale = (s: Sale): string => {
     const st = s.sale_status;
     if (st === "ขายแล้ว") return "ปิดการขายแล้ว";       // เก่า
-    if (st === "จอง") return "จอง";                     // เก่า
+    if (st === "จอง" || st === "จอง/รอโอน" || st === "จอง/โอนมัดจำแล้ว" || st === "มัดจำแล้ว") return "จอง"; // จองทุกแบบ → กันสต็อกเป็น "จอง"
     if (st === "รอผ่านไฟแนนซ์") return "รอผ่านไฟแนนซ์";  // เก่า
-    return st || "ปิดการขายแล้ว";                        // ใหม่ (มัดจำ/รอจัดส่ง/รอไฟแนนซ์/ปิด-ส่งแล้ว)
+    return st || "ปิดการขายแล้ว";                        // ใหม่ (รอจัดส่ง/รอไฟแนนซ์/ปิด-ส่งแล้ว)
   };
 
   const addSale = useCallback((s: Sale) => {

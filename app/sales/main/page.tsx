@@ -65,11 +65,15 @@ type SaleDropdown = "saleTypes" | "paymentTypes" | "customerTypes" | "financeCom
 
 const HISTORY_TABS: { key: SaleStatus | "all"; label: string }[] = [
   { key: "all",                    label: "ทั้งหมด" },
-  { key: "มัดจำแล้ว",              label: "มัดจำแล้ว" },
+  { key: "จอง/รอโอน",             label: "จอง/รอโอน" },
+  { key: "จอง/โอนมัดจำแล้ว",       label: "จอง/มัดจำ" },
   { key: "รอจัดส่ง",               label: "รอจัดส่ง" },
   { key: "รอไฟแนนซ์",             label: "รอไฟแนนซ์" },
   { key: "ปิดการขาย/จัดส่งแล้ว",   label: "ปิด/ส่งแล้ว" },
 ];
+// "จอง/โอนมัดจำแล้ว" รวมดีลเก่าที่ยังเป็น "มัดจำแล้ว" ด้วย (backward compat)
+const saleMatchesTab = (st: string, key: string) =>
+  key === "จอง/โอนมัดจำแล้ว" ? (st === key || st === "มัดจำแล้ว") : st === key;
 
 // อุปกรณ์เสริมติดตั้ง (Add-On) — ราคาเติมเอง (เฟส 4)
 const ADDON_OPTIONS = ["Side Shifter", "Fork Positioner", "Bale Clamp", "Rotator", "Boom", "Carpet Ram", "Paper Roll Clamp", "Brick Clamp", "Hingfork", "Bucket"];
@@ -429,9 +433,9 @@ export default function SalesMain() {
     if (!form.payment_type) e.payment_type = "กรุณาเลือกประเภทการชำระ";
     if (form.payment_type === "ไฟแนนซ์" && !form.finance_company) e.finance_company = "กรุณาเลือกบริษัทไฟแนนซ์";
     if (!form.actual_sale || isNaN(Number(form.actual_sale))) e.actual_sale = "กรุณากรอกราคาขาย";
-    // วันส่งมอบ + สลิป: บังคับเฉพาะตอนปิดการขาย/รอจัดส่ง (เงินเข้าแล้ว) · มัดจำต้องมีสลิปมัดจำ · รอไฟแนนซ์ยังไม่ต้อง
+    // วันส่งมอบ + สลิป: บังคับเฉพาะตอนเงินเข้าแล้ว · "จอง/โอนมัดจำแล้ว"+มัดจำเก่าต้องมีสลิป · "จอง/รอโอน"+รอไฟแนนซ์ ยังไม่ต้อง (จองได้เลย)
     const needDelivery = status === "ปิดการขาย/จัดส่งแล้ว" || status === "รอจัดส่ง";
-    const needProof    = status === "ปิดการขาย/จัดส่งแล้ว" || status === "รอจัดส่ง" || status === "มัดจำแล้ว";
+    const needProof    = status === "ปิดการขาย/จัดส่งแล้ว" || status === "รอจัดส่ง" || status === "จอง/โอนมัดจำแล้ว" || status === "มัดจำแล้ว";
     if (needDelivery && !form.delivery_date) e.delivery_date = "กรุณาระบุวันส่งมอบ";
     if (needProof && !paymentProof) e.payment_proof = "กรุณาแนบรูปหลักฐานการชำระเงิน (บังคับ)";
     return e;
@@ -555,7 +559,8 @@ export default function SalesMain() {
     commitSale(status);
   };
   const handleSell = (e: React.FormEvent) => { e.preventDefault(); submitSale("ปิดการขาย/จัดส่งแล้ว"); };
-  const handleBook = (e: React.MouseEvent) => { e.preventDefault(); submitSale("มัดจำแล้ว"); };
+  const handleReserve = (e: React.MouseEvent) => { e.preventDefault(); submitSale("จอง/รอโอน"); };            // จองไว้ก่อน ยังไม่โอน — ไม่ต้องแนบสลิป
+  const handleBook = (e: React.MouseEvent) => { e.preventDefault(); submitSale("จอง/โอนมัดจำแล้ว"); };        // จอง + โอนมัดจำแล้ว — ต้องแนบสลิป
   const handleShipping = (e: React.MouseEvent) => { e.preventDefault(); submitSale("รอจัดส่ง"); };
   const handleFinance = (e: React.MouseEvent) => { e.preventDefault(); submitSale("รอไฟแนนซ์"); };
 
@@ -626,7 +631,7 @@ export default function SalesMain() {
 
   const filteredHistory = historyTab === "all"
     ? mySales
-    : mySales.filter(s => (s.sale_status ?? "ขายแล้ว") === historyTab);
+    : mySales.filter(s => saleMatchesTab(String(s.sale_status ?? "ขายแล้ว"), historyTab));
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -1368,7 +1373,7 @@ export default function SalesMain() {
                         <div id="sale-error-summary" className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5 flex items-start gap-2">
                           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                           <div>
-                            <p className="font-bold mb-0.5">ยังปิดการขายไม่ได้ — กรอกให้ครบก่อน:</p>
+                            <p className="font-bold mb-0.5">ยังบันทึกไม่ได้ — กรอกให้ครบก่อน:</p>
                             <p>{Object.entries(errors).map(([, msg]) => msg).join(" · ")}</p>
                           </div>
                         </div>
@@ -1376,10 +1381,14 @@ export default function SalesMain() {
                       <button type="submit" className={`w-full text-white font-bold py-3.5 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 ${editingSale ? "bg-gradient-to-r from-violet-600 to-fuchsia-700 hover:from-violet-500 hover:to-fuchsia-600" : "bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600"}`}>
                         <CheckCircle className="w-4 h-4" />{editingSale ? "บันทึกการแก้ไข" : "ปิดการขาย / จัดส่งแล้ว"}
                       </button>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={handleReserve}
+                          className="w-full bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-bold py-3 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-1 text-xs">
+                          📝 จอง/รอโอน
+                        </button>
                         <button type="button" onClick={handleBook}
-                          className="w-full bg-amber-400 hover:bg-amber-500 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-1 text-xs">
-                          📌 มัดจำแล้ว
+                          className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-1 text-xs">
+                          📌 จอง/โอนมัดจำแล้ว
                         </button>
                         <button type="button" onClick={handleShipping}
                           className="w-full bg-orange-400 hover:bg-orange-500 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-1 text-xs">
@@ -1614,7 +1623,7 @@ export default function SalesMain() {
             {historyView === "deals" && (
             <div className="flex gap-1 px-4 pt-3 pb-2 border-b border-slate-100 flex-shrink-0 overflow-x-auto">
               {HISTORY_TABS.map(tab => {
-                const count = tab.key === "all" ? mySales.length : mySales.filter(s => (s.sale_status ?? "ขายแล้ว") === tab.key).length;
+                const count = tab.key === "all" ? mySales.length : mySales.filter(s => saleMatchesTab(String(s.sale_status ?? "ขายแล้ว"), tab.key)).length;
                 return (
                   <button key={tab.key} onClick={() => setHistoryTab(tab.key)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${historyTab === tab.key ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
