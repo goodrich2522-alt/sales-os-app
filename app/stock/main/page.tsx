@@ -8,7 +8,7 @@ import {
   Clock, Hash, Camera, ImageOff, Eye, Bell, MapPin, History,
   Download, Upload, FileText, ShoppingCart, User, Truck
 } from "lucide-react";
-import { Forklift, Sale } from "@/lib/types";
+import { Forklift, Sale, STOCK_APPROVAL_FIELD } from "@/lib/types";
 import { useApp, FieldConfig } from "@/lib/AppContext";
 import { isPendingId } from "@/lib/productId";
 import { thaiMonthShort } from "@/lib/format";
@@ -69,6 +69,7 @@ export default function StockMain() {
   const router = useRouter();
   const {
     forklifts, addForkliftsBulk, updateForklift, deleteForklift, inspections, sales, updateSale,
+    approveStockSale, rejectStockSale,
     exportData, importData,
     fieldConfig, updateFieldOptions,
     removeCustomFieldDef, renameCustomFieldDef,
@@ -156,7 +157,8 @@ export default function StockMain() {
   // ดีลที่ยังไม่รับทราบ = แจ้งเตือนคงค้าง (ใหม่สุดก่อน) — โชว์จนแอดมินกดยืนยัน
   const pendingAlerts: SaleAlert[] = useMemo(() => {
     if (!ackReady) return [];
-    return sales.filter(s => !ackedIds.has(s.id)).slice(0, 50).map(s => ({
+    // ไม่รวมคำขอจองที่ยังรออนุมัติ (มีการ์ด/กระดิ่งของตัวเองแยกแล้ว)
+    return sales.filter(s => !ackedIds.has(s.id) && String(s.custom_fields?.[STOCK_APPROVAL_FIELD] ?? "") !== "รออนุมัติ").slice(0, 50).map(s => ({
       id: s.id,
       staff: s.sales_staff || "เซลล์",
       status: String(s.sale_status ?? "ขายแล้ว"),
@@ -287,6 +289,15 @@ export default function StockMain() {
     updateForklift({ ...f, status: nextStatus, custom_fields: cf });
   };
   const ownerOf = (f: Forklift) => saleOwnerByFk.get(f.id) || (f.custom_fields?.["เซลล์ผู้ดูแล"] as string) || "";
+
+  // ── คำขอจอง รออนุมัติ (เซลล์จองเข้ามา รอฝ่ายสต็อกอนุมัติ/ปฏิเสธ) ──
+  const pendingBookings = useMemo(
+    () => sales.filter(s => String(s.custom_fields?.[STOCK_APPROVAL_FIELD] ?? "") === "รออนุมัติ")
+      .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || ""))),
+    [sales]
+  );
+  const [rejectBox, setRejectBox] = useState<string | null>(null); // saleId ที่กำลังจะปฏิเสธ
+  const [rejectReason, setRejectReason] = useState("");
 
   // รายการสต็อกที่กรองแล้ว (สำหรับ modal) — ค้นหา + หมวด + ยี่ห้อ + สถานะ + เรียงลำดับ
   const hs = (v: unknown) => (v == null ? "" : String(v)).toLowerCase();
@@ -614,6 +625,15 @@ export default function StockMain() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* กระดิ่ง 0 (ส้ม) — คำขอจอง รออนุมัติ (ต้องกดอนุมัติ/ปฏิเสธ) → คลิกเลื่อนไปการ์ด */}
+            <button onClick={() => document.getElementById("pending-bookings")?.scrollIntoView({ behavior: "smooth" })}
+              title="คำขอจอง รออนุมัติจากสต็อก"
+              className="relative flex items-center text-slate-600 hover:text-orange-600 hover:bg-orange-50 p-2 rounded-lg transition-all border border-transparent hover:border-orange-200">
+              <ShoppingCart className="w-5 h-5" />
+              {pendingBookings.length > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-orange-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{pendingBookings.length}</span>
+              )}
+            </button>
             {/* กระดิ่ง 1 (ฟ้า) — รถรับเข้าใหม่ รอยืนยันนำเข้าสต็อก → คลิกเลื่อนไปการ์ด */}
             <button onClick={() => document.getElementById("pending-import")?.scrollIntoView({ behavior: "smooth" })}
               title="รถรับเข้าใหม่ รอยืนยันนำเข้าสต็อก"
@@ -719,6 +739,61 @@ export default function StockMain() {
                       className="flex-shrink-0 flex items-center gap-1 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white text-xs font-bold px-3 py-2 rounded-lg transition-all active:scale-95">
                       <CheckCircle className="w-3.5 h-3.5" />ยืนยันนำเข้า
                     </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── 🔔 คำขอจอง รออนุมัติ (เซลล์จองเข้ามา → สต็อกอนุมัติ/ปฏิเสธ) ── */}
+        {pendingBookings.length > 0 && (
+          <div id="pending-bookings" className="bg-orange-50 border-2 border-orange-200 rounded-2xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-orange-500" />
+              </span>
+              <h3 className="text-sm font-bold text-orange-800">🔔 คำขอจอง รออนุมัติ — {pendingBookings.length} รายการ</h3>
+            </div>
+            <p className="text-xs text-orange-600 mb-3">เซลล์จองรถเข้ามา — ตรวจแล้วกด &ldquo;อนุมัติจอง&rdquo; เพื่อยืนยันสต็อกออก (รถจะเป็น &ldquo;จอง&rdquo;) · หรือ &ldquo;ปฏิเสธ&rdquo; เพื่อคืนรถสู่สต็อก</p>
+            <div className="flex flex-col gap-2">
+              {pendingBookings.map(s => {
+                const f = forklifts.find(x => x.id === s.forklift_id);
+                return (
+                  <div key={s.id} className="bg-white border border-orange-100 rounded-xl p-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-md flex-shrink-0">#{s.forklift_id}</span>
+                          <span className="font-semibold text-slate-800 text-sm">{s.forklift_unit_no ? `${s.forklift_unit_no} — ` : ""}{s.forklift_brand} {s.forklift_model}</span>
+                          <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md">{s.sale_status}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                          เซลล์ {s.sales_staff || "—"} · ลูกค้า {s.customer_name || "—"} · ฿{Number(s.actual_sale || 0).toLocaleString("th-TH")}{f?.pi_no ? ` · PI ${f.pi_no}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                    {rejectBox === s.id ? (
+                      <div className="mt-2 flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg p-2">
+                        <input autoFocus value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="เหตุผลที่ปฏิเสธ (เช่น รถติดจองแล้ว)..."
+                          className="flex-1 min-w-0 text-xs border border-red-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-red-300 bg-white text-slate-800" />
+                        <button onClick={() => { rejectStockSale(s.id, rejectReason.trim(), username); setRejectBox(null); setRejectReason(""); }}
+                          className="text-xs font-bold bg-red-600 hover:bg-red-700 text-white px-2.5 py-1.5 rounded-lg flex-shrink-0">ยืนยันปฏิเสธ</button>
+                        <button onClick={() => { setRejectBox(null); setRejectReason(""); }} className="text-xs text-slate-500 hover:text-slate-700 px-1.5 flex-shrink-0">ยกเลิก</button>
+                      </div>
+                    ) : (
+                      <div className="mt-2 flex items-center gap-2">
+                        <button onClick={() => approveStockSale(s.id, username)}
+                          className="flex-1 flex items-center justify-center gap-1 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white text-xs font-bold px-3 py-2 rounded-lg transition-all active:scale-95">
+                          <CheckCircle className="w-3.5 h-3.5" />อนุมัติจอง
+                        </button>
+                        <button onClick={() => { setRejectBox(s.id); setRejectReason(""); }}
+                          className="flex items-center justify-center gap-1 border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold px-3 py-2 rounded-lg transition-all">
+                          <X className="w-3.5 h-3.5" />ปฏิเสธ
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}

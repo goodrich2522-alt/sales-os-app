@@ -35,6 +35,7 @@ export const STATUS_BADGE: Record<string, string> = {
   "ติดจอง/รอส่ง":   "bg-orange-100 text-orange-700 border-orange-200",
   "รอรับ":          "bg-sky-100 text-sky-700 border-sky-200",
   "รอยืนยันนำเข้าสต็อก": "bg-blue-100 text-blue-700 border-blue-200",
+  "รออนุมัติสต็อก":      "bg-orange-100 text-orange-700 border-orange-200",
   "รอผ่านไฟแนนซ์":  "bg-red-100 text-red-700 border-red-200",
   // ── 4 สถานะปิดการขายใหม่ ──
   "มัดจำแล้ว":            "bg-amber-100 text-amber-700 border-amber-200",

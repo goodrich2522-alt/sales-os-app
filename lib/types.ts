@@ -12,6 +12,13 @@ export type SaleType = "รถเช่า" | "รถขายเต็มคั
 export type FuelType = string;
 export type ForkliftStatus = string;
 
+// ── เกตอนุมัติจองจากฝ่ายสต็อก (booking approval) ──
+// เซลล์จอง/กันสต็อก → รถพักที่ "รออนุมัติสต็อก" จนฝ่ายสต็อกกดอนุมัติ (ยืนยันสต็อกออก)
+export const STOCK_APPROVAL_FIELD = "อนุมัติสต็อก";          // sale.custom_fields — "รออนุมัติ"|"อนุมัติแล้ว"|"ปฏิเสธ"
+export const STATUS_PENDING_APPROVAL = "รออนุมัติสต็อก";     // สถานะรถระหว่างรออนุมัติ
+// สถานะรถ (จาก sale_status) ที่กันสต็อก + ต้องอนุมัติก่อน (ยกเว้นปิดการขายจริง)
+export const GATED_STATUSES = ["จอง", "รอจัดส่ง", "รอไฟแนนซ์", "รอผ่านไฟแนนซ์"];
+
 export interface Forklift {
   id: string;
   SN: string;

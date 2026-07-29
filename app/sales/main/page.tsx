@@ -11,7 +11,7 @@ import {
   LayoutGrid, Table as TableIcon, Users, Download, MapPin,
 } from "lucide-react";
 import { PROVINCES, CONTACT_SOURCES } from "@/lib/mockData";
-import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, ContactSource, SaleType, InspectionRecord, SLOT_LABELS } from "@/lib/types";
+import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, ContactSource, SaleType, InspectionRecord, SLOT_LABELS, STOCK_APPROVAL_FIELD } from "@/lib/types";
 import { useApp } from "@/lib/AppContext";
 import { driveImg } from "@/lib/img";
 import { isPendingId } from "@/lib/productId";
@@ -39,6 +39,7 @@ function notSellableReason(status: unknown): string | null {
   if (s.includes("เช่า")) return "เป็นรถเช่า";
   if (s.includes("รอรับ") || s.includes("รอเข้าไปรับ")) return "ยังไม่รับรถเข้าคลัง (รอรับ)";
   if (s.includes("รอยืนยัน")) return "รอฝ่ายสต็อกยืนยันนำเข้า";
+  if (s.includes("รออนุมัติ")) return "จองรออนุมัติจากสต็อก";
   return null;
 }
 const isSellable = (f: { status?: unknown }) => notSellableReason(f?.status) === null;
@@ -139,6 +140,10 @@ export default function SalesMain() {
 
   // Test notification demo
   const [testNotifActive, setTestNotifActive] = useState(false);
+  // แจ้งเตือนผลอนุมัติจองจากฝ่ายสต็อก (กระดิ่ง)
+  const [bookingAcks, setBookingAcks]         = useState<Set<string>>(new Set());
+  const [bookingAckReady, setBookingAckReady] = useState(false);
+  const [showBookingNotif, setShowBookingNotif] = useState(false);
 
   // Vehicle type selector in checkout (auto-set from product category)
   const [vehicleType, setVehicleType] = useState<VehicleType>("Forklift");
@@ -414,6 +419,31 @@ export default function SalesMain() {
     return result;
   }, [mySales, testNotifActive]);
 
+  // ── แจ้งเตือนผลอนุมัติจอง — ครั้งแรกตั้ง baseline (ผลเก่าถือว่ารับทราบแล้ว กันสแปม) ──
+  useEffect(() => {
+    if (bookingAckReady) return;
+    const raw = localStorage.getItem("sales_booking_acks");
+    if (raw) { setBookingAcks(new Set(JSON.parse(raw) as string[])); setBookingAckReady(true); return; }
+    if (sales.length === 0) return;
+    const decided = sales.filter(s => ["อนุมัติแล้ว", "ปฏิเสธ"].includes(String(s.custom_fields?.[STOCK_APPROVAL_FIELD] ?? ""))).map(s => s.id);
+    localStorage.setItem("sales_booking_acks", JSON.stringify(decided));
+    setBookingAcks(new Set(decided)); setBookingAckReady(true);
+  }, [sales, bookingAckReady]);
+  // จองของฉันที่สต็อก "อนุมัติแล้ว/ปฏิเสธ" แต่ยังไม่รับทราบ
+  const bookingNotifs = useMemo(() => {
+    if (!bookingAckReady || !salesUser) return [] as Sale[];
+    return mySales.filter(s => {
+      const a = String(s.custom_fields?.[STOCK_APPROVAL_FIELD] ?? "");
+      return (a === "อนุมัติแล้ว" || a === "ปฏิเสธ") && !bookingAcks.has(s.id);
+    });
+  }, [mySales, bookingAcks, bookingAckReady, salesUser]);
+  const ackBooking = (id: string) => setBookingAcks(prev => {
+    const n = new Set(prev); n.add(id); localStorage.setItem("sales_booking_acks", JSON.stringify([...n])); return n;
+  });
+  const ackAllBookings = () => setBookingAcks(prev => {
+    const n = new Set(prev); bookingNotifs.forEach(s => n.add(s.id)); localStorage.setItem("sales_booking_acks", JSON.stringify([...n])); return n;
+  });
+
   const detailInspPhotos = useMemo(() => {
     if (!detailSale) return { receiver: [] as LabeledPhoto[], deliverer: [] as LabeledPhoto[], all: [] as LabeledPhoto[], receiverNames: "", delivererNames: "" };
     const recs = inspections.filter(r => r.unit_no === detailSale.forklift_unit_no);
@@ -686,6 +716,14 @@ export default function SalesMain() {
               title="ทดสอบการแจ้งเตือน"
               className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border transition-all ${testNotifActive ? "bg-amber-100 text-amber-700 border-amber-300" : "text-slate-500 border-dashed border-slate-300 hover:border-amber-300 hover:text-amber-600"}`}>
               <Bell className="w-3.5 h-3.5" />ทดสอบ
+            </button>
+            {/* กระดิ่งผลอนุมัติจองจากฝ่ายสต็อก */}
+            <button onClick={() => setShowBookingNotif(true)} title="ผลอนุมัติจองจากสต็อก"
+              className="relative flex items-center text-slate-600 hover:text-amber-600 hover:bg-amber-50 p-2 rounded-lg transition-all border border-transparent hover:border-amber-200">
+              <Bell className="w-5 h-5" />
+              {bookingNotifs.length > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{bookingNotifs.length}</span>
+              )}
             </button>
             <button onClick={() => setShowHistory(true)}
               className="flex items-center gap-1.5 text-slate-600 hover:text-indigo-700 hover:bg-indigo-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-transparent hover:border-indigo-200">
@@ -1688,6 +1726,14 @@ export default function SalesMain() {
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${SALE_STATUS_BADGE[sale.sale_status ?? "ขายแล้ว"]}`}>
                             {sale.sale_status ?? "ขายแล้ว"}
                           </span>
+                          {/* สถานะอนุมัติจองจากสต็อก */}
+                          {(() => {
+                            const a = String(sale.custom_fields?.[STOCK_APPROVAL_FIELD] ?? "");
+                            if (a === "รออนุมัติ") return <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">⏳ รอสต็อกอนุมัติ</span>;
+                            if (a === "ปฏิเสธ") return <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">❌ สต็อกปฏิเสธ</span>;
+                            if (a === "อนุมัติแล้ว") return <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">✅ อนุมัติแล้ว</span>;
+                            return null;
+                          })()}
                         </div>
                         <p className="text-xs text-slate-500 mt-1 truncate">{sale.customer_name} · {sale.province}</p>
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -2055,6 +2101,47 @@ export default function SalesMain() {
       )}
 
       {/* ── ผู้ช่วย AI พี่เก่ง (โครงไว้ก่อน — เติมความสามารถทีหลัง) ── */}
+      {/* ── กล่องแจ้งเตือนผลอนุมัติจองจากฝ่ายสต็อก ── */}
+      {showBookingNotif && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center p-4"
+          onClick={e => e.target === e.currentTarget && setShowBookingNotif(false)}>
+          <div className="bg-white rounded-3xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0 bg-amber-50">
+              <div>
+                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2"><Bell className="w-4 h-4 text-amber-500" />ผลอนุมัติจองจากฝ่ายสต็อก</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{bookingNotifs.length} รายการใหม่</p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {bookingNotifs.length > 0 && <button onClick={ackAllBookings} className="text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 rounded-lg">รับทราบทั้งหมด</button>}
+                <button onClick={() => setShowBookingNotif(false)} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all"><X className="w-5 h-5" /></button>
+              </div>
+            </div>
+            <div className="overflow-y-auto flex-1 min-h-0 p-4 flex flex-col gap-2.5">
+              {bookingNotifs.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-14 text-slate-400"><Bell className="w-10 h-10 text-slate-300 mb-2" /><p className="text-sm">ไม่มีการแจ้งเตือนใหม่</p></div>
+              )}
+              {bookingNotifs.map(s => {
+                const approved = String(s.custom_fields?.[STOCK_APPROVAL_FIELD] ?? "") === "อนุมัติแล้ว";
+                return (
+                  <div key={s.id} className={`border rounded-2xl p-3.5 ${approved ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-bold ${approved ? "text-emerald-700" : "text-red-700"}`}>{approved ? "✅ อนุมัติจองแล้ว — สต็อกออกเรียบร้อย" : "❌ ถูกปฏิเสธจากสต็อก — รถกลับสู่สต็อก"}</p>
+                        <p className="font-semibold text-slate-800 text-sm mt-1">{s.forklift_brand} {s.forklift_model} <span className="text-xs text-slate-400">#{s.forklift_id}</span></p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">ลูกค้า {s.customer_name || "—"} · ฿{Number(s.actual_sale || 0).toLocaleString("th-TH")}</p>
+                        {!approved && s.custom_fields?.["เหตุผลปฏิเสธ"] && <p className="text-[11px] text-red-600 mt-1">เหตุผล: {s.custom_fields["เหตุผลปฏิเสธ"]}</p>}
+                        {s.custom_fields?.["อนุมัติเมื่อ"] && <p className="text-[10px] text-slate-400 mt-0.5">{s.custom_fields["อนุมัติเมื่อ"]}{s.custom_fields?.["อนุมัติโดย"] ? ` · โดย ${s.custom_fields["อนุมัติโดย"]}` : ""}</p>}
+                      </div>
+                      <button onClick={() => ackBooking(s.id)} className="text-xs font-semibold text-slate-500 hover:text-slate-800 bg-white/70 hover:bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg flex-shrink-0">รับทราบ</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       <AiAssistant salesUserName={salesUser?.name} />
     </div>
   );

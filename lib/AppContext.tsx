@@ -1,7 +1,8 @@
 "use client";
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
-import { Forklift, Sale, InspectionRecord, DeletedInspectionRecord, CustomFieldDef } from "./types";
+import { Forklift, Sale, InspectionRecord, DeletedInspectionRecord, CustomFieldDef,
+  STOCK_APPROVAL_FIELD, STATUS_PENDING_APPROVAL, GATED_STATUSES } from "./types";
 import {
   mockForklifts, mockSales, mockInspections,
   BRANDS, FUEL_TYPES,
@@ -90,6 +91,8 @@ interface AppContextType {
   addSale: (s: Sale) => void;
   updateSale: (s: Sale) => void;
   deleteSale: (saleId: string) => void;
+  approveStockSale: (saleId: string, by?: string) => void;   // ฝ่ายสต็อกอนุมัติคำขอจอง
+  rejectStockSale: (saleId: string, reason: string, by?: string) => void; // ฝ่ายสต็อกปฏิเสธ → คืนรถ
   exportData: () => BackupData;
   importData: (data: BackupData) => Promise<{ forklifts: number; sales: number; inspections: number }>;
   addInspection: (r: InspectionRecord) => void;
@@ -312,11 +315,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (st === "รอผ่านไฟแนนซ์") return "รอผ่านไฟแนนซ์";  // เก่า
     return st || "ปิดการขายแล้ว";                        // ใหม่ (รอจัดส่ง/รอไฟแนนซ์/ปิด-ส่งแล้ว)
   };
+  // ── เกตอนุมัติจอง: สถานะที่กันสต็อกและต้องให้ฝ่ายสต็อกอนุมัติก่อน (ยกเว้นปิดการขายจริง) ──
+  const GATED = new Set(GATED_STATUSES);
+  const approvalOf = (s: Sale) => String(s.custom_fields?.[STOCK_APPROVAL_FIELD] ?? "");
+  // สถานะรถที่ควรตั้งจากดีล — กันด้วยเกตอนุมัติ (เฉพาะดีลที่ติดมาร์ก "รออนุมัติ" · ดีลเก่าไม่มีมาร์ก = ผ่าน)
+  const forkStatusGated = (s: Sale): string => {
+    const intended = forkliftStatusForSale(s);
+    const appr = approvalOf(s);
+    if (appr === "ปฏิเสธ") return "พร้อมขาย";                              // สต็อกปฏิเสธ → คืนรถ
+    if (appr === "รออนุมัติ") return GATED.has(intended) ? STATUS_PENDING_APPROVAL : intended; // รอสต็อกอนุมัติ
+    return intended;                                                       // อนุมัติแล้ว / เก่า / ปิดการขายจริง → สถานะจริง
+  };
 
-  const addSale = useCallback((s: Sale) => {
+  const addSale = useCallback((s0: Sale) => {
     lastLocalEditRef.current = Date.now();
+    // ดีลใหม่ที่กันสต็อก (จอง/รอจัดส่ง/รอไฟแนนซ์) + ยังไม่อนุมัติ → ติดมาร์ก "รออนุมัติ" ให้ฝ่ายสต็อกกดอนุมัติก่อน
+    const needGate = GATED.has(forkliftStatusForSale(s0)) && approvalOf(s0) === "";
+    const s = needGate ? { ...s0, custom_fields: { ...(s0.custom_fields || {}), [STOCK_APPROVAL_FIELD]: "รออนุมัติ" } } : s0;
     setSales(p => [s, ...p]); // optimistic (โชว์รูป base64 ทันที)
-    const nextStatus = forkliftStatusForSale(s);
+    const nextStatus = forkStatusGated(s);
     setForklifts(p => p.map(f => f.id === s.forklift_id ? { ...f, status: nextStatus } : f));
     if (api.apiEnabled) {
       (async () => {
@@ -328,10 +345,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       })();
     }
   }, []);
-  // แก้ไขดีลที่ทำไปแล้ว — อัปเดตข้อมูล + ปรับสถานะรถให้ตรงกับ sale_status ล่าสุด
+  // แก้ไขดีลที่ทำไปแล้ว — อัปเดตข้อมูล + ปรับสถานะรถ (เคารพเกตอนุมัติ)
   const updateSale = useCallback((s: Sale) => {
     lastLocalEditRef.current = Date.now();
-    const nextStatus = forkliftStatusForSale(s);
+    const nextStatus = forkStatusGated(s);
     setSales(p => p.map(x => x.id === s.id ? s : x));
     setForklifts(p => p.map(f => f.id === s.forklift_id ? { ...f, status: nextStatus } : f));
     if (api.apiEnabled) {
@@ -342,6 +359,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const target = forkliftsRef.current.find(f => f.id === s.forklift_id);
         if (target) api.updateForkliftApi({ ...target, status: nextStatus }).catch(e => console.warn("updateForklift", e));
       })();
+    }
+  }, []);
+  // ── ฝ่ายสต็อกอนุมัติ/ปฏิเสธคำขอจอง ──
+  const approveStockSale = useCallback((saleId: string, by?: string) => {
+    lastLocalEditRef.current = Date.now();
+    const sale = salesRef.current.find(s => s.id === saleId);
+    if (!sale) return;
+    const stamp = new Date().toLocaleString("th-TH");
+    const ns: Sale = { ...sale, custom_fields: { ...(sale.custom_fields || {}), [STOCK_APPROVAL_FIELD]: "อนุมัติแล้ว", "อนุมัติเมื่อ": stamp, "อนุมัติโดย": by || "สต็อก" } };
+    const finalStatus = forkStatusGated(ns); // = สถานะจริงตามดีล (จอง/รอจัดส่ง/...)
+    setSales(p => p.map(x => x.id === saleId ? ns : x));
+    setForklifts(p => p.map(f => f.id === sale.forklift_id ? { ...f, status: finalStatus } : f));
+    if (api.apiEnabled) {
+      api.updateSaleApi(ns).catch(e => console.warn("approveSale", e));
+      const target = forkliftsRef.current.find(f => f.id === sale.forklift_id);
+      if (target) api.updateForkliftApi({ ...target, status: finalStatus }).catch(e => console.warn("updateForklift", e));
+    }
+  }, []);
+  const rejectStockSale = useCallback((saleId: string, reason: string, by?: string) => {
+    lastLocalEditRef.current = Date.now();
+    const sale = salesRef.current.find(s => s.id === saleId);
+    if (!sale) return;
+    const stamp = new Date().toLocaleString("th-TH");
+    const ns: Sale = { ...sale, custom_fields: { ...(sale.custom_fields || {}), [STOCK_APPROVAL_FIELD]: "ปฏิเสธ", "เหตุผลปฏิเสธ": reason || "", "อนุมัติเมื่อ": stamp, "อนุมัติโดย": by || "สต็อก" } };
+    setSales(p => p.map(x => x.id === saleId ? ns : x));
+    setForklifts(p => p.map(f => f.id === sale.forklift_id ? { ...f, status: "พร้อมขาย" } : f)); // คืนรถสู่สต็อก
+    if (api.apiEnabled) {
+      api.updateSaleApi(ns).catch(e => console.warn("rejectSale", e));
+      const target = forkliftsRef.current.find(f => f.id === sale.forklift_id);
+      if (target) api.updateForkliftApi({ ...target, status: "พร้อมขาย" }).catch(e => console.warn("updateForklift", e));
     }
   }, []);
 
@@ -565,7 +612,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     <AppContext.Provider value={{
       forklifts, sales, inspections, deletedInspections, fieldConfig,
       addForklift, addForkliftsBulk, updateForklift, deleteForklift,
-      addSale, updateSale, deleteSale,
+      addSale, updateSale, deleteSale, approveStockSale, rejectStockSale,
       exportData, importData,
       addInspection, deleteInspection, restoreInspection, purgeInspection,
       refresh,
