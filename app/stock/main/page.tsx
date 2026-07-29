@@ -6,7 +6,7 @@ import {
   Package, Plus, LogOut, CheckCircle, AlertCircle, List, X,
   TrendingUp, Boxes, Trash2, Settings, Pencil, Check, ChevronDown, ChevronRight,
   Clock, Hash, Camera, ImageOff, Eye, Bell, MapPin, History,
-  Download, Upload, FileText, ShoppingCart, User
+  Download, Upload, FileText, ShoppingCart, User, Truck
 } from "lucide-react";
 import { Forklift, Sale } from "@/lib/types";
 import { useApp, FieldConfig } from "@/lib/AppContext";
@@ -245,6 +245,14 @@ export default function StockMain() {
       .forEach(s => { if (s.sales_staff) m.set(s.forklift_id, s.sales_staff); });
     return m;
   }, [sales]);
+  // ดีลล่าสุดต่อคัน (ทั้งก้อน) — ใช้เติมข้อมูลลูกค้าในรายงาน Export
+  const saleByFk = useMemo(() => {
+    const m = new Map<string, Sale>();
+    [...sales]
+      .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")))
+      .forEach(s => m.set(s.forklift_id, s));
+    return m;
+  }, [sales]);
 
   // นับแยกตามสถานะมาตรฐาน 5 ค่า — ฝ่ายสต็อกเห็นชัดว่าเหลือ/ขาย/ไฟแนนซ์/จอง กี่คัน
   const countStatus = (s: string) => forklifts.filter(f => String(f.status) === s).length;
@@ -341,7 +349,9 @@ export default function StockMain() {
       XLSX.writeFile(awb, `รายงานรถค้างสต็อก_${new Date().toISOString().slice(0, 10)}.xlsx`);
       return;
     }
-    const rows = listFiltered.map(f => ({
+    const rows = listFiltered.map(f => {
+      const sale = saleByFk.get(f.id); // ดีลล่าสุดของคันนี้ (ถ้ามี) → เติมข้อมูลลูกค้า
+      return {
       "รหัส (SN)": f.id ?? "",
       "SN": f.SN ?? "",
       "ยี่ห้อ": f.brand || "(ไม่ระบุ)",
@@ -357,10 +367,16 @@ export default function StockMain() {
       "วันรับรถ": f.received_date ?? "",
       "โลเคชั่น": f.location ?? "",
       "เซลล์ดูแล": saleOwnerByFk.get(f.id) || (f.custom_fields?.["เซลล์ผู้ดูแล"] as string) || "",
+      "ลูกค้า": sale?.customer_name ?? "",
+      "เบอร์ลูกค้า": sale?.customer_tel ?? "",
+      "จังหวัดลูกค้า": sale?.province ?? "",
+      "สถานะดีล": sale?.sale_status ?? "",
+      "ราคาขาย": sale ? (Number(sale.actual_sale) || 0) : "",
       "วันเติมเข้าระบบ": String(f.created_at ?? "").slice(0, 10),
-    }));
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws["!cols"] = [16, 14, 12, 18, 14, 10, 12, 10, 10, 10, 14, 12, 12, 12, 16, 12].map(w => ({ wch: w }));
+    ws["!cols"] = [16, 14, 12, 18, 14, 10, 12, 10, 10, 10, 14, 12, 12, 12, 16, 18, 14, 12, 16, 12, 12].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "รายการสินค้า");
     const stamp = new Date().toISOString().slice(0, 10);
@@ -598,12 +614,22 @@ export default function StockMain() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* กระดิ่งแจ้งเตือน — เด้ง badge เมื่อมีดีลรอยืนยันตัดออกจากสต็อก */}
+            {/* กระดิ่ง 1 (ฟ้า) — รถรับเข้าใหม่ รอยืนยันนำเข้าสต็อก → คลิกเลื่อนไปการ์ด */}
+            <button onClick={() => document.getElementById("pending-import")?.scrollIntoView({ behavior: "smooth" })}
+              title="รถรับเข้าใหม่ รอยืนยันนำเข้าสต็อก"
+              className="relative flex items-center text-slate-600 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-lg transition-all border border-transparent hover:border-blue-200">
+              <Truck className="w-5 h-5" />
+              {pendingImport.length > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-blue-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{pendingImport.length}</span>
+              )}
+            </button>
+            {/* กระดิ่ง 2 (ชมพู) — ออเดอร์ขายจากเซลล์ รอรับทราบ → คลิกเปิดกล่องแจ้งเตือน */}
             <button onClick={() => setShowAlerts(true)}
+              title="ออเดอร์ขายจากเซลล์ รอรับทราบ"
               className="relative flex items-center text-slate-600 hover:text-rose-600 hover:bg-rose-50 p-2 rounded-lg transition-all border border-transparent hover:border-rose-200">
               <Bell className="w-5 h-5" />
-              {(pendingAlerts.length + overdueMTO.length) > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{pendingAlerts.length + overdueMTO.length}</span>
+              {pendingAlerts.length > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{pendingAlerts.length}</span>
               )}
             </button>
             <button onClick={() => setShowSaleHistory(true)}

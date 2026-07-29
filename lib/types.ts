@@ -92,9 +92,15 @@ export const INSPECTION_SLOTS = [
   { key: "left",       label: "รถด้านซ้าย",  icon: "◀️" },
   { key: "right",      label: "รถด้านขวา",   icon: "▶️" },
 ] as const;
-export type InspectionSlotKey = (typeof INSPECTION_SLOTS)[number]["key"];
+// ── ช่องรูปเสริม (ไม่บังคับ) — ถ่ายเมื่อมีของจริง เช่น รถไฟฟ้ามีตู้ชาร์จ / มีกล่องเครื่องมือแถม ──
+export const INSPECTION_EXTRA_SLOTS = [
+  { key: "toolbox", label: "กล่องเครื่องมือ", icon: "🧰" },
+  { key: "charger", label: "ตู้ชาร์จ",        icon: "🔌" },
+] as const;
+export type InspectionSlotKey =
+  (typeof INSPECTION_SLOTS)[number]["key"] | (typeof INSPECTION_EXTRA_SLOTS)[number]["key"];
 export const SLOT_LABELS: Record<string, string> =
-  Object.fromEntries(INSPECTION_SLOTS.map(s => [s.key, s.label]));
+  Object.fromEntries([...INSPECTION_SLOTS, ...INSPECTION_EXTRA_SLOTS].map(s => [s.key, s.label]));
 
 export interface InspectionRecord {
   id: string;

@@ -52,11 +52,12 @@ export default function InspectionsPage() {
         "บริษัทที่ไปส่ง": r.delivery_company ?? "", "ลิงก์โลเคชั่น": r.location_link ?? "", "จำนวนรูป": (r.images ?? []).length,
         "รูป Name Plate": slotUrl("name_plate"), "รูปเอกสาร PI": slotUrl("pi_doc"), "รูปรถด้านหน้า": slotUrl("front"),
         "รูปรถด้านหลัง": slotUrl("back"), "รูปรถด้านซ้าย": slotUrl("left"), "รูปรถด้านขวา": slotUrl("right"),
+        "รูปกล่องเครื่องมือ": slotUrl("toolbox"), "รูปตู้ชาร์จ": slotUrl("charger"),
         "รูปเพิ่มเติม (ลิงก์)": extras.join("\n"),
       };
     });
     const ws1 = XLSX.utils.json_to_sheet(recRows);
-    ws1["!cols"] = [6, 12, 12, 16, 16, 12, 18, 14, 10, 16, 12, 20, 26, 8, 30, 30, 30, 30, 30, 30, 42].map(w => ({ wch: w }));
+    ws1["!cols"] = [6, 12, 12, 16, 16, 12, 18, 14, 10, 16, 12, 20, 26, 8, 30, 30, 30, 30, 30, 30, 30, 30, 42].map(w => ({ wch: w }));
 
     const byCar = new Map<string, { f: Forklift | null; unit: string; recv: InspectionRecord[]; send: InspectionRecord[] }>();
     inspections.forEach(r => {

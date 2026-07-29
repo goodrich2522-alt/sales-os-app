@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRight, Package, History, ImageOff, Hash, Calendar, User, FileText, PackageCheck, Clock, Search, RotateCcw, Building2, Briefcase, Trash2, MapPin, Link2, Download } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
-import { Forklift, Sale, InspectionRecord, INSPECTION_SLOTS, InspectionSlotKey, SLOT_LABELS } from "@/lib/types";
+import { Forklift, Sale, InspectionRecord, INSPECTION_SLOTS, INSPECTION_EXTRA_SLOTS, InspectionSlotKey, SLOT_LABELS } from "@/lib/types";
 import { driveImg } from "@/lib/img";
 import { thaiDate, today, specCode } from "@/lib/format";
 import { Lightbox } from "@/components/ui/Lightbox";
@@ -171,7 +171,8 @@ export default function TransporterMain() {
   // รวมรูปส่งเข้า inspection: 6 ช่องเรียงตามลำดับ + รูปเพิ่มเติมต่อท้าย
   const buildImagePayload = () => {
     const slots: Partial<Record<InspectionSlotKey, string>> = { ...slotImages };
-    const ordered = INSPECTION_SLOTS.map(s => slotImages[s.key]).filter(Boolean) as string[];
+    // เรียงรูป: 6 ช่องบังคับ → ช่องเสริม (กล่องเครื่องมือ/ตู้ชาร์จ) → รูปเพิ่มเติม
+    const ordered = [...INSPECTION_SLOTS, ...INSPECTION_EXTRA_SLOTS].map(s => slotImages[s.key]).filter(Boolean) as string[];
     return { images: [...ordered, ...extraImages], image_slots: slots };
   };
 
@@ -284,11 +285,13 @@ export default function TransporterMain() {
         "รูปรถด้านหลัง": slotUrl("back"),
         "รูปรถด้านซ้าย": slotUrl("left"),
         "รูปรถด้านขวา": slotUrl("right"),
+        "รูปกล่องเครื่องมือ": slotUrl("toolbox"),
+        "รูปตู้ชาร์จ": slotUrl("charger"),
         "รูปเพิ่มเติม (ลิงก์)": extras.join("\n"),
       };
     });
     const ws1 = XLSX.utils.json_to_sheet(recRows);
-    ws1["!cols"] = [6, 12, 12, 16, 16, 12, 18, 14, 10, 16, 12, 20, 26, 8, 30, 30, 30, 30, 30, 30, 42].map(w => ({ wch: w }));
+    ws1["!cols"] = [6, 12, 12, 16, 16, 12, 18, 14, 10, 16, 12, 20, 26, 8, 30, 30, 30, 30, 30, 30, 30, 30, 42].map(w => ({ wch: w }));
 
     // ── ชีต 2: สรุปรายคัน (เฉพาะรถที่มีประวัติ ≥ 1 ครั้ง) ──
     const byCar = new Map<string, { f: Forklift | null; unit: string; recv: InspectionRecord[]; send: InspectionRecord[] }>();
@@ -613,6 +616,32 @@ export default function TransporterMain() {
                 ยังขาด: {missingSlotLabels.join(" · ")}
               </p>
             )}
+
+            {/* ── ช่องรูปเสริม: กล่องเครื่องมือ + ตู้ชาร์จ (ไม่บังคับ — ถ่ายเมื่อมีของ) ── */}
+            <div className="mt-5 pt-4 border-t border-slate-100">
+              <p className="text-xs font-semibold text-slate-600 mb-2.5">อุปกรณ์แถม (ไม่บังคับ) — ถ่ายเมื่อมีของจริง</p>
+              <div className="grid grid-cols-2 gap-2.5">
+                {INSPECTION_EXTRA_SLOTS.map(slot => {
+                  const img = slotImages[slot.key];
+                  return img ? (
+                    <div key={slot.key} className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 border-2 border-emerald-300">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={img} alt={slot.label} className="w-full h-full object-cover" />
+                      <span className="absolute bottom-0 inset-x-0 bg-emerald-600/90 text-white text-[11px] font-bold px-1.5 py-1 text-center truncate">✓ {slot.label}</span>
+                      <button onClick={() => retakeSlot(slot.key)} title="ถ่ายใหม่"
+                        className="absolute top-1.5 right-1.5 bg-slate-900/70 hover:bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center transition-colors"><X className="w-3 h-3" /></button>
+                    </div>
+                  ) : (
+                    <button key={slot.key} onClick={() => { setActiveSlot(slot.key); slotInputRef.current?.click(); }}
+                      className="aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all border-slate-200 hover:border-indigo-400 bg-slate-50 hover:bg-indigo-50/40">
+                      <span className="text-2xl">{slot.icon}</span>
+                      <span className="text-xs font-bold text-slate-700 px-1 text-center leading-tight">{slot.label}</span>
+                      <span className="flex items-center gap-1 text-[10px] font-semibold text-slate-400"><Camera className="w-3 h-3" />ไม่บังคับ</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             {/* ── รูปเพิ่มเติม (ไม่บังคับ) ── */}
             <div className="mt-5 pt-4 border-t border-slate-100">
