@@ -362,20 +362,28 @@ export default function StockMain() {
 
   // ── แจ้งเตือนเตรียมสั่งสินค้า — forklift เหลือ < 3 · ชนิดอื่น (ยกเว้นรีชทรัค) เหลือ < 15 ──
   const reorderAlerts = useMemo(() => {
-    const g = new Map<string, { label: string; cat: string; ready: number; threshold: number }>();
+    const g = new Map<string, { brand: string; sub: string; cat: string; ready: number; threshold: number }>();
     forklifts.forEach(f => {
       const cat = f.vehicle_category ?? "Forklift";
       if (cat === "Reach Truck") return;               // รีชทรัคไม่ต้องแจ้ง
       const isFork = cat === "Forklift";
       const mast = String((f.custom_fields as Record<string, unknown> | undefined)?.["MAST"] ?? "").trim();
-      const key = isFork ? `${f.brand}|${f.model}|${mast}` : `${f.brand}|${f.model}`;
-      const label = isFork && mast ? `${f.brand} ${f.model} · เสา ${mast}` : `${f.brand} ${f.model}`;
-      const row = g.get(key) ?? { label, cat, ready: 0, threshold: isFork ? 3 : 15 };
+      const brand = f.brand || "(ไม่ระบุ)";
+      const key = isFork ? `${brand}|${f.model}|${mast}` : `${brand}|${f.model}`;
+      const sub = isFork && mast ? `${f.model} · เสา ${mast}` : f.model; // ไม่ซ้ำยี่ห้อ (โชว์เป็นหัวกลุ่ม)
+      const row = g.get(key) ?? { brand, sub, cat, ready: 0, threshold: isFork ? 3 : 15 };
       if (String(f.status).trim() === "พร้อมขาย") row.ready++;
       g.set(key, row);
     });
     return [...g.values()].filter(r => r.ready < r.threshold).sort((a, b) => a.ready - b.ready);
   }, [forklifts]);
+  // จัดกลุ่มตามยี่ห้อ (เรียงจำนวนมากสุด) + แยกด่วน(เหลือ 0)/ใกล้หมด สำหรับแสดงผล
+  const reorderByBrand = useMemo(() => {
+    const m = new Map<string, typeof reorderAlerts>();
+    reorderAlerts.forEach(r => { const a = m.get(r.brand) ?? []; a.push(r); m.set(r.brand, a); });
+    return [...m.entries()].map(([brand, items]) => ({ brand, items })).sort((a, b) => b.items.length - a.items.length);
+  }, [reorderAlerts]);
+  const reorderOut = reorderAlerts.filter(r => r.ready === 0).length;   // เหลือ 0 = ต้องสั่งด่วน
 
   // ── FIFO เฟส 3: รายงานรถค้างสต็อกนาน (Aging) — เฉพาะพร้อมขาย เรียงค้างนานสุดก่อน ──
   const daysInStock = (f: Forklift): number | null => {
@@ -608,12 +616,31 @@ export default function StockMain() {
               </div>
               <button onClick={() => setShowReorder(false)} className="text-amber-500 hover:text-amber-800 hover:bg-amber-100 rounded-lg p-1"><X className="w-4 h-4" /></button>
             </div>
-            <p className="text-[11px] text-amber-600 mb-2.5">เกณฑ์: โฟล์คลิฟท์เหลือ &lt; 3 · ชนิดอื่นเหลือ &lt; 15 (รีชทรัคไม่นับ)</p>
-            <div className="flex flex-wrap gap-1.5">
-              {reorderAlerts.map((r, i) => (
-                <span key={i} className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border ${r.ready === 0 ? "bg-red-100 text-red-700 border-red-200" : "bg-white text-amber-800 border-amber-200"}`}>
-                  {r.label} <span className={`font-bold ${r.ready === 0 ? "text-red-600" : "text-amber-600"}`}>เหลือ {r.ready}</span>
-                </span>
+            {/* สรุปด้านบน — เห็นภาพรวมก่อน */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              <span className="text-xs font-bold bg-red-100 text-red-700 px-2.5 py-1 rounded-lg">🔴 หมดแล้ว (สั่งด่วน): {reorderOut} รุ่น</span>
+              <span className="text-xs font-bold bg-amber-100 text-amber-700 px-2.5 py-1 rounded-lg">🟡 ใกล้หมด: {reorderAlerts.length - reorderOut} รุ่น</span>
+              <span className="text-[11px] text-amber-600 self-center">เกณฑ์: โฟล์คลิฟท์ &lt; 3 · ชนิดอื่น &lt; 15 (รีชทรัคไม่นับ)</span>
+            </div>
+            {/* จัดกลุ่มตามยี่ห้อ — อ่านง่าย */}
+            <div className="flex flex-col gap-3">
+              {reorderByBrand.map(({ brand, items }) => (
+                <div key={brand} className="bg-white/70 border border-amber-100 rounded-xl p-3">
+                  <p className="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                    <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded">{brand}</span>
+                    <span className="text-slate-400 font-medium">{items.length} รุ่น</span>
+                  </p>
+                  <div className="flex flex-col gap-1">
+                    {items.map((r, i) => (
+                      <div key={i} className="flex items-center justify-between gap-2 text-sm">
+                        <span className="text-slate-700 truncate">{r.sub}</span>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${r.ready === 0 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
+                          {r.ready === 0 ? "หมด" : `เหลือ ${r.ready}`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
