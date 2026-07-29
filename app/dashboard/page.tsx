@@ -327,7 +327,12 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-          {dashYear && <span className="text-xs font-medium bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full hidden sm:block">ปี {Number(dashYear) + 543}</span>}
+          <div className="flex items-center gap-2">
+            <Link href="/dashboard/commission" className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg px-3 py-1.5 transition-all">
+              <DollarSign className="w-4 h-4" /><span className="hidden sm:inline">ค่าคอมรายเดือน</span>
+            </Link>
+            {dashYear && <span className="text-xs font-medium bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full hidden sm:block">ปี {Number(dashYear) + 543}</span>}
+          </div>
         </div>
       </header>
 

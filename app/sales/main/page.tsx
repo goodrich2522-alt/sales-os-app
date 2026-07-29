@@ -18,6 +18,7 @@ import { isPendingId } from "@/lib/productId";
 import { STATUS_BADGE, SALE_STATUS_BADGE, CONTACT_SOURCE_COLORS, VEHICLE_CATS } from "@/lib/constants";
 import { formatBaht } from "@/lib/format";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
+import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isStackerModel } from "@/lib/commission";
 import { apiEnabled } from "@/lib/api";
 import AiAssistant from "@/components/AiAssistant";
 
@@ -141,6 +142,7 @@ export default function SalesMain() {
 
   // Vehicle type selector in checkout (auto-set from product category)
   const [vehicleType, setVehicleType] = useState<VehicleType>("Forklift");
+  const [commCategory, setCommCategory] = useState(""); // หมวดค่าคอม (โฟล์คลิฟท์) — เลือกตอนปิดการขาย
 
   // Custom notification items in checkout
   const [showCustomNotifs, setShowCustomNotifs] = useState(false);
@@ -446,6 +448,8 @@ export default function SalesMain() {
     fieldConfig.saleExtraFieldDefs.forEach(def => {
       if (saleCustomVals[def.id]?.trim()) customFields[def.name] = saleCustomVals[def.id].trim();
     });
+    // หมวดค่าคอม (เฉพาะโฟล์คลิฟท์) — สแตกเกอร์ RE/CDD/CBS คิดตามยอดขาย ไม่ต้องใช้
+    if (commCategory && !isStackerModel(selected?.model)) customFields[COMMISSION_FIELD] = commCategory;
     // ข้อมูลรถจากสต็อก — เติมให้อัตโนมัติ ไม่ต้องให้เซลล์กรอกเอง
     if (selected) {
       const auto: Record<string, string> = {
@@ -522,6 +526,7 @@ export default function SalesMain() {
       if (v != null) cvals[def.id] = String(v);
     });
     setSaleCustomVals(cvals);
+    setCommCategory(String(sale.custom_fields?.[COMMISSION_FIELD] ?? ""));
     setCustomNotifItems(sale.custom_notifications ?? []);
     setShowCustomNotifs((sale.custom_notifications ?? []).length > 0);
     setPaymentProof(sale.payment_proof ?? "");
@@ -537,7 +542,7 @@ export default function SalesMain() {
     setSubmitted(false); setCustomNotifItems([]); setShowCustomNotifs(false);
     setNewNotifLabel(""); setNewNotifDate(""); setPaymentProof("");
     setAddOns([]); setNewAddon({ name: "", price: "" }); setCancelBox(false); setCancelReason("");
-    setFreebie(false); setShippingCost("");
+    setFreebie(false); setShippingCost(""); setCommCategory("");
   };
 
   // เปิดฟอร์มปิดการขายของรถคันหนึ่ง (ใช้ร่วมทั้งมุมมองการ์ดและตาราง)
@@ -1141,6 +1146,20 @@ export default function SalesMain() {
                         </select>
                       </SField>
                     </div>
+
+                    {/* ── หมวดค่าคอม (โฟล์คลิฟท์) — สแตกเกอร์ RE/CDD/CBS คิดตามยอดขายอัตโนมัติ ── */}
+                    {isStackerModel(selected?.model) ? (
+                      <div className="text-xs text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />สแตกเกอร์ ({selected?.model}) — ค่าคอมคิดตามยอดขายอัตโนมัติ ไม่ต้องเลือกหมวด
+                      </div>
+                    ) : (
+                      <SField label="หมวดค่าคอม (สำหรับคำนวณค่าคอมรายเดือน)" error="">
+                        <select value={commCategory} onChange={e => setCommCategory(e.target.value)} className={ss("")}>
+                          <option value="">-- เลือกหมวดลูกค้า --</option>
+                          {COMMISSION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </SField>
+                    )}
 
                     <SField label="ชื่อลูกค้า *" error={errors.customer_name}><input value={form.customer_name} onChange={e => setForm({ ...form, customer_name: e.target.value })} placeholder="ชื่อ-นามสกุล / ชื่อบริษัท" className={si(errors.customer_name)} /></SField>
                     <SField label="เบอร์โทร *" error={errors.customer_tel}><input value={form.customer_tel} onChange={e => setForm({ ...form, customer_tel: e.target.value })} placeholder="0XX-XXX-XXXX" className={si(errors.customer_tel)} /></SField>
