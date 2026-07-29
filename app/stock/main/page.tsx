@@ -84,7 +84,7 @@ export default function StockMain() {
   const [listModel, setListModel]   = useState("all");                                       // กรองรุ่น
   const [listMast, setListMast]     = useState("all");                                       // กรองเสา (MAST)
   const [listFuel, setListFuel]     = useState("all");                                       // กรองพลังงาน
-  const [listSort, setListSort]     = useState<"recent" | "model" | "remain" | "sn">("recent"); // การเรียง
+  const [listSort, setListSort]     = useState<"recent" | "model" | "remain" | "sn" | "pi">("recent"); // การเรียง
   const [listView, setListView]     = useState<"list" | "table" | "byModel" | "aging">("list");  // มุมมอง: รายคัน / ตาราง / รวมตามรุ่น / ค้างนาน
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showSettings, setShowSettings]   = useState(false);
@@ -277,6 +277,7 @@ export default function StockMain() {
     const recent = (a: Forklift, b: Forklift) => String(b.created_at || "").localeCompare(String(a.created_at || ""));
     if (listSort === "model") rows.sort((a, b) => String(a.model || "").localeCompare(String(b.model || "")) || recent(a, b));
     else if (listSort === "sn") rows.sort((a, b) => String(a.SN || "").localeCompare(String(b.SN || "")) || recent(a, b));
+    else if (listSort === "pi") rows.sort((a, b) => String(a.pi_no || "~").localeCompare(String(b.pi_no || "~"), undefined, { numeric: true }) || recent(a, b)); // PIxx เรียงแบบตัวเลข (PI2<PI10) · ไม่มี PI ไปท้าย
     else rows.sort(recent); // recent / remain (remain ใช้ในมุมมอง byModel)
     return rows;
   }, [forklifts, listSearch, listCat, listBrand, listModel, listMast, listFuel, listStatus, listSort]);
@@ -804,6 +805,7 @@ export default function StockMain() {
                   <option value="recent">เรียง: เติมล่าสุด</option>
                   <option value="model">เรียง: ตามรุ่น</option>
                   <option value="sn">เรียง: ตาม SN</option>
+                  <option value="pi">เรียง: ตาม PI</option>
                   {listView === "byModel" && <option value="remain">เรียง: เหลือเยอะสุด</option>}
                 </select>
                 {/* สลับมุมมอง รายคัน ↔ รวมตามรุ่น */}
