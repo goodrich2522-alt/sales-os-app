@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Package, Plus, LogOut, CheckCircle, AlertCircle, List, X,
-  TrendingUp, Boxes, Trash2, Settings, Pencil, Check, ChevronDown,
+  TrendingUp, Boxes, Trash2, Settings, Pencil, Check, ChevronDown, ChevronRight,
   Clock, Hash, Camera, ImageOff, Eye, Bell, MapPin, History,
   Download, Upload, FileText, ShoppingCart, User
 } from "lucide-react";
@@ -436,33 +436,32 @@ export default function StockMain() {
   }, [histFiltered]);
 
   // Export ประวัติการขายเป็น Excel (ตามที่กรองอยู่ — ทั้งหมด/รายเซลล์)
+  // Export ประวัติการขาย — ได้ทั้ง 2 ชีต: รายละเอียดรายดีล + สรุปรายเซลล์ (ไม่ว่าจะดูมุมมองไหน)
   const exportSaleHistory = async () => {
     if (histFiltered.length === 0) return;
     const XLSX = await import("xlsx");
-    if (histView === "summary") {
-      const srows = staffSummary.map(g => ({
-        "เซลล์": g.staff, "จำนวนดีล": g.deals, "ยอดขายรวม": g.revenue, "ปิดการขายได้": g.closed, "กำลังดำเนินการ": g.pending,
-      }));
-      const sws = XLSX.utils.json_to_sheet(srows);
-      sws["!cols"] = [16, 10, 14, 12, 14].map(w => ({ wch: w }));
-      const swb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(swb, sws, "สรุปรายเซลล์");
-      XLSX.writeFile(swb, `สรุปยอดขายรายเซลล์_${new Date().toISOString().slice(0, 10)}.xlsx`);
-      return;
-    }
+    const wb = XLSX.utils.book_new();
+    // ชีต 1: รายละเอียดทุกดีล (ขายอะไร/ให้ใคร/เท่าไหร่/เมื่อไหร่)
     const rows = histFiltered.map(s => ({
       "วันที่": s.created_at ?? "", "สถานะ": s.sale_status ?? "ขายแล้ว", "เซลล์": s.sales_staff ?? "",
       "SN": s.forklift_unit_no ?? "", "ยี่ห้อ/รุ่น": `${s.forklift_brand ?? ""} ${s.forklift_model ?? ""}`.trim(),
       "ลูกค้า": s.customer_name ?? "", "เบอร์โทร": s.customer_tel ?? "", "จังหวัด": s.province ?? "",
-      "การชำระ": s.payment_type ?? "", "ราคาขาย": Number(s.actual_sale) || 0, "มัดจำ": Number(s.deposit) || 0,
+      "ประเภทลูกค้า": (s.customer_type as string) ?? "", "การชำระ": s.payment_type ?? "",
+      "ราคาขาย": Number(s.actual_sale) || 0, "มัดจำ": Number(s.deposit) || 0,
       "ค่าขนส่ง": Number(s.shipping_cost) || 0, "วันส่งมอบ": s.delivery_date ?? "",
       "รถสั่งผลิต": isPendingId(s.forklift_id) ? "ใช่" : "", "วันคาดรับ": (s.custom_fields?.["วันคาดรับรถสั่งผลิต"] as string) ?? "",
-      "หมายเหตุ": s.remark ?? "",
+      "เลขที่ใบกำกับ": (s.custom_fields?.["เลขที่ใบกำกับภาษี"] as string) ?? "", "หมายเหตุ": s.remark ?? "",
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws["!cols"] = [12, 16, 14, 14, 20, 18, 12, 10, 12, 12, 10, 10, 12, 10, 12, 20].map(w => ({ wch: w }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "ประวัติการขาย");
+    ws["!cols"] = [12, 16, 14, 14, 20, 20, 12, 10, 12, 12, 12, 10, 10, 12, 10, 12, 14, 18].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws, "รายดีล (รายละเอียด)");
+    // ชีต 2: สรุปรายเซลล์
+    const srows = staffSummary.map(g => ({
+      "เซลล์": g.staff, "จำนวนดีล": g.deals, "ยอดขายรวม": g.revenue, "ปิดการขายได้": g.closed, "กำลังดำเนินการ": g.pending,
+    }));
+    const sws = XLSX.utils.json_to_sheet(srows);
+    sws["!cols"] = [16, 10, 14, 12, 14].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, sws, "สรุปรายเซลล์");
     const who = histStaff === "all" ? "ทุกเซลล์" : histStaff;
     XLSX.writeFile(wb, `ประวัติการขาย_${who}_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
@@ -1108,8 +1107,9 @@ export default function StockMain() {
                     </thead>
                     <tbody>
                       {staffSummary.map((g, i) => (
-                        <tr key={g.staff} className="border-b border-slate-50">
-                          <td className="px-3 py-2.5"><span className="text-xs font-bold text-slate-400 mr-1.5">{i + 1}</span><span className="font-semibold text-slate-800">{g.staff}</span></td>
+                        <tr key={g.staff} onClick={() => { setHistStaff(g.staff === "ไม่ระบุ" ? "all" : g.staff); setHistView("deals"); }}
+                          className="border-b border-slate-50 hover:bg-indigo-50/50 cursor-pointer transition-colors" title="คลิกดูรายดีลของเซลล์คนนี้">
+                          <td className="px-3 py-2.5"><span className="text-xs font-bold text-slate-400 mr-1.5">{i + 1}</span><span className="font-semibold text-slate-800">{g.staff}</span> <ChevronRight className="w-3 h-3 text-slate-300 inline" /></td>
                           <td className="px-3 py-2.5 text-right text-slate-700 font-semibold">{g.deals}</td>
                           <td className="px-3 py-2.5 text-right font-bold text-indigo-700">฿{g.revenue.toLocaleString("th-TH")}</td>
                           <td className="px-3 py-2.5 text-right text-emerald-600 font-semibold">{g.closed}</td>
