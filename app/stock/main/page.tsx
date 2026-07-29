@@ -277,7 +277,11 @@ export default function StockMain() {
     const recent = (a: Forklift, b: Forklift) => String(b.created_at || "").localeCompare(String(a.created_at || ""));
     if (listSort === "model") rows.sort((a, b) => String(a.model || "").localeCompare(String(b.model || "")) || recent(a, b));
     else if (listSort === "sn") rows.sort((a, b) => String(a.SN || "").localeCompare(String(b.SN || "")) || recent(a, b));
-    else if (listSort === "pi") rows.sort((a, b) => String(a.pi_no || "~").localeCompare(String(b.pi_no || "~"), undefined, { numeric: true }) || recent(a, b)); // PIxx เรียงแบบตัวเลข (PI2<PI10) · ไม่มี PI ไปท้าย
+    else if (listSort === "pi") {
+      // เรียงตามเลข PI จริง 1-2-3 (ดึงตัวเลขกลุ่มแรก: PI011→11, PI108→108) · ไม่มี PI ไปท้าย
+      const piNum = (f: Forklift) => { const m = String(f.pi_no || "").match(/\d+/); return m ? Number(m[0]) : Number.MAX_SAFE_INTEGER; };
+      rows.sort((a, b) => (piNum(a) - piNum(b)) || String(a.pi_no || "~").localeCompare(String(b.pi_no || "~")) || recent(a, b));
+    }
     else rows.sort(recent); // recent / remain (remain ใช้ในมุมมอง byModel)
     return rows;
   }, [forklifts, listSearch, listCat, listBrand, listModel, listMast, listFuel, listStatus, listSort]);
