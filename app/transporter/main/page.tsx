@@ -2,9 +2,9 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRight, Package, History, ImageOff, Hash, Calendar, User, FileText, PackageCheck, Clock, Search, RotateCcw, Building2, Briefcase, Trash2, MapPin, Link2 } from "lucide-react";
+import { Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRight, Package, History, ImageOff, Hash, Calendar, User, FileText, PackageCheck, Clock, Search, RotateCcw, Building2, Briefcase, Trash2, MapPin, Link2, Download } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
-import { Forklift, Sale, INSPECTION_SLOTS, InspectionSlotKey, SLOT_LABELS } from "@/lib/types";
+import { Forklift, Sale, InspectionRecord, INSPECTION_SLOTS, InspectionSlotKey, SLOT_LABELS } from "@/lib/types";
 import { driveImg } from "@/lib/img";
 import { thaiDate, today, specCode } from "@/lib/format";
 import { Lightbox } from "@/components/ui/Lightbox";
@@ -238,6 +238,87 @@ export default function TransporterMain() {
       return !q || String(r.unit_no ?? "").toLowerCase().includes(q) || String(r.transporter_name ?? "").toLowerCase().includes(q);
     })
     .sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")) || String(b.id ?? "").localeCompare(String(a.id ?? "")));
+
+  // ── Export ประวัติรับ-ส่งรถทุกคัน → Excel (สำรองข้อมูล + ส่งต่อให้ตำแหน่งอื่น) ──
+  // ชีต 1 = รายเรคคอร์ด (พร้อมลิงก์รูปทุกช่อง) · ชีต 2 = สรุปรายคัน · export ตามที่ค้นหาอยู่ (ไม่ค้นหา = ทั้งหมด)
+  const exportHistoryExcel = async () => {
+    if (histFiltered.length === 0) return;
+    const XLSX = await import("xlsx");
+
+    // จับคู่รถจาก SN/รหัส เพื่อเติมยี่ห้อ/รุ่น/สถานะ/PI
+    const fkByKey = new Map<string, Forklift>();
+    forklifts.forEach(f => { if (f.SN) fkByKey.set(String(f.SN).toUpperCase(), f); fkByKey.set(String(f.id).toUpperCase(), f); });
+    const findFk = (unit?: string) => unit ? (fkByKey.get(String(unit).toUpperCase()) || null) : null;
+
+    // ── ชีต 1: ประวัติรับ-ส่งรถ (1 แถว = 1 ครั้งที่รับ/ส่ง) ──
+    const recRows = histFiltered.map((r, i) => {
+      const f = findFk(r.unit_no);
+      const slots = (r.image_slots ?? {}) as Record<string, string>;
+      const slotUrl = (k: string) => slots[k] ? driveImg(slots[k]) : "";
+      const slotVals = new Set(Object.values(slots).filter(Boolean));
+      const extras = (r.images ?? []).filter(u => !slotVals.has(u)).map(driveImg);
+      return {
+        "ลำดับ": i + 1,
+        "วันที่": r.date ?? "",
+        "บทบาท": r.role ?? "ผู้รับรถ",
+        "รหัสรถ": f?.id ?? "",
+        "SN": r.unit_no ?? "",
+        "ยี่ห้อ": f?.brand ?? "",
+        "รุ่น": f?.model ?? "",
+        "สถานะรถ": f?.status ?? "",
+        "PI": f?.pi_no ?? "",
+        "ผู้ขนส่ง": r.transporter_name ?? "",
+        "เบอร์": r.transporter_phone ?? "",
+        "บริษัทที่ไปส่ง": r.delivery_company ?? "",
+        "ลิงก์โลเคชั่น": r.location_link ?? "",
+        "จำนวนรูป": (r.images ?? []).length,
+        "รูป Name Plate": slotUrl("name_plate"),
+        "รูปเอกสาร PI": slotUrl("pi_doc"),
+        "รูปรถด้านหน้า": slotUrl("front"),
+        "รูปรถด้านหลัง": slotUrl("back"),
+        "รูปรถด้านซ้าย": slotUrl("left"),
+        "รูปรถด้านขวา": slotUrl("right"),
+        "รูปเพิ่มเติม (ลิงก์)": extras.join("\n"),
+      };
+    });
+    const ws1 = XLSX.utils.json_to_sheet(recRows);
+    ws1["!cols"] = [6, 12, 12, 16, 16, 12, 18, 14, 10, 16, 12, 20, 26, 8, 30, 30, 30, 30, 30, 30, 42].map(w => ({ wch: w }));
+
+    // ── ชีต 2: สรุปรายคัน (เฉพาะรถที่มีประวัติ ≥ 1 ครั้ง) ──
+    const byCar = new Map<string, { f: Forklift | null; unit: string; recv: InspectionRecord[]; send: InspectionRecord[] }>();
+    histFiltered.forEach(r => {
+      const key = String(r.unit_no ?? "").toUpperCase();
+      if (!key) return;
+      if (!byCar.has(key)) byCar.set(key, { f: findFk(r.unit_no), unit: r.unit_no, recv: [], send: [] });
+      const g = byCar.get(key)!;
+      ((r.role ?? "ผู้รับรถ") === "ผู้รับรถ" ? g.recv : g.send).push(r);
+    });
+    const latest = (arr: InspectionRecord[]) => [...arr].sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")))[0];
+    const carRows = [...byCar.values()].map(g => {
+      const lr = latest(g.recv), ls = latest(g.send);
+      return {
+        "รหัสรถ": g.f?.id ?? "",
+        "SN": g.unit,
+        "ยี่ห้อ": g.f?.brand ?? "",
+        "รุ่น": g.f?.model ?? "",
+        "สถานะรถ": g.f?.status ?? "",
+        "PI": g.f?.pi_no ?? "",
+        "ครั้งที่รับ": g.recv.length,
+        "ครั้งที่ส่ง": g.send.length,
+        "วันรับล่าสุด": lr?.date ?? "",
+        "วันส่งล่าสุด": ls?.date ?? "",
+        "บริษัทปลายทางล่าสุด": ls?.delivery_company ?? "",
+        "รวมรูปทั้งหมด": [...g.recv, ...g.send].reduce((s, r) => s + (r.images?.length ?? 0), 0),
+      };
+    }).sort((a, b) => String(a["ยี่ห้อ"]).localeCompare(String(b["ยี่ห้อ"])) || String(a["รุ่น"]).localeCompare(String(b["รุ่น"])));
+    const ws2 = XLSX.utils.json_to_sheet(carRows);
+    ws2["!cols"] = [16, 16, 12, 18, 14, 10, 10, 10, 14, 14, 26, 12].map(w => ({ wch: w }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws2, "สรุปรายคัน");
+    XLSX.utils.book_append_sheet(wb, ws1, "ประวัติรับ-ส่งรถ");
+    XLSX.writeFile(wb, `ประวัติรับ-ส่งรถ_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
 
   const inp = "w-full border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent transition-all";
 
@@ -640,7 +721,14 @@ export default function TransporterMain() {
                   <h3 className="text-base font-bold text-slate-800">ประวัติรับ-ส่งรถ</h3>
                   <p className="text-xs text-slate-500 mt-0.5">{histFiltered.length} รายการ</p>
                 </div>
-                <button onClick={() => setShowHistory(false)} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all"><X className="w-5 h-5" /></button>
+                <div className="flex items-center gap-1.5">
+                  <button onClick={exportHistoryExcel} disabled={histFiltered.length === 0}
+                    className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-sm font-semibold px-3 py-2 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="ส่งออกประวัติรถทุกคันเป็น Excel">
+                    <Download className="w-4 h-4" /><span className="hidden sm:inline">Excel</span>
+                  </button>
+                  <button onClick={() => setShowHistory(false)} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all"><X className="w-5 h-5" /></button>
+                </div>
               </div>
               <input value={histSearch} onChange={e => setHistSearch(e.target.value)} placeholder="ค้นหา หมายเลขรถ / ชื่อผู้ขนส่ง..."
                 className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white text-slate-800 placeholder:text-slate-400" />
