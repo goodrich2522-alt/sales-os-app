@@ -151,6 +151,7 @@ export default function SalesMain() {
   const [fCapacity, setFCapacity] = useState("");
   const [fHeight, setFHeight]     = useState("");
   const [fMast, setFMast]         = useState(""); // กรองความสูงเสา (MAST) — ใช้ตอนคลิกการ์ดตามรุ่น
+  const [fStatus, setFStatus]     = useState(""); // กรองสถานะ ("" = ขายได้ทั้งหมด · ระบุ = ทุกสถานะรวมปิดการขาย)
   const [extraFilterVals, setExtraFilterVals] = useState<Record<string, string>>({});
   const [showAddFilter, setShowAddFilter] = useState(false);
   const [newFilterName, setNewFilterName] = useState("");
@@ -227,13 +228,16 @@ export default function SalesMain() {
 
   const available = forklifts.filter(isSellable);
   const readyCount = available.filter(f => String(f.status).trim() === "พร้อมขาย").length;
-  const brands     = [...new Set(available.map(f => f.brand).filter(Boolean))].sort();
-  const models     = [...new Set(available.filter(f => !fBrand || f.brand === fBrand).map(f => f.model).filter(Boolean))].sort();
-  const fuels      = [...new Set(available.map(f => f.fuel).filter(Boolean))].sort();
-  const masts      = [...new Set(available.filter(f => (!fBrand || f.brand === fBrand) && (!fModel || f.model === fModel)).map(mastOf).filter(Boolean))].sort();
-  const capacities = [...new Set(available.filter(f => (!fBrand || f.brand === fBrand) && (!fModel || f.model === fModel)).map(f => f.capacity).filter(Boolean))].sort();
-  const heights    = [...new Set(available.filter(f => (!fBrand || f.brand === fBrand) && (!fModel || f.model === fModel)).map(f => f.height).filter(Boolean))].sort();
-  const hasFilter  = !!(fBrand || fModel || fMast || fFuel || fCapacity || fHeight || search || fSpecModel || fSpecSN || fForkLength || fForkWidth);
+  // ฐานรายการ: ปกติ = รถขายได้ · ถ้าเลือกสถานะ = ทุกสถานะที่ตรง (รวมปิดการขาย เพื่อดูย้อนหลัง)
+  const listBase   = fStatus ? forklifts.filter(f => String(f.status).trim() === fStatus) : available;
+  const brands     = [...new Set(forklifts.map(f => f.brand).filter(Boolean))].sort(); // ทุกยี่ห้อในระบบ (CNC ฯลฯ)
+  const statuses   = [...new Set(forklifts.map(f => String(f.status).trim()).filter(Boolean))].sort();
+  const models     = [...new Set(listBase.filter(f => !fBrand || f.brand === fBrand).map(f => f.model).filter(Boolean))].sort();
+  const fuels      = [...new Set(forklifts.map(f => f.fuel).filter(Boolean))].sort();
+  const masts      = [...new Set(listBase.filter(f => (!fBrand || f.brand === fBrand) && (!fModel || f.model === fModel)).map(mastOf).filter(Boolean))].sort();
+  const capacities = [...new Set(listBase.filter(f => (!fBrand || f.brand === fBrand) && (!fModel || f.model === fModel)).map(f => f.capacity).filter(Boolean))].sort();
+  const heights    = [...new Set(listBase.filter(f => (!fBrand || f.brand === fBrand) && (!fModel || f.model === fModel)).map(f => f.height).filter(Boolean))].sort();
+  const hasFilter  = !!(fBrand || fModel || fMast || fFuel || fStatus || fCapacity || fHeight || search || fSpecModel || fSpecSN || fForkLength || fForkWidth);
 
   // แปลงค่าใดๆ เป็น string ตัวพิมพ์เล็กอย่างปลอดภัย (กัน .toLowerCase บน undefined → จอเด้ง)
   const hay = (v: unknown) => (v == null ? "" : String(v)).toLowerCase();
@@ -249,7 +253,7 @@ export default function SalesMain() {
     return n;
   };
 
-  const filtered = available.filter(f => {
+  const filtered = listBase.filter(f => {
     const q = search.trim().toLowerCase();
     const base =
       (!q || hay(f.id).includes(q) || hay(f.SN).includes(q) || hay(f.brand).includes(q) || hay(f.model).includes(q)) &&
@@ -327,7 +331,7 @@ export default function SalesMain() {
   })();
 
   const clearFilters = () => {
-    setFBrand(""); setFModel(""); setFMast(""); setFFuel(""); setFCapacity(""); setFHeight("");
+    setFBrand(""); setFModel(""); setFMast(""); setFFuel(""); setFStatus(""); setFCapacity(""); setFHeight("");
     setSearch(""); setExtraFilterVals({});
     setFSpecModel(""); setFSpecSN(""); setFForkLength(""); setFForkWidth("");
   };
@@ -795,6 +799,11 @@ export default function SalesMain() {
             className="text-sm bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer shadow-sm">
             <option value="">พลังงานทั้งหมด</option>
             {fuels.map(f => <option key={f} value={f}>{f}</option>)}
+          </select>
+          <select value={fStatus} onChange={e => setFStatus(e.target.value)}
+            className="text-sm bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer shadow-sm">
+            <option value="">สถานะ: ขายได้ทั้งหมด</option>
+            {statuses.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
 
