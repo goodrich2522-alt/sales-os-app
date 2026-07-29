@@ -91,7 +91,9 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
     capacity: v.capacity || "", capacity_kg: v.capacity_kg || "",
     height: v.height || "", fuel: v.fuel || "",
     cost_price: v.cost_price || 0, stock_price: 0,
-    status: "รอรับ", created_at: today(),
+    // STAXX/CNC ไม่มีขั้นตอนผู้รับรถ (มาเป็นตู้คอนเทนเนอร์ทั้งล็อต) → ลงวันรับรถแล้วขายได้เลย
+    status: (/^(STAXX|CNC)$/i.test(v.brand) && receivedDate) ? "พร้อมขาย" : "รอรับ",
+    created_at: today(),
     received_date: receivedDate || undefined, // วันรับรถเข้า (ทั้งล็อต) — ถ้าไม่กรอกเว้นว่าง
     vehicle_category: categorizeModel(v.model),
     pi_no: v.pi_no,

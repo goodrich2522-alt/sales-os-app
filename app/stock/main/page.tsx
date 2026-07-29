@@ -92,6 +92,8 @@ export default function StockMain() {
   const [detailLightbox, setDetailLightbox] = useState<{ imgs: string[]; idx: number } | null>(null);
   const [locEdit, setLocEdit]             = useState(""); // แก้สถานที่ที่รถอยู่ (ใน detail modal)
   const [locSaved, setLocSaved]           = useState(false);
+  const [orderDateEdit, setOrderDateEdit] = useState(""); // วันสั่งรถ (รถสั่งผลิต)
+  const [orderSaved, setOrderSaved]       = useState(false);
   // ── ประวัติการขาย (เฟส 1): ดีลทุกเซลล์ ──
   const [showSaleHistory, setShowSaleHistory] = useState(false);
   const [showReorder, setShowReorder]     = useState(false); // กางรายการเตรียมสั่งสินค้า (คลิกจากการ์ด)
@@ -133,7 +135,10 @@ export default function StockMain() {
   }, [router]);
 
   // เปิดรถคันไหน → เติมสถานที่เดิมลงช่องแก้ไข
-  useEffect(() => { setLocEdit(detailItem?.location ?? ""); setLocSaved(false); }, [detailItem]);
+  useEffect(() => {
+    setLocEdit(detailItem?.location ?? ""); setLocSaved(false);
+    setOrderDateEdit((detailItem?.custom_fields?.["วันสั่งรถ"] as string) ?? ""); setOrderSaved(false);
+  }, [detailItem]);
 
   // โหลดรายการที่ "รับทราบแล้ว" · ครั้งแรกที่เปิด (ยังไม่มี key) ถือว่าดีลเก่าทั้งหมดรับทราบแล้ว กันสแปมของเก่า
   useEffect(() => {
@@ -1328,6 +1333,23 @@ export default function StockMain() {
                       disabled={locEdit.trim() === (it.location ?? "").trim()}
                       className="px-4 py-2 rounded-xl text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
                       {locSaved ? "บันทึกแล้ว ✓" : "บันทึก"}
+                    </button>
+                  </div>
+                </div>
+                {/* วันสั่งรถ (สำหรับรถสั่งผลิต) — โชว์บนการ์ดหน้าขายด้วย */}
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />วันสั่งรถ (รถสั่งผลิต)</p>
+                  <div className="flex gap-2">
+                    <input type="date" value={orderDateEdit} onChange={e => { setOrderDateEdit(e.target.value); setOrderSaved(false); }}
+                      className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                    <button onClick={() => {
+                        const cf = { ...(it.custom_fields ?? {}) } as Record<string, string>;
+                        if (orderDateEdit.trim()) cf["วันสั่งรถ"] = orderDateEdit.trim(); else delete cf["วันสั่งรถ"];
+                        const u = { ...it, custom_fields: cf }; updateForklift(u); setDetailItem(u); setOrderSaved(true);
+                      }}
+                      disabled={orderDateEdit.trim() === ((it.custom_fields?.["วันสั่งรถ"] as string) ?? "").trim()}
+                      className="px-4 py-2 rounded-xl text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
+                      {orderSaved ? "บันทึกแล้ว ✓" : "บันทึก"}
                     </button>
                   </div>
                 </div>

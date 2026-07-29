@@ -961,6 +961,12 @@ export default function SalesMain() {
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${STATUS_BADGE[item.status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>{item.status}</span>
+                      {String(item.status).trim() === "สั่งผลิต" && (() => {
+                        const od = (item.custom_fields as Record<string, unknown> | undefined)?.["วันสั่งรถ"] as string | undefined;
+                        return od?.trim()
+                          ? <span className="text-[10px] font-semibold text-violet-600 bg-violet-50 border border-violet-100 px-1.5 py-0.5 rounded">🏭 สั่งรถ {od}</span>
+                          : <span className="text-[10px] text-slate-400">ยังไม่ระบุวันสั่งรถ</span>;
+                      })()}
                     </div>
                   </div>
                   {(() => {
