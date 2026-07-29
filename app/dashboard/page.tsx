@@ -11,7 +11,7 @@ import { useApp } from "@/lib/AppContext";
 import { getRegion } from "@/lib/mockData";
 import { buildStaffMonthly, buildStaffWeekly, buildAllMonthlyWeekly } from "@/components/charts/Charts";
 import { CONTACT_SOURCE_COLORS } from "@/lib/constants";
-import { Sale } from "@/lib/types";
+import { Sale, Forklift } from "@/lib/types";
 import GoogleLoginButton, { type GoogleUser } from "@/components/GoogleLoginButton";
 import { checkAccess, hasActiveSession } from "@/lib/auth";
 import { apiEnabled } from "@/lib/api";
@@ -163,16 +163,20 @@ export default function Dashboard() {
     const rows = ready.map((f) => {
       const d = String(f.received_date || "").slice(0, 10);
       const days = /^\d{4}-\d{2}-\d{2}$/.test(d) ? Math.max(0, Math.floor((Date.now() - new Date(d + "T00:00:00").getTime()) / 86400000)) : null;
-      return { cost: Number(f.cost_price) || 0, days };
+      return { f, cost: Number(f.cost_price) || 0, days };
     });
     const dated = rows.filter((r) => r.days != null);
     const avg = dated.length ? Math.round(dated.reduce((s, r) => s + (r.days ?? 0), 0) / dated.length) : 0;
     const over90 = rows.filter((r) => (r.days ?? 0) > 90);
     const over180 = rows.filter((r) => (r.days ?? 0) > 180);
     const stuckCost = over90.reduce((s, r) => s + r.cost, 0);
+    const byAge = [...rows].sort((a, b) => (b.days ?? -1) - (a.days ?? -1)); // ค้างนานสุดก่อน
     return { readyCount: ready.length, avg, over90: over90.length, over180: over180.length,
-      pctOver90: ready.length ? Math.round((over90.length / ready.length) * 100) : 0, stuckCost };
+      pctOver90: ready.length ? Math.round((over90.length / ready.length) * 100) : 0, stuckCost,
+      lists: { ready: byAge, over90: over90.sort((a, b) => (b.days ?? 0) - (a.days ?? 0)) } };
   }, [forklifts]);
+  // Modal ดูรายการรถของการ์ด FIFO (คลิกการ์ด → เปิดรายการนั้น)
+  const [agingModal, setAgingModal] = useState<null | { title: string; rows: { f: Forklift; cost: number; days: number | null }[]; showCost?: boolean }>(null);
 
   const contactSourceData = useMemo(() => {
     const ALL_SOURCES = ["Line", "Facebook", "TikTok", "โทร", "Google", "คนอื่นบอกต่อ"];
@@ -551,23 +555,27 @@ export default function Dashboard() {
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
           <SectionHeader icon={<Clock className="w-4 h-4 text-amber-500" />} title="สุขภาพสต็อก (FIFO)" sub="อายุค้างสต็อกของรถพร้อมขาย — ยิ่งค้างนาน ต้นทุนยิ่งจม" iconBg="bg-amber-50" />
           <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
-              <p className="text-xs text-slate-500 font-medium">พร้อมขายทั้งหมด</p>
+            <button onClick={() => setAgingModal({ title: "รถพร้อมขายทั้งหมด (เรียงตามอายุค้าง)", rows: agingMetrics.lists.ready })}
+              className="text-left bg-slate-50 border border-slate-100 rounded-2xl p-4 hover:bg-slate-100 hover:border-slate-200 transition-all active:scale-[0.98] group">
+              <p className="text-xs text-slate-500 font-medium flex items-center justify-between">พร้อมขายทั้งหมด <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" /></p>
               <p className="text-2xl font-bold text-slate-800 mt-1">{agingMetrics.readyCount} <span className="text-sm font-semibold text-slate-400">คัน</span></p>
-            </div>
-            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
-              <p className="text-xs text-indigo-500 font-medium">อายุสต็อกเฉลี่ย</p>
+            </button>
+            <button onClick={() => setAgingModal({ title: "อายุสต็อก — เรียงจากค้างนานสุด", rows: agingMetrics.lists.ready })}
+              className="text-left bg-indigo-50 border border-indigo-100 rounded-2xl p-4 hover:bg-indigo-100 hover:border-indigo-200 transition-all active:scale-[0.98] group">
+              <p className="text-xs text-indigo-500 font-medium flex items-center justify-between">อายุสต็อกเฉลี่ย <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" /></p>
               <p className="text-2xl font-bold text-indigo-700 mt-1">{agingMetrics.avg} <span className="text-sm font-semibold text-indigo-400">วัน</span></p>
-            </div>
-            <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
-              <p className="text-xs text-amber-600 font-medium">ค้าง &gt; 90 วัน</p>
+            </button>
+            <button onClick={() => setAgingModal({ title: "รถค้าง > 90 วัน", rows: agingMetrics.lists.over90 })}
+              className="text-left bg-amber-50 border border-amber-100 rounded-2xl p-4 hover:bg-amber-100 hover:border-amber-200 transition-all active:scale-[0.98] group">
+              <p className="text-xs text-amber-600 font-medium flex items-center justify-between">ค้าง &gt; 90 วัน <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" /></p>
               <p className="text-2xl font-bold text-amber-700 mt-1">{agingMetrics.over90} <span className="text-sm font-semibold text-amber-500">คัน · {agingMetrics.pctOver90}%</span></p>
               <p className="text-[11px] text-red-500 mt-0.5">ในนั้นค้าง &gt; 180 วัน: {agingMetrics.over180} คัน</p>
-            </div>
-            <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4">
-              <p className="text-xs text-rose-500 font-medium">ต้นทุนจม (ค้าง &gt; 90 วัน)</p>
+            </button>
+            <button onClick={() => setAgingModal({ title: "ต้นทุนจม — รถค้าง > 90 วัน", rows: agingMetrics.lists.over90, showCost: true })}
+              className="text-left bg-rose-50 border border-rose-100 rounded-2xl p-4 hover:bg-rose-100 hover:border-rose-200 transition-all active:scale-[0.98] group">
+              <p className="text-xs text-rose-500 font-medium flex items-center justify-between">ต้นทุนจม (ค้าง &gt; 90 วัน) <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" /></p>
               <p className="text-2xl font-bold text-rose-700 mt-1">฿{fmtM(agingMetrics.stuckCost)}</p>
-            </div>
+            </button>
           </div>
         </div>
 
@@ -836,6 +844,45 @@ export default function Dashboard() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal รายการรถของการ์ด FIFO (คลิกการ์ด → ดูรถจริงในกลุ่มนั้น) ── */}
+      {agingModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+          onClick={(e) => e.target === e.currentTarget && setAgingModal(null)}>
+          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0 bg-amber-50">
+              <div>
+                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2"><Clock className="w-4 h-4 text-amber-500" />{agingModal.title}</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{agingModal.rows.length} คัน{agingModal.showCost && ` · ต้นทุนรวม ฿${fmt(agingModal.rows.reduce((s, r) => s + r.cost, 0))}`}</p>
+              </div>
+              <button onClick={() => setAgingModal(null)} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="overflow-y-auto flex-1 min-h-0 p-4 flex flex-col gap-2">
+              {agingModal.rows.length === 0 && <div className="text-center py-14 text-slate-400 text-sm">ไม่มีรถในกลุ่มนี้</div>}
+              {agingModal.rows.map(({ f, cost, days }) => {
+                const badge = days == null ? "bg-slate-100 text-slate-500" : days > 180 ? "bg-red-100 text-red-700" : days > 90 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700";
+                return (
+                  <div key={f.id} className="flex items-center gap-3 border border-slate-100 rounded-xl p-3 bg-slate-50/60">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-md flex-shrink-0">#{f.id}</span>
+                        <span className="font-semibold text-slate-800 text-sm">{f.SN ? `${f.SN} — ` : ""}{f.brand} {f.model}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                        {[f.pi_no ? `PI ${f.pi_no}` : "", f.received_date ? `รับ ${String(f.received_date).slice(0, 10)}` : "", f.location].filter(Boolean).join(" · ") || "—"}
+                      </p>
+                    </div>
+                    <div className="text-right flex-shrink-0 flex flex-col items-end gap-1">
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${badge}`}>{days == null ? "ไม่มีวันรับ" : `ค้าง ${days} วัน`}</span>
+                      {agingModal.showCost && <span className="text-xs font-bold text-rose-600">฿{fmt(cost)}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
