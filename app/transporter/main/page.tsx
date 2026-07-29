@@ -211,6 +211,14 @@ export default function TransporterMain() {
     setDelCompany(""); setDelLocation("");
   };
 
+  // รับคันถัดไปใน PI เดิม — คง PI/วันที่/ชื่อผู้รับ รีเซ็ตแค่ SN + รูป (batch รับหลายคันใน 1 PI)
+  const startNextInPI = () => {
+    setSlotImages({}); setExtraImages([]); setActiveSlot(null); setDone(null);
+    setUnitNo(""); setPickedModel("");
+  };
+  // จำนวนรถใน PI นี้ที่ยังรอรับ (หลังหักคันที่เพิ่งรับไปแล้ว) — ใช้โชว์ปุ่ม "รับคันถัดไป"
+  const remainingInPI = piKey ? waitingList.filter(w => String(w.pi_no || "").trim().toUpperCase() === piKey).length : 0;
+
   const switchRole = (r: TransporterRole) => { setRole(r); resetForm(); };
   const handleLogout = () => { localStorage.removeItem("transporter_name"); localStorage.removeItem("transporter_phone"); router.push("/transporter/login"); };
 
@@ -291,6 +299,13 @@ export default function TransporterMain() {
                 <p className="text-sm text-emerald-600 mt-0.5">{done.label}</p>
               </div>
             </div>
+            {/* รับหลายคันใน 1 PI — รับคันถัดไปโดยไม่ต้องกรอก PI/วันที่/ชื่อใหม่ */}
+            {isReceiver && done.before && remainingInPI > 0 && (
+              <button onClick={startNextInPI}
+                className="w-full flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-400 to-amber-500 text-slate-900 font-bold py-3.5 rounded-xl transition-all active:scale-[0.98]">
+                <Truck className="w-4 h-4" />รับคันถัดไปใน PI {piKey} (เหลือ {remainingInPI} คัน) <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
             <div className="flex gap-2">
               <button onClick={undoLast}
                 className="flex-1 flex items-center justify-center gap-1.5 border border-red-200 text-red-600 hover:bg-red-50 font-semibold py-3 rounded-xl transition-all">
@@ -298,7 +313,7 @@ export default function TransporterMain() {
               </button>
               <button onClick={resetForm}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white font-semibold py-3 rounded-xl transition-all">
-                ทำรายการต่อไป <ChevronRight className="w-4 h-4" />
+                {isReceiver && remainingInPI > 0 ? "เริ่ม PI ใหม่" : "ทำรายการต่อไป"} <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -354,6 +369,18 @@ export default function TransporterMain() {
                       <span className="text-xs">ยังไม่พบรถ — เช็ค PI/SN ให้ตรง (รถสั่งใหม่ต้องมีในระบบสถานะ &quot;รอรับ&quot; ก่อน)</span>
                     </div>
                   )
+                )}
+
+                {/* รับหลายคันใน 1 PI — โชว์รายการรถทั้งหมดใน PI นี้ที่รอรับ */}
+                {waitingByPI.length > 1 && (
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                    <p className="text-xs font-bold text-blue-700 mb-1.5 flex items-center gap-1.5"><Truck className="w-3.5 h-3.5" />PI {piKey} มีรถรอรับ {waitingByPI.length} คัน — รับทีละคัน (บันทึกคันนี้แล้วกด &quot;รับคันถัดไป&quot;)</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {waitingByPI.map((w, i) => (
+                        <span key={w.id} className="text-[11px] bg-white border border-blue-100 rounded-lg px-2 py-1 text-slate-600">{i + 1}. {w.model}{w.SN ? ` · ${w.SN}` : ""}</span>
+                      ))}
+                    </div>
+                  </div>
                 )}
 
                 <div>
