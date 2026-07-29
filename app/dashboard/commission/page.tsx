@@ -21,7 +21,9 @@ export default function CommissionPage() {
   const { sales, forklifts, updateSale } = useApp();
   const fkById = useMemo(() => new Map(forklifts.map(f => [f.id, f])), [forklifts]);
 
-  // ดีลที่ปิดจริง (ปิด/จัดส่งแล้ว) — ตัดดีลนำเข้าบิลภาษี GR ออก (ไม่คิดค่าคอม)
+  // ประวัติซื้อทั้งหมด (รวมบิล GR) — ใช้ตรวจ "ลูกค้าเก่า" (เคยซื้อมาก่อน = ลูกค้าเก่าเสมอ)
+  const historySales = useMemo(() => sales.filter(isClosedSale), [sales]);
+  // ดีลที่นำมาคิดค่าคอม = ปิดจริง แต่ตัดดีลนำเข้าบิลภาษี GR ออก (ไม่จ่ายค่าคอม)
   const closedSales = useMemo(() => sales.filter(s => isClosedSale(s) && !isImportedSale(s)), [sales]);
 
   // เดือนที่มีดีลปิด (ใหม่สุดก่อน)
@@ -39,7 +41,7 @@ export default function CommissionPage() {
       .filter(s => closeMonth(s) === activeMonth)
       .map(s => {
         const f = fkById.get(s.forklift_id);
-        return { sale: s, forklift: f, comm: calcCommission(s, f) };
+        return { sale: s, forklift: f, comm: calcCommission(s, f, historySales) };
       })
       .sort((a, b) => String(a.sale.sales_staff || "").localeCompare(String(b.sale.sales_staff || "")) || closeDate(a.sale).localeCompare(closeDate(b.sale)));
   }, [closedSales, activeMonth, fkById]);
@@ -86,11 +88,12 @@ export default function CommissionPage() {
       "ยี่ห้อ/รุ่น": `${r.sale.forklift_brand ?? ""} ${r.sale.forklift_model ?? ""}`.trim(),
       "กลุ่ม": r.comm.group === "STACKER" ? "STACKER" : r.comm.group === "FORKLIFT" ? "FORKLIFT" : "อื่นๆ",
       "เกณฑ์": r.comm.basis, "ยอด/กำไร (บาท)": Math.round(r.comm.basisValue),
-      "หมวดลูกค้า": r.comm.category || "", "ลูกค้า": r.sale.customer_name || "",
+      "หมวดลูกค้า": r.comm.category || "", "ลูกค้าเก่า(ประวัติ)": r.comm.returning ? "ใช่" : "",
+      "ลูกค้า": r.sale.customer_name || "",
       "ค่าคอม (บาท)": r.comm.amount, "หมายเหตุ": r.comm.note || "",
     }));
     const ws2 = XLSX.utils.json_to_sheet(detRows);
-    ws2["!cols"] = [18, 12, 16, 16, 22, 10, 8, 16, 18, 20, 12, 22].map(w => ({ wch: w }));
+    ws2["!cols"] = [18, 12, 16, 16, 22, 10, 8, 16, 18, 14, 20, 12, 22].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws1, "สรุปรายคน");
     XLSX.utils.book_append_sheet(wb, ws2, "รายดีล");
@@ -187,13 +190,19 @@ export default function CommissionPage() {
                         <p className="text-[11px] text-slate-500 mt-0.5">
                           {r.sale.customer_name || "—"} · {r.comm.basis} ฿{fmt(Math.round(r.comm.basisValue))} · ปิด {closeDate(r.sale)}
                         </p>
-                        {/* หมวดลูกค้า: forklift แก้ได้ · stacker ไม่ต้อง */}
+                        {/* หมวดลูกค้า: forklift · ลูกค้าเก่า(จากประวัติ)ล็อกอัตโนมัติ · อื่นๆ เลือกเองได้ */}
                         {r.comm.group === "FORKLIFT" && (
-                          <select value={r.comm.category} onChange={e => setCategory(r.sale, e.target.value)}
-                            className={`mt-1.5 text-xs border rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 ${r.comm.note ? "border-red-300 text-red-700" : "border-slate-200 text-slate-700"}`}>
-                            <option value="">-- เลือกหมวดลูกค้า --</option>
-                            {COMMISSION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                          </select>
+                          r.comm.returning ? (
+                            <span className="inline-flex items-center gap-1 mt-1.5 text-[11px] font-bold text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-2 py-1">
+                              🔁 ลูกค้าเก่า (ตรวจจากประวัติซื้อ) — คิดเรตลูกค้าเก่าอัตโนมัติ
+                            </span>
+                          ) : (
+                            <select value={r.comm.category} onChange={e => setCategory(r.sale, e.target.value)}
+                              className={`mt-1.5 text-xs border rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 ${r.comm.note ? "border-red-300 text-red-700" : "border-slate-200 text-slate-700"}`}>
+                              <option value="">-- เลือกหมวดลูกค้า --</option>
+                              {COMMISSION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          )
                         )}
                         {r.comm.group === "STACKER" && <p className="text-[11px] text-teal-600 mt-0.5">สแตกเกอร์ — คิดตามยอดขายอัตโนมัติ</p>}
                         {r.comm.group === "none" && <p className="text-[11px] text-slate-400 mt-0.5">{r.comm.note}</p>}

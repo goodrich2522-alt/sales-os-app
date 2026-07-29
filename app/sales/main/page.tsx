@@ -18,7 +18,7 @@ import { isPendingId } from "@/lib/productId";
 import { STATUS_BADGE, SALE_STATUS_BADGE, CONTACT_SOURCE_COLORS, VEHICLE_CATS } from "@/lib/constants";
 import { formatBaht } from "@/lib/format";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
-import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isStackerModel } from "@/lib/commission";
+import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isStackerModel, priorPurchaseByCustomer } from "@/lib/commission";
 import { apiEnabled } from "@/lib/api";
 import AiAssistant from "@/components/AiAssistant";
 
@@ -443,13 +443,24 @@ export default function SalesMain() {
     return e;
   };
 
+  // ตรวจ "ลูกค้าเก่า" อัตโนมัติจากประวัติซื้อทั้งหมด (ชื่อ/เบอร์ตรงกัน ไม่ว่าเซลล์ไหน/บิลแบบไหน)
+  const custReturning = useMemo(() => {
+    const nm = form.customer_name.trim(), tel = form.customer_tel.trim();
+    if (!nm && !tel) return 0;
+    const pool = editingSale ? sales.filter(s => s.id !== editingSale.id) : sales;
+    return priorPurchaseByCustomer(nm, tel, pool);
+  }, [form.customer_name, form.customer_tel, sales, editingSale]);
+
   const buildSale = (status: SaleStatus): Sale => {
     const customFields: Record<string, string> = {};
     fieldConfig.saleExtraFieldDefs.forEach(def => {
       if (saleCustomVals[def.id]?.trim()) customFields[def.name] = saleCustomVals[def.id].trim();
     });
-    // หมวดค่าคอม (เฉพาะโฟล์คลิฟท์) — สแตกเกอร์ RE/CDD/CBS คิดตามยอดขาย ไม่ต้องใช้
-    if (commCategory && !isStackerModel(selected?.model)) customFields[COMMISSION_FIELD] = commCategory;
+    // หมวดค่าคอม (เฉพาะโฟล์คลิฟท์) — ลูกค้าเก่า(จากประวัติ)บังคับอัตโนมัติ · สแตกเกอร์ไม่ต้องใช้
+    if (!isStackerModel(selected?.model)) {
+      const cat = custReturning > 0 ? "ลูกค้าเก่า/รับช่วงต่อ" : commCategory;
+      if (cat) customFields[COMMISSION_FIELD] = cat;
+    }
     // ข้อมูลรถจากสต็อก — เติมให้อัตโนมัติ ไม่ต้องให้เซลล์กรอกเอง
     if (selected) {
       const auto: Record<string, string> = {
@@ -1147,13 +1158,18 @@ export default function SalesMain() {
                       </SField>
                     </div>
 
-                    {/* ── หมวดค่าคอม (โฟล์คลิฟท์) — สแตกเกอร์ RE/CDD/CBS คิดตามยอดขายอัตโนมัติ ── */}
+                    {/* ── หมวดค่าคอม (โฟล์คลิฟท์) — สแตกเกอร์คิดตามยอดขาย · ลูกค้าเก่าตรวจอัตโนมัติจากประวัติ ── */}
                     {isStackerModel(selected?.model) ? (
                       <div className="text-xs text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
                         <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />สแตกเกอร์ ({selected?.model}) — ค่าคอมคิดตามยอดขายอัตโนมัติ ไม่ต้องเลือกหมวด
                       </div>
+                    ) : custReturning > 0 ? (
+                      <div className="text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2 flex items-start gap-1.5">
+                        <RefreshCw className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                        <span>🔁 <b>ลูกค้าเก่า</b> — ตรวจพบเคยซื้อกับบริษัทแล้ว {custReturning} ครั้ง (ชื่อ/เบอร์ตรงกัน) · ระบบคิดค่าคอมเป็น &ldquo;ลูกค้าเก่า&rdquo; อัตโนมัติ ไม่ต้องเลือก</span>
+                      </div>
                     ) : (
-                      <SField label="หมวดค่าคอม (สำหรับคำนวณค่าคอมรายเดือน)" error="">
+                      <SField label="หมวดค่าคอม (เฉพาะลูกค้าใหม่ — ลูกค้าเก่าระบบตรวจเอง)" error="">
                         <select value={commCategory} onChange={e => setCommCategory(e.target.value)} className={ss("")}>
                           <option value="">-- เลือกหมวดลูกค้า --</option>
                           {COMMISSION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}

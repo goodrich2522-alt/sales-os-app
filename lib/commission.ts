@@ -28,6 +28,26 @@ export const isImportedSale = (s: Sale) =>
 export const closeDate = (s: Sale) => String(s.delivery_date || s.created_at || "").slice(0, 10);
 export const closeMonth = (s: Sale) => closeDate(s).slice(0, 7); // YYYY-MM
 
+// ── ตรวจ "ลูกค้าเก่า" = เคยมีประวัติซื้อกับบริษัทมาก่อน (ไม่ว่าเซลล์คนไหน/เปิดบิลแบบไหน) ──
+const normName = (n?: string) => String(n ?? "").toLowerCase().replace(/[\s .\-()]/g, "");
+const normTel  = (t?: string) => String(t ?? "").replace(/\D/g, "");
+// ลูกค้าคนเดียวกัน = ชื่อ(ตัดช่องว่าง/อักขระ)ตรงกัน หรือ เบอร์โทรตรงกัน
+export const sameCustomer = (a: Pick<Sale, "customer_name" | "customer_tel">, b: Pick<Sale, "customer_name" | "customer_tel">) => {
+  const na = normName(a.customer_name), nb = normName(b.customer_name);
+  const ta = normTel(a.customer_tel),  tb = normTel(b.customer_tel);
+  return (!!na && na === nb) || (ta.length >= 6 && ta === tb);
+};
+// จำนวนดีลปิดของลูกค้ารายนี้ที่เกิด "ก่อน" ดีลนี้ (นับรวมดีลนำเข้า GR เพราะเป็นประวัติซื้อจริง)
+export const priorPurchaseCount = (sale: Sale, all: Sale[]) => {
+  const t = String(sale.created_at || "");
+  return all.filter(o => o.id !== sale.id && isClosedSale(o) && String(o.created_at || "") < t && sameCustomer(o, sale)).length;
+};
+// เช็คตอนกรอกฟอร์ม (ยังไม่มี created_at) — มีประวัติซื้อของลูกค้าชื่อ/เบอร์นี้ไหม
+export const priorPurchaseByCustomer = (name: string, tel: string, all: Sale[]) => {
+  const probe = { customer_name: name, customer_tel: tel };
+  return all.filter(o => isClosedSale(o) && sameCustomer(probe, o)).length;
+};
+
 // กำไรสุทธิของดีล
 export const dealProfit = (s: Sale, f?: Forklift): number => {
   const revenue = Number(s.actual_sale) || 0;
@@ -55,14 +75,15 @@ export interface CommissionResult {
   group: "STACKER" | "FORKLIFT" | "none";
   basis: "ยอดขาย" | "กำไร" | "-";
   basisValue: number;   // ยอดขาย (stacker) หรือ กำไรสุทธิ (forklift)
-  category: string;     // หมวดลูกค้า (เฉพาะ forklift)
+  category: string;     // หมวดลูกค้าที่ใช้คิดจริง (เฉพาะ forklift)
+  returning?: boolean;  // ระบบตรวจพบว่าเป็นลูกค้าเก่า (มีประวัติซื้อ) → บังคับหมวด "ลูกค้าเก่า"
   note?: string;        // เตือนถ้าคิดไม่ได้ (ยังไม่เลือกหมวด / ไม่เข้าเงื่อนไข)
 }
 
-// คำนวณค่าคอม 1 ดีล
-export const calcCommission = (s: Sale, f?: Forklift): CommissionResult => {
+// คำนวณค่าคอม 1 ดีล · ส่ง allSales มาด้วยเพื่อตรวจ "ลูกค้าเก่า" อัตโนมัติจากประวัติซื้อ
+export const calcCommission = (s: Sale, f?: Forklift, allSales?: Sale[]): CommissionResult => {
   const model = f?.model ?? s.forklift_model;
-  const category = String(s.custom_fields?.[COMMISSION_FIELD] ?? "").trim();
+  const storedCat = String(s.custom_fields?.[COMMISSION_FIELD] ?? "").trim();
 
   // STACKER (RE/CDD/CBS) → ตามยอดขาย
   if (isStackerModel(model)) {
@@ -74,14 +95,17 @@ export const calcCommission = (s: Sale, f?: Forklift): CommissionResult => {
   const vtype = String(f?.vehicle_category ?? s.vehicle_type ?? "").trim();
   const isForklift = vtype === "Forklift" || vtype === "" || /^(CPC?D|CQD|CPD|FD|FG|H2000)/i.test(String(model ?? ""));
   if (!isForklift) {
-    return { amount: 0, group: "none", basis: "-", basisValue: 0, category, note: "ไม่เข้าเงื่อนไขค่าคอม (คิดเอง)" };
+    return { amount: 0, group: "none", basis: "-", basisValue: 0, category: storedCat, note: "ไม่เข้าเงื่อนไขค่าคอม (คิดเอง)" };
   }
+  // กติกา: มีประวัติซื้อมาก่อน = ลูกค้าเก่าเสมอ (บังคับ ทับค่าที่เซลล์เลือก)
+  const returning = allSales ? priorPurchaseCount(s, allSales) > 0 : false;
+  const category = returning ? "ลูกค้าเก่า/รับช่วงต่อ" : storedCat;
   const profit = dealProfit(s, f);
-  if (!category) return { amount: 0, group: "FORKLIFT", basis: "กำไร", basisValue: profit, category: "", note: "ยังไม่เลือกหมวดลูกค้า" };
+  if (!category) return { amount: 0, group: "FORKLIFT", basis: "กำไร", basisValue: profit, category: "", returning, note: "ยังไม่เลือกหมวดลูกค้า" };
 
   let amount = 0;
   if (category === "ลูกค้าใหม่+ออกพบเอง") amount = forkliftNewVisit(profit);
   else if (category === "ลูกค้าเก่า/รับช่วงต่อ") amount = forkliftOld(profit);
   else amount = forkliftNew(profit); // "ลูกค้าใหม่"
-  return { amount, group: "FORKLIFT", basis: "กำไร", basisValue: profit, category };
+  return { amount, group: "FORKLIFT", basis: "กำไร", basisValue: profit, category, returning };
 };
