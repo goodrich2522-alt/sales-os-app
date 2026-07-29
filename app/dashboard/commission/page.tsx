@@ -9,7 +9,7 @@ import {
 import { useApp } from "@/lib/AppContext";
 import { Sale } from "@/lib/types";
 import {
-  calcCommission, isClosedSale, closeMonth, closeDate,
+  calcCommission, isClosedSale, isImportedSale, closeMonth, closeDate,
   COMMISSION_FIELD, COMMISSION_CATEGORIES,
 } from "@/lib/commission";
 
@@ -21,8 +21,8 @@ export default function CommissionPage() {
   const { sales, forklifts, updateSale } = useApp();
   const fkById = useMemo(() => new Map(forklifts.map(f => [f.id, f])), [forklifts]);
 
-  // ดีลที่ปิดจริง (ปิด/จัดส่งแล้ว) เท่านั้น
-  const closedSales = useMemo(() => sales.filter(isClosedSale), [sales]);
+  // ดีลที่ปิดจริง (ปิด/จัดส่งแล้ว) — ตัดดีลนำเข้าบิลภาษี GR ออก (ไม่คิดค่าคอม)
+  const closedSales = useMemo(() => sales.filter(s => isClosedSale(s) && !isImportedSale(s)), [sales]);
 
   // เดือนที่มีดีลปิด (ใหม่สุดก่อน)
   const months = useMemo(
@@ -220,7 +220,7 @@ export default function CommissionPage() {
             <div><b className="text-indigo-700">FORKLIFT · ลูกค้าใหม่</b> — ตามกำไรสุทธิ · ≥100k=2,000 · 80k–99,999=1,500 · 50k–79,999=1,000 · 40k–49,999=800 · 30,001–40k=700 · 25k–30k=500 · ต่ำกว่า 25k=0</div>
             <div><b className="text-indigo-700">FORKLIFT · ลูกค้าใหม่+ออกพบเอง</b> — ≥100k=2,000 · 50k–99,999=1,200 · 40k–49,999=800 · ต่ำกว่า 40k=500</div>
             <div><b className="text-indigo-700">FORKLIFT · ลูกค้าเก่า/รับช่วงต่อ</b> — ≥100k=1,500 · 40k–99,999=800 · ต่ำกว่า 40k=500</div>
-            <div className="text-slate-400">กำไรสุทธิ = ราคาขาย − ทุน − อุปกรณ์เสริม − ของแถม − ค่าขนส่ง · นับเฉพาะดีลปิด/จัดส่งแล้ว</div>
+            <div className="text-slate-400">กำไรสุทธิ = ราคาขาย − ทุน − อุปกรณ์เสริม − ของแถม − ค่าขนส่ง · นับเฉพาะดีลปิด/จัดส่งแล้ว · <b>ไม่รวมดีลนำเข้าจากบิลภาษี GR</b></div>
           </div>
         </details>
       </main>

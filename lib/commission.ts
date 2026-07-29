@@ -20,6 +20,10 @@ export const isClosedSale = (s: Sale) => {
   return st.includes("ปิดการขาย") || st.includes("จัดส่งแล้ว") || st.includes("ส่งมอบ") || st === "ขายแล้ว";
 };
 
+// ดีลนำเข้าจากบิลภาษี GR (ทุน=0 ไม่มีเซลล์จริง) — ไม่นำมาคิดค่าคอม (ผู้ใช้ยืนยัน 29 ก.ค. 2026)
+export const isImportedSale = (s: Sale) =>
+  String(s.custom_fields?.["ที่มา"] ?? "") === "นำเข้าบิลภาษี" || /^sale_gr_/i.test(String(s.id ?? ""));
+
 // วันที่ปิดการขาย (ใช้จัดกลุ่มรายเดือน) = วันส่งมอบ ถ้ามี ไม่งั้นวันที่สร้างดีล
 export const closeDate = (s: Sale) => String(s.delivery_date || s.created_at || "").slice(0, 10);
 export const closeMonth = (s: Sale) => closeDate(s).slice(0, 7); // YYYY-MM
