@@ -47,6 +47,8 @@ export default function TransporterMain() {
 
   // ── สถานะหลังบันทึก (เพื่อยกเลิกรายการล่าสุด) ──
   const [done, setDone] = useState<null | { insId: string; before: Forklift | null; label: string }>(null);
+  // ── ป๊อปอัพเตือน SN ซ้ำก่อนรับรถ (SN ตรงกับรถที่รับเข้าระบบแล้ว) ──
+  const [dupConfirm, setDupConfirm] = useState<Forklift | null>(null);
 
   useEffect(() => {
     const name = localStorage.getItem("transporter_name");
@@ -86,6 +88,14 @@ export default function TransporterMain() {
   const missingSlotLabels = INSPECTION_SLOTS.filter(s => !slotImages[s.key]).map(s => s.label);
 
   const receiverValid = !!(piKey && receivedDate && receiverName.trim() && snKey && recvTarget) && allSlotsFilled;
+
+  // ── เช็ค SN ซ้ำ: SN ที่กรอกไปตรงกับรถที่ "รับเข้าระบบแล้ว" (สถานะไม่ใช่ 'รอรับ') → เตือนก่อนเพิ่ม ──
+  // รถ 'รอรับ' ปกติ หรือ SN ใหม่ = ไม่ซ้ำ ผ่านได้เลย (จะได้ไม่รบกวนงานรับรถปกติ)
+  const snDupCar: Forklift | null = snKey
+    ? (recvMode === "stock"
+        ? (recvTarget && String(recvTarget.status || "").trim() !== "รอรับ" ? recvTarget : null)
+        : (forklifts.find(f => f.id !== recvTarget?.id && f.SN && String(f.SN).toUpperCase() === snKey) || null))
+    : null;
 
   // ===== ผู้ส่งรถ: กรอก SN → หา รถ + ดีล =====
   const delKey = delSN.trim().toUpperCase();
@@ -204,7 +214,7 @@ export default function TransporterMain() {
   };
 
   const resetForm = () => {
-    setSlotImages({}); setExtraImages([]); setActiveSlot(null); setDone(null);
+    setSlotImages({}); setExtraImages([]); setActiveSlot(null); setDone(null); setDupConfirm(null);
     setPiNo(""); setReceivedDate(""); setUnitNo(""); setPickedModel("");
     setReceiverName(username);
     setDelSN(""); setSenderName(username); setDeliverDate(""); setSalesOwner("");
@@ -611,7 +621,7 @@ export default function TransporterMain() {
                 กรอก ผู้ส่งรถ · วันที่ส่งรถ · บริษัทที่ไปส่ง ให้ครบ{!deliveryPhotosValid && " + ถ่ายรูปการส่งมอบอย่างน้อย 1 รูป"}
               </p>
             )}
-            <button onClick={isReceiver ? submitReceiver : submitDeliverer} disabled={isReceiver ? !receiverValid : !delValid}
+            <button onClick={() => { if (isReceiver && snDupCar) { setDupConfirm(snDupCar); return; } isReceiver ? submitReceiver() : submitDeliverer(); }} disabled={isReceiver ? !receiverValid : !delValid}
               className={`w-full text-white font-bold py-4 rounded-2xl transition-all duration-200 active:scale-[0.98] text-base shadow-md hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-md disabled:active:scale-100 ${isReceiver ? "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500" : "bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500"}`}>
               <CheckCircle className="w-5 h-5" />{isReceiver ? "ยืนยันรับมอบรถ" : "ยืนยันส่งมอบรถ"}<ChevronRight className="w-4 h-4" />
             </button>
@@ -692,6 +702,34 @@ export default function TransporterMain() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ป๊อปอัพเตือน SN ซ้ำ (SN ตรงกับรถที่รับเข้าระบบแล้ว) ── */}
+      {dupConfirm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={e => e.target === e.currentTarget && setDupConfirm(null)}>
+          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden">
+            <div className="px-6 pt-6 pb-4 flex flex-col items-center text-center gap-3">
+              <div className="bg-amber-100 rounded-2xl p-3"><AlertCircle className="w-8 h-8 text-amber-600" /></div>
+              <h3 className="text-lg font-bold text-slate-800">SN นี้มีรถอยู่ในระบบแล้ว</h3>
+              <p className="text-sm text-slate-500">
+                SN <span className="font-bold text-slate-700">{snKey}</span> ตรงกับรถที่รับเข้าระบบไปแล้ว:
+              </p>
+              <div className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-left">
+                <p className="font-bold text-slate-800 text-sm">{dupConfirm.brand} {dupConfirm.model}</p>
+                <p className="text-xs text-slate-500 mt-0.5">รหัส: <span className="font-medium text-slate-700">{dupConfirm.id}</span> · สถานะ: <span className="font-semibold text-amber-700">{dupConfirm.status || "—"}</span></p>
+                {dupConfirm.pi_no && <p className="text-xs text-slate-500 mt-0.5">PI: {dupConfirm.pi_no}</p>}
+              </div>
+              <p className="text-xs text-amber-600">หากดำเนินการต่อจะเป็นการรับ/เพิ่มรถ SN นี้ซ้ำ — ต้องการทำต่อหรือไม่?</p>
+            </div>
+            <div className="flex gap-2 px-5 pb-5">
+              <button onClick={() => setDupConfirm(null)}
+                className="flex-1 border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold py-3 rounded-xl transition-all">ยกเลิก</button>
+              <button onClick={() => { setDupConfirm(null); submitReceiver(); }}
+                className="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98]">เพิ่มซ้ำ</button>
             </div>
           </div>
         </div>
