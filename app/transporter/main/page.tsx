@@ -81,6 +81,8 @@ export default function TransporterMain() {
     : !needPickModel ? waitingByPI[0]                                              // รุ่นเดียว → คันแรก (FIFO)
     : (waitingByPI.find(w => String(w.model || "").trim() === pickedModel) || null); // หลายรุ่น → คันแรกของรุ่นที่เลือก
   const recvMode: "stock" | "waiting" | null = stockMatch ? "stock" : (recvTarget ? "waiting" : null);
+  // STAXX/CNC = ล็อตตู้คอนเทนเนอร์ ยืนยันแล้วพร้อมขายเลย · ยี่ห้ออื่นต้องให้ฝ่ายสต็อกยืนยันนำเข้าก่อน
+  const recvIsContainer = recvTarget ? /^(STAXX|CNC)$/i.test(String(recvTarget.brand || "")) : false;
 
   // ── รูปบังคับ: ต้องครบ 6 ช่องก่อนถึงจะยืนยันได้ (ทั้งผู้รับและผู้ส่ง) ──
   const filledSlots = INSPECTION_SLOTS.filter(s => !!slotImages[s.key]);
@@ -180,15 +182,19 @@ export default function TransporterMain() {
     const rd = thaiDate(receivedDate);
     addInspection({ id: insId, unit_no: snKey, transporter_name: receiverName.trim() || username, transporter_phone: userphone || undefined, date: receivedDate || today(), ...buildImagePayload(), role: "ผู้รับรถ" });
     const before = { ...recvTarget };
-    // รับรถ = รถมาถึงพร้อมขาย → ตั้ง "พร้อมขาย" เสมอ (ทั้งรถรอรับและรถสต็อก) → ขึ้นหน้าเซลล์
+    // STAXX/CNC = ล็อตตู้คอนเทนเนอร์ ไม่มีเกตยืนยัน → "พร้อมขาย" ทันที · ยี่ห้ออื่น → พักที่ "รอยืนยันนำเข้าสต็อก" ให้ฝ่ายสต็อกกดยืนยันก่อนขึ้นหน้าขาย
+    const isContainerLot = /^(STAXX|CNC)$/i.test(String(recvTarget.brand || ""));
+    const newStatus = isContainerLot ? "พร้อมขาย" : "รอยืนยันนำเข้าสต็อก";
     updateForklift({
       ...recvTarget,
       SN: recvMode === "waiting" ? snKey : recvTarget.SN,
       pi_no: piNo.trim() || recvTarget.pi_no,
       received_date: rd || recvTarget.received_date,
-      status: "พร้อมขาย",
+      status: newStatus,
     });
-    setDone({ insId, before, label: `รับรถ ${snKey} แล้ว → เข้าหน้าขาย (พร้อมขาย)` });
+    setDone({ insId, before, label: isContainerLot
+      ? `รับรถ ${snKey} แล้ว → พร้อมขาย (ขึ้นหน้าขายทันที)`
+      : `รับรถ ${snKey} แล้ว → ส่งฝ่ายสต็อกยืนยันนำเข้าก่อนขึ้นหน้าขาย` });
   };
 
   const submitDeliverer = () => {
@@ -447,12 +453,12 @@ export default function TransporterMain() {
                           );
                         })}
                       </div>
-                      {pickedModel && <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1"><PackageCheck className="w-3.5 h-3.5" />เลือก {pickedModel} — ยืนยันแล้วเข้าหน้าขายทันที</p>}
+                      {pickedModel && <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1"><PackageCheck className="w-3.5 h-3.5" />เลือก {pickedModel} — {recvIsContainer ? "ยืนยันแล้วเข้าหน้าขายทันที" : "ยืนยันแล้วส่งฝ่ายสต็อกยืนยันนำเข้าก่อน"}</p>}
                     </div>
                   ) : recvMode === "waiting" ? (
                     <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5">
                       <PackageCheck className="w-4 h-4 flex-shrink-0" />
-                      <span className="text-xs font-medium">รถรอรับ: <span className="font-bold">{recvTarget!.model}</span> — ยืนยันแล้วเปลี่ยนเป็น &quot;พร้อมขาย&quot; ขึ้นหน้าเซลล์</span>
+                      <span className="text-xs font-medium">รถรอรับ: <span className="font-bold">{recvTarget!.model}</span> — {recvIsContainer ? "ยืนยันแล้วเปลี่ยนเป็นพร้อมขาย ขึ้นหน้าเซลล์" : "ยืนยันแล้วส่งฝ่ายสต็อกยืนยันนำเข้าก่อนขึ้นหน้าขาย"}</span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2.5">

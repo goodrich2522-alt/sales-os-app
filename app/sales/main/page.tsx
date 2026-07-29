@@ -37,6 +37,7 @@ function notSellableReason(status: unknown): string | null {
   if (s.includes("ไฟแนนซ์")) return "รอไฟแนนซ์";
   if (s.includes("เช่า")) return "เป็นรถเช่า";
   if (s.includes("รอรับ") || s.includes("รอเข้าไปรับ")) return "ยังไม่รับรถเข้าคลัง (รอรับ)";
+  if (s.includes("รอยืนยัน")) return "รอฝ่ายสต็อกยืนยันนำเข้า";
   return null;
 }
 const isSellable = (f: { status?: unknown }) => notSellableReason(f?.status) === null;

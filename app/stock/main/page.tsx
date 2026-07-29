@@ -110,6 +110,7 @@ export default function StockMain() {
   const [ackedIds, setAckedIds]   = useState<Set<string>>(new Set());
   const [ackReady, setAckReady]   = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
+  const [confirmAllImport, setConfirmAllImport] = useState(false); // ยืนยันนำเข้าทั้งหมด (2 จังหวะกันพลาด)
 
   // Settings modal state
   const [editingField, setEditingField]   = useState<DropdownField | null>(null);
@@ -257,6 +258,27 @@ export default function StockMain() {
     setListStatus(status); setListView("list");
     setTimeout(() => document.getElementById("stock-list")?.scrollIntoView({ behavior: "smooth" }), 60);
   };
+
+  // ── รถที่ผู้ขนส่งรับเข้ามาแล้ว รอฝ่ายสต็อก "ยืนยันนำเข้า" (เกตก่อนขึ้นหน้าขาย) ──
+  const pendingImport = useMemo(
+    () => forklifts.filter(f => String(f.status).trim() === "รอยืนยันนำเข้าสต็อก")
+      .sort((a, b) => String(b.received_date || b.created_at || "").localeCompare(String(a.received_date || a.created_at || ""))),
+    [forklifts]
+  );
+  // แปลง sale_status → สถานะรถ (กันสต็อก) — ให้ตรงกับ forkliftStatusForSale ใน AppContext
+  const saleStatusToStock = (st?: string) =>
+    st === "ขายแล้ว" ? "ปิดการขายแล้ว" : st === "จอง" ? "จอง" : st === "รอผ่านไฟแนนซ์" ? "รอผ่านไฟแนนซ์" : (st || "จอง");
+  // ยืนยันนำเข้าสต็อก: มีเซลล์เจ้าของงาน/ดีลแล้ว → ไม่ขึ้น "พร้อมขาย" (คงสถานะตามดีล หรือ "จอง") · ไม่มี → "พร้อมขาย"
+  const confirmImportOne = (f: Forklift) => {
+    const sale = [...sales].filter(s => s.forklift_id === f.id)
+      .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))[0];
+    const owner = saleOwnerByFk.get(f.id) || (f.custom_fields?.["เซลล์ผู้ดูแล"] as string) || "";
+    const nextStatus = sale ? saleStatusToStock(sale.sale_status) : (owner ? "จอง" : "พร้อมขาย");
+    const stamp = new Date().toLocaleDateString("th-TH");
+    const cf = { ...(f.custom_fields || {}), "ยืนยันนำเข้าสต็อก": `${stamp} · ${username || "สต็อก"}` };
+    updateForklift({ ...f, status: nextStatus, custom_fields: cf });
+  };
+  const ownerOf = (f: Forklift) => saleOwnerByFk.get(f.id) || (f.custom_fields?.["เซลล์ผู้ดูแล"] as string) || "";
 
   // รายการสต็อกที่กรองแล้ว (สำหรับ modal) — ค้นหา + หมวด + ยี่ห้อ + สถานะ + เรียงลำดับ
   const hs = (v: unknown) => (v == null ? "" : String(v)).toLowerCase();
@@ -621,6 +643,60 @@ export default function StockMain() {
           </div>
         )}
 
+        {/* ── 🔔 รถรับเข้าใหม่ รอฝ่ายสต็อกยืนยันนำเข้า (เกตก่อนขึ้นหน้าขาย) ── */}
+        {pendingImport.length > 0 && (
+          <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500" />
+                </span>
+                <h3 className="text-sm font-bold text-blue-800">🔔 รถรับเข้าใหม่ รอยืนยันนำเข้าสต็อก — {pendingImport.length} คัน</h3>
+              </div>
+              {pendingImport.length > 1 && (confirmAllImport ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-blue-700">ยืนยันทั้งหมด?</span>
+                  <button onClick={() => { pendingImport.forEach(confirmImportOne); setConfirmAllImport(false); }}
+                    className="text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded-lg">ยืนยัน</button>
+                  <button onClick={() => setConfirmAllImport(false)} className="text-xs text-slate-500 hover:text-slate-700 px-1.5">ยกเลิก</button>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmAllImport(true)}
+                  className="text-xs font-bold bg-blue-100 hover:bg-blue-200 text-blue-700 px-2.5 py-1.5 rounded-lg transition-colors">ยืนยันทั้งหมด</button>
+              ))}
+            </div>
+            <p className="text-xs text-blue-600 mb-3">ผู้ขนส่งบันทึกการรับรถแล้ว — ตรวจสอบแล้วกด &ldquo;ยืนยันนำเข้า&rdquo; เพื่อให้รถขึ้นหน้าขาย · รถที่มีเซลล์เจ้าของงานจะไม่ขึ้นพร้อมขาย (ตั้งเป็นจอง)</p>
+            <div className="flex flex-col gap-2">
+              {pendingImport.map(f => {
+                const owner = ownerOf(f);
+                const recv = [...inspections]
+                  .filter(r => String(r.unit_no || "").toUpperCase() === String(f.SN || f.id).toUpperCase() && (r.role ?? "ผู้รับรถ") === "ผู้รับรถ")
+                  .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0];
+                return (
+                  <div key={f.id} className="bg-white border border-blue-100 rounded-xl p-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-md flex-shrink-0">#{f.id}</span>
+                        <span className="font-semibold text-slate-800 text-sm">{f.SN ? `${f.SN} — ` : ""}{f.brand} {f.model}</span>
+                        {owner && <span className="text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-md flex items-center gap-0.5 flex-shrink-0"><User className="w-2.5 h-2.5" />#{owner}</span>}
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                        {[f.pi_no ? `PI ${f.pi_no}` : "", recv ? `รับโดย ${recv.transporter_name} · ${recv.date}` : (f.received_date ? `วันรับ ${f.received_date}` : "")].filter(Boolean).join(" · ")}
+                        {owner ? " · จะเข้าสถานะ “จอง” (มีเซลล์เจ้าของงาน)" : " · จะขึ้น “พร้อมขาย”"}
+                      </p>
+                    </div>
+                    <button onClick={() => confirmImportOne(f)}
+                      className="flex-shrink-0 flex items-center gap-1 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white text-xs font-bold px-3 py-2 rounded-lg transition-all active:scale-95">
+                      <CheckCircle className="w-3.5 h-3.5" />ยืนยันนำเข้า
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ── รายการเตรียมสั่งสินค้า (กางจากการ์ด "เตรียมสั่งสินค้า") ── */}
         {showReorder && reorderAlerts.length > 0 && (
           <div id="reorder-list" className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
@@ -949,6 +1025,9 @@ export default function StockMain() {
                       {/* รหัสสินค้า (ID) — โชว์ทุกคันเพื่อแยกรถถูกตัว */}
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{item.id}</span>
                       <p className="font-semibold text-slate-800 text-sm">{item.SN ? `${item.SN} — ` : ""}{item.brand} {item.model}</p>
+                      {ownerOf(item) && (
+                        <span className="text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-md flex-shrink-0 flex items-center gap-0.5" title="เซลล์เจ้าของงาน"><User className="w-2.5 h-2.5" />#{ownerOf(item)}</span>
+                      )}
                       {idx === 0 && <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded-full flex-shrink-0">ล่าสุด</span>}
                     </div>
                     <p className="text-xs text-slate-500">{[
@@ -958,9 +1037,6 @@ export default function StockMain() {
                       item.height ? `สูง ${item.height}` : "",
                       item.location,
                     ].filter(Boolean).join(" · ") || "—"}</p>
-                    {saleOwnerByFk.get(item.id) && item.status !== "พร้อมขาย" && (
-                      <p className="text-[11px] text-violet-700 mt-0.5 flex items-center gap-1 font-semibold"><User className="w-3 h-3 flex-shrink-0" />เซลล์: {saleOwnerByFk.get(item.id)}</p>
-                    )}
                     {fmtAdded(item.created_at) && (
                       <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1"><Clock className="w-3 h-3 flex-shrink-0" />เติมเมื่อ {fmtAdded(item.created_at)}</p>
                     )}
