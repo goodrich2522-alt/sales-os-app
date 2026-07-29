@@ -94,6 +94,7 @@ export default function StockMain() {
   const [locSaved, setLocSaved]           = useState(false);
   // ── ประวัติการขาย (เฟส 1): ดีลทุกเซลล์ ──
   const [showSaleHistory, setShowSaleHistory] = useState(false);
+  const [showReorder, setShowReorder]     = useState(false); // กางรายการเตรียมสั่งสินค้า (คลิกจากการ์ด)
   const [histStaff, setHistStaff]         = useState("all"); // กรองรายเซลล์
   const [histStatus, setHistStatus]       = useState("all");
   const [histSearch, setHistSearch]       = useState("");
@@ -582,11 +583,14 @@ export default function StockMain() {
 
       <main className="max-w-4xl mx-auto px-4 py-6 flex flex-col gap-5">
         {/* Stats — แยกตามสถานะให้ฝ่ายสต็อกเห็นชัดทุกกอง */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <StatCard label="เหลือ (พร้อมขาย)" value={available} onClick={() => showStatus("พร้อมขาย")} icon={<TrendingUp className="w-4 h-4" />} color="text-emerald-700" bg="bg-emerald-50 border-emerald-100" iconBg="bg-emerald-100 text-emerald-600" />
           <StatCard label="จอง"              value={reserved}  onClick={() => showStatus("จอง")} icon={<Boxes className="w-4 h-4" />}       color="text-amber-700"   bg="bg-amber-50 border-amber-100"   iconBg="bg-amber-100 text-amber-600" />
           <StatCard label="ติดไฟแนนซ์"       value={financing} onClick={() => showStatus("รอผ่านไฟแนนซ์")} icon={<Clock className="w-4 h-4" />}       color="text-rose-700"    bg="bg-rose-50 border-rose-100"     iconBg="bg-rose-100 text-rose-600" />
           <StatCard label="ขายไปแล้ว"        value={sold}      onClick={() => showStatus("ปิดการขายแล้ว")} icon={<CheckCircle className="w-4 h-4" />} color="text-indigo-700"  bg="bg-indigo-50 border-indigo-100" iconBg="bg-indigo-100 text-indigo-600" />
+          <StatCard label="เตรียมสั่งสินค้า" value={reorderAlerts.length}
+            onClick={() => { setShowReorder(v => !v); setTimeout(() => document.getElementById("reorder-list")?.scrollIntoView({ behavior: "smooth" }), 60); }}
+            icon={<AlertCircle className="w-4 h-4" />} color="text-amber-700" bg="bg-amber-50 border-amber-200" iconBg="bg-amber-100 text-amber-600" />
         </div>
         {waiting > 0 && (
           <div className="-mt-2 text-xs text-slate-500 flex items-center gap-1.5">
@@ -594,12 +598,15 @@ export default function StockMain() {
           </div>
         )}
 
-        {/* ── แจ้งเตือนเตรียมสั่งสินค้า (สต็อกใกล้หมด) ── */}
-        {reorderAlerts.length > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-            <div className="flex items-center gap-2 mb-2.5">
-              <AlertCircle className="w-4 h-4 text-amber-600" />
-              <h3 className="text-sm font-bold text-amber-800">เตรียมสั่งสินค้า — {reorderAlerts.length} รุ่นใกล้หมด</h3>
+        {/* ── รายการเตรียมสั่งสินค้า (กางจากการ์ด "เตรียมสั่งสินค้า") ── */}
+        {showReorder && reorderAlerts.length > 0 && (
+          <div id="reorder-list" className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+            <div className="flex items-center justify-between gap-2 mb-2.5">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600" />
+                <h3 className="text-sm font-bold text-amber-800">เตรียมสั่งสินค้า — {reorderAlerts.length} รุ่นใกล้หมด</h3>
+              </div>
+              <button onClick={() => setShowReorder(false)} className="text-amber-500 hover:text-amber-800 hover:bg-amber-100 rounded-lg p-1"><X className="w-4 h-4" /></button>
             </div>
             <p className="text-[11px] text-amber-600 mb-2.5">เกณฑ์: โฟล์คลิฟท์เหลือ &lt; 3 · ชนิดอื่นเหลือ &lt; 15 (รีชทรัคไม่นับ)</p>
             <div className="flex flex-wrap gap-1.5">
