@@ -278,9 +278,13 @@ export default function StockMain() {
     if (listSort === "model") rows.sort((a, b) => String(a.model || "").localeCompare(String(b.model || "")) || recent(a, b));
     else if (listSort === "sn") rows.sort((a, b) => String(a.SN || "").localeCompare(String(b.SN || "")) || recent(a, b));
     else if (listSort === "pi") {
-      // เรียงตามเลข PI จริง 1-2-3 (ดึงตัวเลขกลุ่มแรก: PI011→11, PI108→108) · ไม่มี PI ไปท้าย
-      const piNum = (f: Forklift) => { const m = String(f.pi_no || "").match(/\d+/); return m ? Number(m[0]) : Number.MAX_SAFE_INTEGER; };
-      rows.sort((a, b) => (piNum(a) - piNum(b)) || String(a.pi_no || "~").localeCompare(String(b.pi_no || "~")) || recent(a, b));
+      // เรียงตามเลข PI จริง 1-2-3 · ดึงจาก pi_no ก่อน · ถ้าว่างและ id ขึ้นต้น PI (เช่น PI#27) ใช้เลขจาก id · ไม่มี PI ไปท้าย
+      const piNum = (f: Forklift) => {
+        const src = String(f.pi_no || "").trim() || (/^PI/i.test(String(f.id || "")) ? String(f.id) : "");
+        const m = src.match(/\d+/);
+        return m ? Number(m[0]) : Number.MAX_SAFE_INTEGER;
+      };
+      rows.sort((a, b) => (piNum(a) - piNum(b)) || recent(a, b));
     }
     else rows.sort(recent); // recent / remain (remain ใช้ในมุมมอง byModel)
     return rows;
