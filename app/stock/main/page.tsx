@@ -344,6 +344,8 @@ export default function StockMain() {
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [forklifts]);
   const brandCount = (b: string) => b === "all" ? forklifts.length : (brandList.find(([n]) => n === b)?.[1] ?? 0);
+  // ตัวเลือกสถานะในตัวกรอง = ค่าใน fieldConfig + สถานะจริงที่มีในข้อมูล (เช่น สั่งผลิต/รอตรวจสอบ ที่ไม่ได้อยู่ใน config)
+  const statusOpts = [...new Set([...fieldConfig.stockStatuses, ...forklifts.map(f => String(f.status).trim()).filter(Boolean)])];
 
   // มุมมองรวมตามรุ่น — เห็นทันทีว่ารุ่นไหนเหลือ/หมด (จากรายการที่กรองแล้ว)
   // รวมตาม รุ่น + เสา (MAST) — พิกัดยกอยู่ในชื่อรุ่นแล้ว (CPCD25=2.5ตัน) · เสาต่างกันแยกกลุ่ม
@@ -795,7 +797,7 @@ export default function StockMain() {
                 <select value={listStatus} onChange={e => setListStatus(e.target.value)}
                   className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400">
                   <option value="all">ทุกสถานะ</option>
-                  {fieldConfig.stockStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                  {statusOpts.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
                 <select value={listSort} onChange={e => setListSort(e.target.value as typeof listSort)}
                   className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400">
