@@ -1281,6 +1281,22 @@ export default function StockMain() {
           ["ราคาทุน", it.cost_price ? `฿${it.cost_price.toLocaleString()}` : ""],
           ["เติมเข้าสต็อกเมื่อ", fmtAdded(it.created_at)],
         ];
+        // ── ข้อมูลการขาย (ดึงจากตารางดีล) — โชว์เมื่อรถมีดีลผูกอยู่ (เช่น ปิดการขายแล้ว) ──
+        const saleForItem = [...sales]
+          .filter(s => String(s.forklift_id) === String(it.id) || (it.SN && String(s.forklift_unit_no).toUpperCase() === String(it.SN).toUpperCase()))
+          .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))[0];
+        const saleRows: [string, string][] = saleForItem ? [
+          ["เซลล์ผู้ขาย", saleForItem.sales_staff ?? ""],
+          ["ลูกค้า", saleForItem.customer_name ?? ""],
+          ["เบอร์โทร", saleForItem.customer_tel ?? ""],
+          ["จังหวัด", saleForItem.province ?? ""],
+          ["ประเภทลูกค้า", (saleForItem.customer_type as string) ?? ""],
+          ["ราคาขาย", saleForItem.actual_sale ? `฿${Number(saleForItem.actual_sale).toLocaleString()}` : ""],
+          ["การชำระ", (saleForItem.payment_type as string) ?? ""],
+          ["สถานะดีล", (saleForItem.sale_status as string) ?? ""],
+          ["วันที่ปิดการขาย", saleForItem.created_at ?? ""],
+          ["เลขที่ใบกำกับ", (saleForItem.custom_fields?.["เลขที่ใบกำกับภาษี"] as string) ?? ""],
+        ] : [];
         // custom_fields ที่โชว์ในสเปก/ข้อมูลแล้ว + คีย์ internal → ไม่ต้องโชว์ซ้ำใน "ข้อมูลเพิ่มเติม"
         const SHOWN_CF = new Set(["ประเภทสินค้า","MAST","Valve","ขนาดงา","ชนิดล้อ","เซลล์ผู้ดูแล","รายละเอียด (ลูกค้า)","เลขที่ใบกำกับภาษี","ชีตต้นทาง"]);
         const customs = Object.entries(cf).filter(([k, v]) => String(v ?? "").trim() && !SHOWN_CF.has(k));
@@ -1321,6 +1337,22 @@ export default function StockMain() {
               <div className="overflow-y-auto flex-1 min-h-0 p-5 flex flex-col gap-5">
                 <Section title="สเปกรถ" rows={spec} />
                 <Section title="ข้อมูลสต็อก / จัดซื้อ" rows={info} />
+                {saleForItem && (
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><ShoppingCart className="w-3.5 h-3.5 text-indigo-500" />ข้อมูลการขาย</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {saleRows.filter(([, v]) => String(v ?? "").trim()).map(([k, v]) => (
+                        <div key={k} className="bg-indigo-50/50 border border-indigo-100 rounded-xl px-3 py-2">
+                          <p className="text-[11px] text-indigo-400">{k}</p>
+                          <p className="text-sm font-semibold text-slate-700 break-words">{v}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {!String(saleForItem.sales_staff ?? "").trim() && (
+                      <p className="text-[11px] text-slate-400 mt-1.5">* ดีลนี้ไม่มีข้อมูลเซลล์ผู้ขาย (นำเข้าจากบิลภาษี)</p>
+                    )}
+                  </div>
+                )}
                 {/* สถานที่ที่รถอยู่ — แก้ไขได้ (ทั้งสต็อก/เซลล์ใช้ดูตำแหน่งเพื่อส่งมอบ) */}
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />สถานที่ที่รถอยู่</p>
