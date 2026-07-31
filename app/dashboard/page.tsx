@@ -212,7 +212,8 @@ export default function Dashboard() {
   }, [sales]);
   const realLeaderboard = useMemo(() => {
     const map: Record<string, { name: string; sales: number; revenue: number }> = {};
-    sales.forEach((s) => { const n = s.sales_staff || "ไม่ระบุ"; if (!map[n]) map[n] = { name: n, sales: 0, revenue: 0 }; map[n].sales += 1; map[n].revenue += s.actual_sale || 0; });
+    // นับเฉพาะดีลที่มีชื่อเซลล์จริง — ตัดดีลนำเข้าเก่าที่ไม่มีเซลล์ (บิลภาษี GR/ไฟล์นำเข้า) ออกจากอันดับ
+    sales.forEach((s) => { const n = (s.sales_staff || "").trim(); if (!n) return; if (!map[n]) map[n] = { name: n, sales: 0, revenue: 0 }; map[n].sales += 1; map[n].revenue += s.actual_sale || 0; });
     const badges = ["🥇", "🥈", "🥉"];
     return Object.values(map).sort((a, b) => b.revenue - a.revenue).map((x, i) => ({ rank: i + 1, ...x, badge: badges[i] ?? "" }));
   }, [sales]);
