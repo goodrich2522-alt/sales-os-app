@@ -1020,6 +1020,7 @@ export default function SalesMain() {
                         const days = daysInStock(item);
                         return (
                           <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                            {fStatus === "__recent__" && days != null && <span className="text-[10px] font-bold text-white bg-gradient-to-r from-sky-500 to-blue-600 px-2 py-0.5 rounded-full shadow-sm">🆕 เพิ่งเข้า {days === 0 ? "วันนี้" : `${days} วัน`}</span>}
                             {fifoOldestIds.has(item.id) && <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded-full">🟢 ควรขายก่อน (FIFO)</span>}
                             {days != null && <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${days > 180 ? "bg-red-100 text-red-700" : days > 90 ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}>ค้างสต็อก {days} วัน</span>}
                           </div>
