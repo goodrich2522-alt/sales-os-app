@@ -108,9 +108,13 @@ export default function Dashboard() {
     // เข้าค้างไว้ได้เฉพาะเมื่อ session Supabase ยังไม่หมดอายุ — ไม่งั้นให้ล็อกอินใหม่
     (async () => {
       if (localStorage.getItem("dash_auth") !== "1") return;
-      if (apiEnabled && !(await hasActiveSession())) {
-        localStorage.removeItem("dash_auth");
-        return;
+      if (apiEnabled) {
+        if (!(await hasActiveSession())) { localStorage.removeItem("dash_auth"); return; }
+        // ตรวจ role ซ้ำ — แดชบอร์ดเฉพาะแอดมิน/สต็อก (กัน session เซลล์เก่าที่เคยเข้าได้)
+        const du = localStorage.getItem("dash_user");
+        const email = du ? (JSON.parse(du).email as string) : "";
+        const acc = await checkAccess(email, "stock");
+        if (!acc.ok) { localStorage.removeItem("dash_auth"); return; }
       }
       setDashAuth(true);
     })();
@@ -224,15 +228,16 @@ export default function Dashboard() {
   const monthsWithData = realMonthly.filter((m) => m.units > 0).length || 1;
   const avgRevenue = Math.round(totalRevenue / monthsWithData);
 
-  // แดชบอร์ดเห็นข้อมูลรวมทั้งบริษัท — เข้าได้เฉพาะผู้ใช้ที่แอดมินอนุมัติแล้ว (role ไหนก็ได้) หรือแอดมิน
+  // แดชบอร์ดเห็นข้อมูลรวมทั้งบริษัท (ต้นทุน/กำไร/ค่าคอม) — เข้าได้เฉพาะแอดมิน + ฝ่ายสต็อกเท่านั้น (ทีมขายเข้าไม่ได้)
   const handleDashGoogle = async (u: GoogleUser) => {
     setDashChecking(true); setDashNotice("");
-    const access = await checkAccess(u.email);
+    const access = await checkAccess(u.email, "stock");
     setDashChecking(false);
     if (!access.ok) {
       setDashNotice(
         access.reason === "blocked" ? "บัญชีนี้ถูกระงับการใช้งาน — ติดต่อแอดมิน"
         : access.reason === "pending" ? "บัญชีของคุณรอแอดมินอนุมัติอยู่ — ยังเข้าแดชบอร์ดไม่ได้"
+        : access.reason === "role_mismatch" ? "หน้าแดชบอร์ดสำหรับฝ่ายสต็อก/แอดมินเท่านั้น — ทีมขายเข้าไม่ได้"
         : "บัญชีนี้ยังไม่ได้ลงทะเบียนในระบบ — ลงทะเบียนผ่านหน้าทีมขาย/ฝ่ายสต็อก แล้วรอแอดมินอนุมัติ"
       );
       return;

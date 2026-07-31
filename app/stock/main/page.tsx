@@ -9,6 +9,7 @@ import {
   Download, Upload, FileText, ShoppingCart, User
 } from "lucide-react";
 import { Forklift, Sale, STOCK_APPROVAL_FIELD, isVoidSale } from "@/lib/types";
+import { COMMISSION_FIELD, COMMISSION_CATEGORIES } from "@/lib/commission";
 import { useApp, FieldConfig } from "@/lib/AppContext";
 import { isPendingId } from "@/lib/productId";
 import { thaiMonthShort } from "@/lib/format";
@@ -103,7 +104,7 @@ export default function StockMain() {
   const [histSearch, setHistSearch]       = useState("");
   const [histView, setHistView]           = useState<"deals" | "summary">("deals"); // รายดีล / สรุปรายเซลล์
   const [histDetail, setHistDetail]       = useState<Sale | null>(null); // ดีลที่กางดูรายละเอียด
-  const [histEdit, setHistEdit]           = useState<{ sale_status: string; delivery_date: string; remark: string; eta: string; sn: string } | null>(null); // eta=วันคาดรับ · sn=SN จริงรถสั่งผลิต
+  const [histEdit, setHistEdit]           = useState<{ sale_status: string; delivery_date: string; remark: string; eta: string; sn: string; commCat: string } | null>(null); // eta=วันคาดรับ · sn=SN จริงรถสั่งผลิต · commCat=หมวดค่าคอม
 
   // ── แจ้งเตือนเซลล์ทำรายการขาย — คงค้างจนแอดมินอ่าน + กดยืนยันตัดออกจากสต็อก (เก็บ ack ใน localStorage) ──
   type SaleAlert = { id: string; staff: string; status: string; title: string; sub: string };
@@ -533,6 +534,7 @@ export default function StockMain() {
       sale_status: s.sale_status ?? "ขายแล้ว", delivery_date: s.delivery_date ?? "", remark: s.remark ?? "",
       eta: (s.custom_fields?.["วันคาดรับรถสั่งผลิต"] as string) ?? "",
       sn: s.forklift_unit_no ?? "",
+      commCat: (s.custom_fields?.[COMMISSION_FIELD] as string) ?? "",
     });
   };
   const saveHistEdit = () => {
@@ -545,9 +547,11 @@ export default function StockMain() {
     if (histEdit.remark !== (histDetail.remark ?? "")) changes.push("แก้หมายเหตุ");
     const snChanged = !!histEdit.sn.trim() && histEdit.sn.trim() !== (histDetail.forklift_unit_no ?? "");
     if (snChanged) changes.push(`เติม SN→${histEdit.sn.trim()}`); // ก: รถสั่งผลิตมาถึง เติม SN จริง
+    if (histEdit.commCat !== ((histDetail.custom_fields?.[COMMISSION_FIELD] as string) ?? "")) changes.push(`หมวดค่าคอม→${histEdit.commCat || "-"}`);
 
     const cf: Record<string, string> = { ...(histDetail.custom_fields ?? {}) };
     if (histEdit.eta.trim()) cf["วันคาดรับรถสั่งผลิต"] = histEdit.eta.trim(); else delete cf["วันคาดรับรถสั่งผลิต"];
+    if (histEdit.commCat) cf[COMMISSION_FIELD] = histEdit.commCat; else delete cf[COMMISSION_FIELD];
     if (changes.length) {
       const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
       const line = `${stamp} · ${username || "สต็อก"}: ${changes.join(", ")}`;
@@ -1407,6 +1411,13 @@ export default function StockMain() {
                     </label>
                     <label className="text-xs text-slate-500">วันส่งมอบ
                       <input type="date" value={histEdit.delivery_date} onChange={e => setHistEdit({ ...histEdit, delivery_date: e.target.value })} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800" />
+                    </label>
+                    {/* หมวดลูกค้า (สำหรับคำนวณค่าคอมโฟล์คลิฟท์) — ลูกค้าเก่าระบบตรวจอัตโนมัติจากประวัติ */}
+                    <label className="text-xs text-slate-500">หมวดค่าคอม (โฟล์คลิฟท์ — สำหรับหน้าค่าคอม)
+                      <select value={histEdit.commCat} onChange={e => setHistEdit({ ...histEdit, commCat: e.target.value })} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white text-slate-800">
+                        <option value="">— เลือกหมวดลูกค้า —</option>
+                        {COMMISSION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
                     </label>
                     <label className="text-xs text-slate-500">หมายเหตุ
                       <textarea value={histEdit.remark} onChange={e => setHistEdit({ ...histEdit, remark: e.target.value })} rows={2} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800" />

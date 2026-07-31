@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ShieldCheck, RefreshCw, Search, Package, ShoppingCart, Trash2, CheckCircle, X, Pencil } from "lucide-react";
 import { fetchAuditApi, AuditEntry } from "@/lib/api";
+import { DashboardGuard } from "@/components/DashboardGuard";
 
 const fmtTime = (s?: string) => { if (!s) return ""; try { return new Date(s).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }); } catch { return s; } };
 
@@ -30,7 +31,7 @@ const actionStyle = (a?: string) => {
   return { c: "bg-slate-100 text-slate-600", i: <Pencil className="w-3.5 h-3.5" /> };
 };
 
-export default function AuditPage() {
+function AuditPageInner() {
   const [rows, setRows] = useState<AuditEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -111,4 +112,8 @@ export default function AuditPage() {
       </main>
     </div>
   );
+}
+
+export default function AuditPage() {
+  return <DashboardGuard><AuditPageInner /></DashboardGuard>;
 }

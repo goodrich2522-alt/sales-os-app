@@ -6,6 +6,7 @@ import { useApp } from "@/lib/AppContext";
 import { driveImg } from "@/lib/img";
 import { mockTransporterData } from "@/lib/mockData";
 import { InspectionRecord, DeletedInspectionRecord, Forklift } from "@/lib/types";
+import { DashboardGuard } from "@/components/DashboardGuard";
 import {
   ArrowLeft, Camera, ImageOff, Calendar, Truck, User,
   Trash2, RotateCcw, AlertTriangle, X, ZoomIn, ChevronLeft, ChevronRight, Info, Download
@@ -16,7 +17,7 @@ function daysLeft(deletedAt: string) {
   return Math.max(0, Math.ceil(ms / (24 * 60 * 60 * 1000)));
 }
 
-export default function InspectionsPage() {
+function InspectionsPageInner() {
   const { inspections, deletedInspections, deleteInspection, restoreInspection, purgeInspection, forklifts } = useApp();
 
   const [detail, setDetail]         = useState<InspectionRecord | null>(null);
@@ -433,4 +434,8 @@ function InspectionCard({
       </div>
     </div>
   );
+}
+
+export default function InspectionsPage() {
+  return <DashboardGuard><InspectionsPageInner /></DashboardGuard>;
 }

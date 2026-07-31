@@ -12,12 +12,13 @@ import {
   calcCommission, isClosedSale, isImportedSale, closeMonth, closeDate,
   COMMISSION_FIELD, COMMISSION_CATEGORIES,
 } from "@/lib/commission";
+import { DashboardGuard } from "@/components/DashboardGuard";
 
 const fmt = (n: number) => Number(n || 0).toLocaleString("th-TH");
 const MONTHS_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 const monthLabel = (ym: string) => { const [y, m] = ym.split("-"); return `${MONTHS_TH[Number(m) - 1] ?? m} ${Number(y) + 543}`; };
 
-export default function CommissionPage() {
+function CommissionPageInner() {
   const { sales, forklifts, updateSale } = useApp();
   const fkById = useMemo(() => new Map(forklifts.map(f => [f.id, f])), [forklifts]);
 
@@ -237,4 +238,8 @@ export default function CommissionPage() {
       </main>
     </div>
   );
+}
+
+export default function CommissionPage() {
+  return <DashboardGuard><CommissionPageInner /></DashboardGuard>;
 }
