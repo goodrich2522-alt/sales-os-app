@@ -49,14 +49,22 @@ function CommissionPageInner() {
 
   // จัดกลุ่มรายบุคคล
   const byStaff = useMemo(() => {
-    const m = new Map<string, { staff: string; deals: typeof rows; total: number; missing: number }>();
+    const m = new Map<string, { staff: string; deals: typeof rows; total: number; missing: number; noneCount: number; noneSaleTotal: number; noneComm: number }>();
     rows.forEach(r => {
       const staff = r.sale.sales_staff || "(ไม่ระบุเซลล์)";
-      const g = m.get(staff) ?? { staff, deals: [] as typeof rows, total: 0, missing: 0 };
+      const g = m.get(staff) ?? { staff, deals: [] as typeof rows, total: 0, missing: 0, noneCount: 0, noneSaleTotal: 0, noneComm: 0 };
       g.deals.push(r);
-      g.total += r.comm.amount;
+      if (r.comm.group !== "none") g.total += r.comm.amount; // รถกลุ่มอื่นคิดรวมทั้งเดือนทีหลัง (ไม่คิดทีละใบ)
       if (r.comm.group === "FORKLIFT" && r.comm.note) g.missing += 1;
       m.set(staff, g);
+    });
+    // รถกลุ่มอื่น (แฮนด์ลิฟท์/CBD/CNS) — รวมยอดขายทั้งเดือนก่อน แล้วคิด 1% ครั้งเดียว (ทุก 100,000 = 1,000)
+    m.forEach(g => {
+      const none = g.deals.filter(r => r.comm.group === "none");
+      g.noneCount = none.length;
+      g.noneSaleTotal = none.reduce((s, r) => s + (Number(r.sale.actual_sale) || 0), 0);
+      g.noneComm = Math.round(g.noneSaleTotal * 0.01);
+      g.total += g.noneComm;
     });
     return [...m.values()].sort((a, b) => b.total - a.total);
   }, [rows]);
@@ -79,10 +87,11 @@ function CommissionPageInner() {
     // ชีต 1: สรุปรายคน
     const sumRows = byStaff.map((g, i) => ({
       "อันดับ": i + 1, "เซลล์": g.staff, "จำนวนดีลปิด": g.deals.length,
+      "รถกลุ่มอื่น: จำนวนใบ": g.noneCount, "รถกลุ่มอื่น: ยอดขายรวม": g.noneSaleTotal, "รถกลุ่มอื่น: ค่าคอม 1%": g.noneComm,
       "ค่าคอมรวม (บาท)": g.total, "ดีลที่ยังไม่เลือกหมวด": g.missing,
     }));
     const ws1 = XLSX.utils.json_to_sheet(sumRows);
-    ws1["!cols"] = [8, 20, 14, 18, 20].map(w => ({ wch: w }));
+    ws1["!cols"] = [8, 20, 14, 16, 18, 16, 18, 20].map(w => ({ wch: w }));
     // ชีต 2: รายดีล
     const detRows = rows.map(r => ({
       "เซลล์": r.sale.sales_staff || "", "วันปิด": closeDate(r.sale),
@@ -92,7 +101,9 @@ function CommissionPageInner() {
       "เกณฑ์": r.comm.basis, "ยอด/กำไร (บาท)": Math.round(r.comm.basisValue),
       "หมวดลูกค้า": r.comm.category || "", "ลูกค้าเก่า(ประวัติ)": r.comm.returning ? "ใช่" : "",
       "ลูกค้า": r.sale.customer_name || "",
-      "ค่าคอม (บาท)": r.comm.amount, "หมายเหตุ": r.comm.note || "",
+      // รถกลุ่มอื่นคิดรวมทั้งเดือน (ดูชีตสรุป) → ไม่ลงค่าคอมทีละใบ กันนับซ้ำ
+      "ค่าคอม (บาท)": r.comm.group === "none" ? "" : r.comm.amount,
+      "หมายเหตุ": r.comm.group === "none" ? "รวมคิด 1% ที่ยอดเดือน (ดูชีตสรุป)" : (r.comm.note || ""),
     }));
     const ws2 = XLSX.utils.json_to_sheet(detRows);
     ws2["!cols"] = [18, 12, 16, 16, 22, 10, 8, 16, 18, 14, 20, 12, 22].map(w => ({ wch: w }));
@@ -182,7 +193,7 @@ function CommissionPageInner() {
 
               {expanded === g.staff && (
                 <div className="border-t border-slate-100 divide-y divide-slate-50">
-                  {g.deals.map(r => (
+                  {g.deals.filter(r => r.comm.group !== "none").map(r => (
                     <div key={r.sale.id} className="p-3.5 flex items-center gap-3 text-sm">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -214,6 +225,22 @@ function CommissionPageInner() {
                       </div>
                     </div>
                   ))}
+                  {/* รถกลุ่มอื่น (แฮนด์ลิฟท์/CBD/CNS) — รวมยอดขายทั้งเดือนแล้วคิด 1% ครั้งเดียว (ไม่แยกทีละใบ) */}
+                  {g.noneCount > 0 && (
+                    <div className="p-3.5 flex items-center gap-3 text-sm bg-blue-50/40">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-slate-800">รถกลุ่มอื่น (แฮนด์ลิฟท์/CBD/CNS ฯลฯ)</span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">อื่นๆ · รวมทั้งเดือน</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">{g.noneCount} ใบ · ยอดขายรวมทั้งเดือน ฿{fmt(g.noneSaleTotal)}</p>
+                        <p className="text-[11px] text-blue-600 mt-0.5">คิด 1% ของยอดรวม (ทุก 100,000 บาท = 1,000 บาท)</p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className={`font-bold ${g.noneComm > 0 ? "text-amber-600" : "text-slate-400"}`}>฿{fmt(g.noneComm)}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

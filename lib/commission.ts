@@ -95,7 +95,8 @@ export const calcCommission = (s: Sale, f?: Forklift, allSales?: Sale[]): Commis
   const vtype = String(f?.vehicle_category ?? s.vehicle_type ?? "").trim();
   const isForklift = vtype === "Forklift" || vtype === "" || /^(CPC?D|CQD|CPD|FD|FG|H2000)/i.test(String(model ?? ""));
   if (!isForklift) {
-    // รถกลุ่มอื่น (แฮนด์ลิฟท์/CBD/CNS ฯลฯ) → 1% ของยอดขาย (ทุก 100,000 = 1,000)
+    // รถกลุ่มอื่น (แฮนด์ลิฟท์/CBD/CNS ฯลฯ) → คิด 1% ของ "ยอดรวมทั้งเดือน" (ทุก 100,000 = 1,000)
+    // amount ต่อใบนี้เป็นค่าอ้างอิงเท่านั้น — หน้ารายงานรวมยอดทั้งเดือนแล้วคิด 1% ครั้งเดียว (กันเศษปัดต่อใบ)
     const saleAmount = Number(s.actual_sale) || 0;
     return { amount: Math.round(saleAmount * 0.01), group: "none", basis: "ยอดขาย", basisValue: saleAmount, category: "" };
   }
