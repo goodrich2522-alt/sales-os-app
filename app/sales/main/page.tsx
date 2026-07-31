@@ -240,8 +240,8 @@ export default function SalesMain() {
 
   const available = forklifts.filter(isSellable);
   const readyCount = available.filter(f => String(f.status).trim() === "พร้อมขาย").length;
-  // ฐานรายการ: ปกติ = รถขายได้ · ถ้าเลือกสถานะ = ทุกสถานะที่ตรง (รวมปิดการขาย เพื่อดูย้อนหลัง)
-  const listBase   = fStatus ? forklifts.filter(f => String(f.status).trim() === fStatus) : available;
+  // ฐานรายการ: ปกติ = รถขายได้ · เลือกสถานะ = ทุกสถานะที่ตรง · "รับมาล่าสุด" = รถขายได้ (เรียงวันรับทีหลัง)
+  const listBase   = (fStatus && fStatus !== "__recent__") ? forklifts.filter(f => String(f.status).trim() === fStatus) : available;
   const brands     = [...new Set(forklifts.map(f => f.brand).filter(Boolean))].sort(); // ทุกยี่ห้อในระบบ (CNC ฯลฯ)
   const statuses   = [...new Set(forklifts.map(f => String(f.status).trim()).filter(Boolean))].sort();
   const models     = [...new Set(listBase.filter(f => !fBrand || f.brand === fBrand).map(f => f.model).filter(Boolean))].sort();
@@ -284,8 +284,14 @@ export default function SalesMain() {
     return base && cat && spec;
   });
 
-  // เรียงตามวันที่เข้าสต็อก (created_at) — ล่าสุด/เก่าสุด
+  // เรียง: "รับมาล่าสุด" = ตามวันรับรถ (received_date) ใหม่สุดก่อน · ปกติ = วันเข้าสต็อก (created_at) ล่าสุด/เก่าสุด
   const sorted = [...filtered].sort((a, b) => {
+    if (fStatus === "__recent__") {
+      const ra = String(a.received_date || ""), rb = String(b.received_date || "");
+      if (ra && rb) return rb.localeCompare(ra);   // มีวันรับทั้งคู่ → ใหม่สุดก่อน
+      if (ra !== rb) return ra ? -1 : 1;            // คันที่มีวันรับมาก่อนคันที่ไม่มี
+      return String(b.created_at || "").localeCompare(String(a.created_at || ""));
+    }
     const ta = String(a.created_at || ""), tb = String(b.created_at || "");
     const cmp = ta < tb ? -1 : ta > tb ? 1 : 0;
     return sortOrder === "newest" ? -cmp : cmp;
@@ -863,6 +869,7 @@ export default function SalesMain() {
           <select value={fStatus} onChange={e => setFStatus(e.target.value)}
             className="text-sm bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer shadow-sm">
             <option value="">สถานะ: ขายได้ทั้งหมด</option>
+            <option value="__recent__">🆕 รับมาล่าสุด (เรียงวันรับใหม่สุด)</option>
             {statuses.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
