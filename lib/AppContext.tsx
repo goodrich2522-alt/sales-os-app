@@ -326,12 +326,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (appr === "รออนุมัติ") return GATED.has(intended) ? STATUS_PENDING_APPROVAL : intended; // รอสต็อกอนุมัติ
     return intended;                                                       // อนุมัติแล้ว / เก่า / ปิดการขายจริง → สถานะจริง
   };
+  // ตั้งมาร์กอนุมัติให้ดีล: จอง/กันสต็อก → "รออนุมัติ" · ปิดการขายจริง (ไม่ gated) → ตัดจองออกอัตโนมัติ ไม่ต้องรอสต็อก
+  const withApprovalMarker = (s: Sale): Sale => {
+    const appr = approvalOf(s);
+    if (appr === "อนุมัติแล้ว" || appr === "ปฏิเสธ") return s; // สต็อกตัดสินแล้ว คงไว้เป็นประวัติ
+    const intended = forkliftStatusForSale(s);
+    if (GATED.has(intended)) {
+      return appr === "รออนุมัติ" ? s : { ...s, custom_fields: { ...(s.custom_fields || {}), [STOCK_APPROVAL_FIELD]: "รออนุมัติ" } };
+    }
+    // ปิดการขายจริง/พร้อมขาย = ไม่ต้องอนุมัติ → ถ้าเคยติด "รออนุมัติ" ให้ตัดออก (ปิดการขายอัตโนมัติ)
+    if (appr === "รออนุมัติ") { const cf = { ...(s.custom_fields || {}) }; delete cf[STOCK_APPROVAL_FIELD]; return { ...s, custom_fields: cf }; }
+    return s;
+  };
 
   const addSale = useCallback((s0: Sale) => {
     lastLocalEditRef.current = Date.now();
-    // ดีลใหม่ที่กันสต็อก (จอง/รอจัดส่ง/รอไฟแนนซ์) + ยังไม่อนุมัติ → ติดมาร์ก "รออนุมัติ" ให้ฝ่ายสต็อกกดอนุมัติก่อน
-    const needGate = GATED.has(forkliftStatusForSale(s0)) && approvalOf(s0) === "";
-    const s = needGate ? { ...s0, custom_fields: { ...(s0.custom_fields || {}), [STOCK_APPROVAL_FIELD]: "รออนุมัติ" } } : s0;
+    // จอง/กันสต็อก → ติดมาร์ก "รออนุมัติ" · ปิดการขายจริง → ตัดจองออกอัตโนมัติ (ไม่ต้องรอสต็อก)
+    const s = withApprovalMarker(s0);
     setSales(p => [s, ...p]); // optimistic (โชว์รูป base64 ทันที)
     const nextStatus = forkStatusGated(s);
     setForklifts(p => p.map(f => f.id === s.forklift_id ? { ...f, status: nextStatus } : f));
@@ -345,9 +356,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       })();
     }
   }, []);
-  // แก้ไขดีลที่ทำไปแล้ว — อัปเดตข้อมูล + ปรับสถานะรถ (เคารพเกตอนุมัติ)
-  const updateSale = useCallback((s: Sale) => {
+  // แก้ไขดีลที่ทำไปแล้ว — อัปเดตข้อมูล + ปรับสถานะรถ (เคารพเกตอนุมัติ · ปิดการขายจริงตัดจองอัตโนมัติ)
+  const updateSale = useCallback((s0: Sale) => {
     lastLocalEditRef.current = Date.now();
+    const s = withApprovalMarker(s0);
     const nextStatus = forkStatusGated(s);
     setSales(p => p.map(x => x.id === s.id ? s : x));
     setForklifts(p => p.map(f => f.id === s.forklift_id ? { ...f, status: nextStatus } : f));

@@ -28,12 +28,12 @@ export default function TransporterMain() {
   const slotInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── ฟอร์มผู้รับรถ ──
-  const [piNo, setPiNo] = useState("");
+  // ── ฟอร์มผู้รับรถ (flow ใหม่: เลือก PI → เลือกคัน → กรอก SN/รูป) ──
+  const [openPI, setOpenPI] = useState<string | null>(null);   // PI ที่กางดูรายการรถ
+  const [recvCarId, setRecvCarId] = useState<string | null>(null); // รถที่เลือกรับ (เปิดฟอร์ม)
   const [receivedDate, setReceivedDate] = useState("");
   const [receiverName, setReceiverName] = useState("");
-  const [unitNo, setUnitNo] = useState("");           // SN
-  const [pickedModel, setPickedModel] = useState(""); // เลือก "รุ่น" เมื่อ PI มีหลายรุ่น
+  const [unitNo, setUnitNo] = useState("");           // SN ที่กรอก (สำหรับรถที่ยังไม่มี SN)
 
   // ── ฟอร์มผู้ส่งรถ (กรอก SN → โชว์รายละเอียดรถให้ตรวจก่อนส่ง) ──
   const [delSN, setDelSN] = useState("");
@@ -60,27 +60,21 @@ export default function TransporterMain() {
 
   const isReceiver = role === "ผู้รับรถ";
 
-  // ===== ผู้รับรถ: ระบบหาคันเอง =====
+  // ===== ผู้รับรถ: เลือกจาก PI → คัน =====
   const waitingList = forklifts.filter(f => String(f.status || "") === "รอรับ");
-  const snKey = unitNo.trim().toUpperCase();
-  const piKey = piNo.trim().toUpperCase();
-  // หาได้ทั้งจาก SN และรหัสสินค้า (FK-0001 ฯลฯ) — รหัสสินค้าคือ id หลักของรถในระบบ
-  const stockMatch = snKey
-    ? (forklifts.find(f =>
-        (f.SN && String(f.SN).toUpperCase() === snKey) ||
-        String(f.id ?? "").toUpperCase() === snKey
-      ) || null)
-    : null;
-  const waitingByPI = (!stockMatch && piKey) ? waitingList.filter(w => String(w.pi_no || "").trim().toUpperCase() === piKey) : [];
-  // จัดกลุ่มตามรุ่นภายใน PI — รุ่นเดียว = ใส่ SN ให้คันแรกเลย / หลายรุ่น = ให้เลือกรุ่นก่อน
-  const waitingModels = [...new Set(waitingByPI.map(w => String(w.model || "").trim()))];
-  const needPickModel = waitingModels.length > 1;
-  const recvTarget: Forklift | null = stockMatch
-    ? stockMatch
-    : waitingByPI.length === 0 ? null
-    : !needPickModel ? waitingByPI[0]                                              // รุ่นเดียว → คันแรก (FIFO)
-    : (waitingByPI.find(w => String(w.model || "").trim() === pickedModel) || null); // หลายรุ่น → คันแรกของรุ่นที่เลือก
-  const recvMode: "stock" | "waiting" | null = stockMatch ? "stock" : (recvTarget ? "waiting" : null);
+  // จัดกลุ่มรถรอรับตามเลข PI (เรียงตามเลข PI) — โชว์เป็นการ์ด PI ให้กดเข้าไปดูรถแต่ละคัน
+  const piGroups = (() => {
+    const m = new Map<string, Forklift[]>();
+    waitingList.forEach(f => { const pi = String(f.pi_no || "").trim() || "(ไม่มี PI)"; const a = m.get(pi) ?? []; a.push(f); m.set(pi, a); });
+    const num = (pi: string) => { const mm = pi.match(/\d+/); return mm ? Number(mm[0]) : Number.MAX_SAFE_INTEGER; };
+    return [...m.entries()].map(([pi, cars]) => ({ pi, cars })).sort((a, b) => num(a.pi) - num(b.pi) || a.pi.localeCompare(b.pi));
+  })();
+  const openPICars = openPI ? (piGroups.find(g => g.pi === openPI)?.cars ?? []) : [];
+  const recvTarget: Forklift | null = recvCarId ? (forklifts.find(f => f.id === recvCarId) ?? null) : null;
+  // SN ที่จะบันทึก: ถ้ารถมี SN จริงแล้วใช้เลย · ยังไม่มี (รถสั่งผลิต) → ใช้ที่กรอก
+  const carHasSN = !!(recvTarget?.SN && String(recvTarget.SN).trim());
+  const snForSave = (carHasSN ? String(recvTarget!.SN).trim() : unitNo.trim());
+  const snKey = snForSave.toUpperCase();
   // STAXX/CNC = ล็อตตู้คอนเทนเนอร์ ยืนยันแล้วพร้อมขายเลย · ยี่ห้ออื่นต้องให้ฝ่ายสต็อกยืนยันนำเข้าก่อน
   const recvIsContainer = recvTarget ? /^(STAXX|CNC)$/i.test(String(recvTarget.brand || "")) : false;
 
@@ -89,14 +83,13 @@ export default function TransporterMain() {
   const allSlotsFilled = filledSlots.length === INSPECTION_SLOTS.length;
   const missingSlotLabels = INSPECTION_SLOTS.filter(s => !slotImages[s.key]).map(s => s.label);
 
-  const receiverValid = !!(piKey && receivedDate && receiverName.trim() && snKey && recvTarget) && allSlotsFilled;
+  const receiverValid = !!(recvTarget && receivedDate && receiverName.trim() && snForSave) && allSlotsFilled;
 
-  // ── เช็ค SN ซ้ำ: SN ที่กรอกไปตรงกับรถที่ "รับเข้าระบบแล้ว" (สถานะไม่ใช่ 'รอรับ') → เตือนก่อนเพิ่ม ──
-  // รถ 'รอรับ' ปกติ หรือ SN ใหม่ = ไม่ซ้ำ ผ่านได้เลย (จะได้ไม่รบกวนงานรับรถปกติ)
+  // ── เช็ค SN ซ้ำ: SN ที่กรอก/มี ตรงกับรถอื่นที่ "รับเข้าระบบแล้ว" (สถานะไม่ใช่ 'รอรับ') → เตือนก่อน ──
   const snDupCar: Forklift | null = snKey
-    ? (recvMode === "stock"
-        ? (recvTarget && String(recvTarget.status || "").trim() !== "รอรับ" ? recvTarget : null)
-        : (forklifts.find(f => f.id !== recvTarget?.id && f.SN && String(f.SN).toUpperCase() === snKey) || null))
+    ? (forklifts.find(f => f.id !== recvTarget?.id &&
+        ((f.SN && String(f.SN).toUpperCase() === snKey) || String(f.id ?? "").toUpperCase() === snKey) &&
+        String(f.status || "").trim() !== "รอรับ") || null)
     : null;
 
   // ===== ผู้ส่งรถ: กรอก SN → หา รถ + ดีล =====
@@ -178,24 +171,23 @@ export default function TransporterMain() {
 
   // ===== บันทึก =====
   const submitReceiver = () => {
-    if (!recvTarget) return;
+    if (!recvTarget || !snForSave) return;
     const insId = `ins_${Date.now()}`;
     const rd = thaiDate(receivedDate);
     addInspection({ id: insId, unit_no: snKey, transporter_name: receiverName.trim() || username, transporter_phone: userphone || undefined, date: receivedDate || today(), ...buildImagePayload(), role: "ผู้รับรถ" });
     const before = { ...recvTarget };
-    // STAXX/CNC = ล็อตตู้คอนเทนเนอร์ ไม่มีเกตยืนยัน → "พร้อมขาย" ทันที · ยี่ห้ออื่น → พักที่ "รอยืนยันนำเข้าสต็อก" ให้ฝ่ายสต็อกกดยืนยันก่อนขึ้นหน้าขาย
+    // STAXX/CNC = ล็อตตู้คอนเทนเนอร์ ไม่มีเกตยืนยัน → "พร้อมขาย" ทันที · ยี่ห้ออื่น → พักที่ "รอยืนยันนำเข้าสต็อก"
     const isContainerLot = /^(STAXX|CNC)$/i.test(String(recvTarget.brand || ""));
     const newStatus = isContainerLot ? "พร้อมขาย" : "รอยืนยันนำเข้าสต็อก";
     updateForklift({
       ...recvTarget,
-      SN: recvMode === "waiting" ? snKey : recvTarget.SN,
-      pi_no: piNo.trim() || recvTarget.pi_no,
+      SN: carHasSN ? recvTarget.SN : snForSave,     // รถสั่งผลิต → เติม SN จริงที่กรอก
       received_date: rd || recvTarget.received_date,
       status: newStatus,
     });
     setDone({ insId, before, label: isContainerLot
-      ? `รับรถ ${snKey} แล้ว → พร้อมขาย (ขึ้นหน้าขายทันที)`
-      : `รับรถ ${snKey} แล้ว → ส่งฝ่ายสต็อกยืนยันนำเข้าก่อนขึ้นหน้าขาย` });
+      ? `รับรถ ${snForSave} แล้ว → พร้อมขาย (ขึ้นหน้าขายทันที)`
+      : `รับรถ ${snForSave} แล้ว → ส่งฝ่ายสต็อกยืนยันนำเข้าก่อนขึ้นหน้าขาย` });
   };
 
   const submitDeliverer = () => {
@@ -222,19 +214,19 @@ export default function TransporterMain() {
 
   const resetForm = () => {
     setSlotImages({}); setExtraImages([]); setActiveSlot(null); setDone(null); setDupConfirm(null);
-    setPiNo(""); setReceivedDate(""); setUnitNo(""); setPickedModel("");
+    setOpenPI(null); setRecvCarId(null); setReceivedDate(""); setUnitNo("");
     setReceiverName(username);
     setDelSN(""); setSenderName(username); setDeliverDate(""); setSalesOwner("");
     setDelCompany(""); setDelLocation("");
   };
 
-  // รับคันถัดไปใน PI เดิม — คง PI/วันที่/ชื่อผู้รับ รีเซ็ตแค่ SN + รูป (batch รับหลายคันใน 1 PI)
+  // รับคันถัดไปใน PI เดิม — คงวันที่/ชื่อผู้รับ กลับไปหน้ารายการรถของ PI นั้น (batch รับหลายคันใน 1 PI)
   const startNextInPI = () => {
     setSlotImages({}); setExtraImages([]); setActiveSlot(null); setDone(null);
-    setUnitNo(""); setPickedModel("");
+    setRecvCarId(null); setUnitNo("");
   };
-  // จำนวนรถใน PI นี้ที่ยังรอรับ (หลังหักคันที่เพิ่งรับไปแล้ว) — ใช้โชว์ปุ่ม "รับคันถัดไป"
-  const remainingInPI = piKey ? waitingList.filter(w => String(w.pi_no || "").trim().toUpperCase() === piKey).length : 0;
+  // จำนวนรถใน PI นี้ที่ยังรอรับ — ใช้โชว์ปุ่ม "รับคันถัดไป"
+  const remainingInPI = openPI ? (piGroups.find(g => g.pi === openPI)?.cars.length ?? 0) : 0;
 
   const switchRole = (r: TransporterRole) => { setRole(r); resetForm(); };
   const handleLogout = () => { localStorage.removeItem("transporter_name"); localStorage.removeItem("transporter_phone"); router.push("/transporter/login"); };
@@ -403,7 +395,7 @@ export default function TransporterMain() {
             {isReceiver && done.before && remainingInPI > 0 && (
               <button onClick={startNextInPI}
                 className="w-full flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-400 to-amber-500 text-slate-900 font-bold py-3.5 rounded-xl transition-all active:scale-[0.98]">
-                <Truck className="w-4 h-4" />รับคันถัดไปใน PI {piKey} (เหลือ {remainingInPI} คัน) <ChevronRight className="w-4 h-4" />
+                <Truck className="w-4 h-4" />รับคันถัดไปใน PI {openPI} (เหลือ {remainingInPI} คัน) <ChevronRight className="w-4 h-4" />
               </button>
             )}
             <div className="flex gap-2">
@@ -418,82 +410,95 @@ export default function TransporterMain() {
             </div>
           </div>
         ) : isReceiver ? (
-          /* ============ ผู้รับรถ ============ */
-          <>
+          /* ============ ผู้รับรถ (เลือก PI → เลือกคัน → กรอก SN/รูป) ============ */
+          !recvTarget ? (
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-              <h2 className="text-base font-bold text-slate-800 mb-1 flex items-center gap-2"><FileText className="w-4 h-4 text-amber-500" />ข้อมูลการรับรถ</h2>
-              <p className="text-xs text-slate-500 mb-4">กรอก PI กับ SN ระบบจะหาให้เองว่าเป็นรถคันไหน แล้วเลื่อนลงไปถ่ายรูป</p>
-              <div className="flex flex-col gap-3.5">
-                <div>
-                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1.5"><Hash className="w-3.5 h-3.5 text-amber-500" />เลข PI</label>
-                  <input value={piNo} onChange={e => { setPiNo(e.target.value); setPickedModel(""); }} placeholder="เช่น PI017" className={inp} />
-                </div>
-                <div>
-                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1.5"><Hash className="w-3.5 h-3.5 text-amber-500" />SN (ซีเรียลรถ)</label>
-                  <input value={unitNo} onChange={e => setUnitNo(e.target.value)} placeholder="เช่น 010503T1726" className={inp} />
-                </div>
-
-                {/* ผลการหาคัน */}
-                {(snKey || piKey) && (
-                  recvMode === "stock" ? (
-                    <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5">
-                      <PackageCheck className="w-4 h-4 flex-shrink-0" />
-                      <span className="text-xs font-medium">พบรถในสต็อก: <span className="font-bold">{recvTarget!.brand} {recvTarget!.model}</span> — เติม PI/วันรับให้ และเชื่อมไปหน้าขาย</span>
-                    </div>
-                  ) : needPickModel ? (
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-                      <p className="text-xs font-semibold text-amber-700 mb-2 flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" />PI {piKey} มีหลายรุ่น — แตะเลือกรุ่นที่รับ</p>
-                      <div className="flex flex-col gap-1.5">
-                        {waitingModels.map(m => {
-                          const cnt = waitingByPI.filter(w => String(w.model || "").trim() === m).length;
-                          const sel = pickedModel === m;
-                          return (
-                            <button key={m} onClick={() => setPickedModel(m)}
-                              className={`text-left rounded-lg border-2 px-3 py-2 transition-all flex items-center justify-between ${sel ? "border-amber-400 bg-white" : "border-slate-200 bg-white hover:border-amber-200"}`}>
-                              <span><span className="text-sm font-bold text-slate-800">{m || "—"}</span><span className="text-xs text-slate-500"> · รอรับ {cnt} คัน</span></span>
-                              {sel && <CheckCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {pickedModel && <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1"><PackageCheck className="w-3.5 h-3.5" />เลือก {pickedModel} — {recvIsContainer ? "ยืนยันแล้วเข้าหน้าขายทันที" : "ยืนยันแล้วส่งฝ่ายสต็อกยืนยันนำเข้าก่อน"}</p>}
-                    </div>
-                  ) : recvMode === "waiting" ? (
-                    <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5">
-                      <PackageCheck className="w-4 h-4 flex-shrink-0" />
-                      <span className="text-xs font-medium">รถรอรับ: <span className="font-bold">{recvTarget!.model}</span> — {recvIsContainer ? "ยืนยันแล้วเปลี่ยนเป็นพร้อมขาย ขึ้นหน้าเซลล์" : "ยืนยันแล้วส่งฝ่ายสต็อกยืนยันนำเข้าก่อนขึ้นหน้าขาย"}</span>
+              {!openPI ? (
+                /* ── ระดับ 1: การ์ดเลข PI ── */
+                <>
+                  <h2 className="text-base font-bold text-slate-800 mb-1 flex items-center gap-2"><FileText className="w-4 h-4 text-amber-500" />เลือกเลข PI ที่จะรับเข้า</h2>
+                  <p className="text-xs text-slate-500 mb-4">แตะการ์ด PI เพื่อดูรถทุกคันใน PI นั้น แล้วเลือกคันที่จะรับ</p>
+                  {piGroups.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                      <Truck className="w-10 h-10 text-slate-300 mb-2" /><p className="text-sm">ยังไม่มีรถรอรับเข้า</p>
+                      <p className="text-xs text-slate-400 mt-1">รถต้องอยู่ในระบบสถานะ &quot;รอรับ&quot; ก่อน (ฝ่ายสต็อก/นำเข้า PI)</p>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2.5">
-                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                      <span className="text-xs">ยังไม่พบรถ — เช็ค PI/SN ให้ตรง (รถสั่งใหม่ต้องมีในระบบสถานะ &quot;รอรับ&quot; ก่อน)</span>
-                    </div>
-                  )
-                )}
-
-                {/* รับหลายคันใน 1 PI — โชว์รายการรถทั้งหมดใน PI นี้ที่รอรับ */}
-                {waitingByPI.length > 1 && (
-                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
-                    <p className="text-xs font-bold text-blue-700 mb-1.5 flex items-center gap-1.5"><Truck className="w-3.5 h-3.5" />PI {piKey} มีรถรอรับ {waitingByPI.length} คัน — รับทีละคัน (บันทึกคันนี้แล้วกด &quot;รับคันถัดไป&quot;)</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {waitingByPI.map((w, i) => (
-                        <span key={w.id} className="text-[11px] bg-white border border-blue-100 rounded-lg px-2 py-1 text-slate-600">{i + 1}. {w.model}{w.SN ? ` · ${w.SN}` : ""}</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                      {piGroups.map(g => (
+                        <button key={g.pi} onClick={() => setOpenPI(g.pi)}
+                          className="flex flex-col items-center gap-1 rounded-2xl border-2 border-amber-200 bg-amber-50/50 hover:border-amber-400 hover:bg-amber-50 p-4 transition-all active:scale-[0.97]">
+                          <Hash className="w-4 h-4 text-amber-500" />
+                          <span className="text-base font-bold text-slate-800 leading-tight text-center break-all">{g.pi}</span>
+                          <span className="text-xs font-semibold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">{g.cars.length} คัน</span>
+                        </button>
                       ))}
                     </div>
+                  )}
+                </>
+              ) : (
+                /* ── ระดับ 2: รายการรถใน PI ที่เลือก ── */
+                <>
+                  <button onClick={() => setOpenPI(null)} className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-amber-700 mb-3"><ChevronRight className="w-3.5 h-3.5 rotate-180" />เลือก PI อื่น</button>
+                  <h2 className="text-base font-bold text-slate-800 mb-1 flex items-center gap-2"><Hash className="w-4 h-4 text-amber-500" />PI {openPI} — {openPICars.length} คัน</h2>
+                  <p className="text-xs text-slate-500 mb-4">แตะรถที่จะรับเข้า แล้วกรอก SN (ถ้ายังไม่มี) + แนบรูป 6 ด้าน</p>
+                  <div className="flex flex-col gap-2">
+                    {openPICars.map(c => {
+                      const noSN = !(c.SN && String(c.SN).trim());
+                      return (
+                        <button key={c.id} onClick={() => { setRecvCarId(c.id); setUnitNo(String(c.SN || "")); }}
+                          className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-amber-50 hover:border-amber-300 p-3.5 transition-all text-left active:scale-[0.99]">
+                          <div className="bg-white border border-slate-200 rounded-lg p-2 flex-shrink-0"><Truck className="w-4 h-4 text-amber-600" /></div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-slate-800 text-sm">{c.brand} {c.model}</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">{noSN
+                              ? <span className="text-amber-600 font-semibold">รหัส {c.id} · รถสั่งผลิต (ยังไม่มี SN — กรอกตอนรับ)</span>
+                              : <>SN: <span className="font-semibold text-slate-700">{c.SN}</span></>}</p>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            /* ── ระดับ 3: ฟอร์มรับรถของคันที่เลือก ── */
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+              <button onClick={() => { setRecvCarId(null); setSlotImages({}); setExtraImages([]); }} className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-amber-700 mb-3"><ChevronRight className="w-3.5 h-3.5 rotate-180" />เลือกคันอื่นใน PI {recvTarget.pi_no}</button>
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
+                <p className="font-bold text-slate-800 text-sm">{recvTarget.brand} {recvTarget.model}</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">รหัส {recvTarget.id} · PI {recvTarget.pi_no || "—"}</p>
+              </div>
+              <div className="flex flex-col gap-3.5">
+                {/* SN — มีแล้วโชว์เฉยๆ · รถสั่งผลิตให้กรอก */}
+                {carHasSN ? (
+                  <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5">
+                    <PackageCheck className="w-4 h-4 flex-shrink-0" /><span className="text-xs font-medium">SN: <span className="font-bold">{recvTarget.SN}</span></span>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1.5"><Hash className="w-3.5 h-3.5 text-amber-500" />SN (ซีเรียลรถจริง) <span className="text-red-500">*</span></label>
+                    <input value={unitNo} onChange={e => setUnitNo(e.target.value)} placeholder="กรอกเลข SN ที่ตัวรถ เช่น 010503T1726" className={inp} />
                   </div>
                 )}
-
+                {/* หมายเหตุเกต */}
+                <div className={`flex items-center gap-2 text-xs rounded-xl px-3.5 py-2 ${recvIsContainer ? "text-teal-700 bg-teal-50 border border-teal-200" : "text-blue-700 bg-blue-50 border border-blue-200"}`}>
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                  {recvIsContainer ? "ยืนยันแล้ว → พร้อมขายทันที (ล็อตตู้คอนเทนเนอร์)" : "ยืนยันแล้ว → ส่งฝ่ายสต็อกยืนยันนำเข้าก่อนขึ้นหน้าขาย"}
+                </div>
                 <div>
-                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1.5"><Calendar className="w-3.5 h-3.5 text-amber-500" />วันที่รับรถ</label>
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1.5"><Calendar className="w-3.5 h-3.5 text-amber-500" />วันที่รับรถ <span className="text-red-500">*</span></label>
                   <input type="date" value={receivedDate} onChange={e => setReceivedDate(e.target.value)} className={inp} />
                 </div>
                 <div>
-                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1.5"><User className="w-3.5 h-3.5 text-amber-500" />ชื่อผู้รับรถ</label>
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1.5"><User className="w-3.5 h-3.5 text-amber-500" />ชื่อผู้รับรถ <span className="text-red-500">*</span></label>
                   <input value={receiverName} onChange={e => setReceiverName(e.target.value)} placeholder="ชื่อผู้ไปรับรถ" className={inp} />
                 </div>
               </div>
             </div>
-          </>
+          )
         ) : (
           /* ============ ผู้ส่งมอบรถ ============ */
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
@@ -728,7 +733,7 @@ export default function TransporterMain() {
             {isReceiver && !receiverValid && (
               <p className="text-xs text-amber-600 text-center flex items-center justify-center gap-1">
                 <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                กรอก PI · SN · วันที่รับรถ · ชื่อผู้รับรถ ให้ครบ{!allSlotsFilled && ` + ถ่ายรูปให้ครบ 6 ช่อง (ขาด ${missingSlotLabels.length} รูป)`}
+กรอก SN · วันที่รับรถ · ชื่อผู้รับรถ ให้ครบ{!allSlotsFilled && ` + ถ่ายรูปให้ครบ 6 ช่อง (ขาด ${missingSlotLabels.length} รูป)`}
               </p>
             )}
             {!isReceiver && !delValid && (
