@@ -106,7 +106,8 @@ npm run lint     # eslint
 
 ## แผนพัฒนา / ช่องโหว่ที่รอแก้
 - **[ROADMAP.md](ROADMAP.md)** ⭐ — ลำดับงานหลักทั้งหมด (เฟส A-G) เริ่มอ่านที่นี่ก่อน
-- **[DEV-PLAN.md](DEV-PLAN.md)** — ผลตรวจช่องโหว่ + โค้ดซ้ำ (13 ก.ค. 2026) แผนแก้ 4 เฟส · ⚠️ **RLS ยังไม่ปิด (policy `open_all` ยังอยู่) = ข้อมูลลูกค้า/ราคาทุนเปิดโล่ง**
+- **[DEV-PLAN.md](DEV-PLAN.md)** — ผลตรวจช่องโหว่ + โค้ดซ้ำ (13 ก.ค. 2026) แผนแก้ 4 เฟส
+- ✅ **RLS เปิดใช้งานแล้ว (ยืนยัน 31 ก.ค. 2026):** forklifts/sales/inspections/app_config select ต้อง `is_approved()` · write แยกตาม role (`user_role()` = stock/sales/transporter, `is_admin()`) · **public (anon) ดึงข้อมูลไม่ได้ = 0 rows** · ผู้ขนส่ง (anon) อ่านผ่าน RPC `transporter_stock`/`transporter_inspections` (ตัดราคาทุน/ลูกค้า) · audit_log: insert เปิด, select=approved · **ที่เหลือ (optional):** column-level — ซ่อน cost_price จาก sales, ซ่อนข้อมูลลูกค้าจาก stock (staff-vs-staff เท่านั้น ไม่ใช่ public)
 - **[DATA-SYNC-PLAN.md](DATA-SYNC-PLAN.md)** — ซิงก์ DB กับ Excel สต็อกจริง (gitignored — มีข้อมูลลูกค้า)
 - ก่อนเพิ่มฟีเจอร์ใหม่ให้เช็คว่างานนั้นชนกับแผนหรือไม่ และอัปเดตสถานะ ☐→☑ เมื่อทำเสร็จ
 
