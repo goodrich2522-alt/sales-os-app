@@ -1748,7 +1748,7 @@ export default function SalesMain() {
                         </div>
                         <p className="text-xs text-slate-500 mt-1 truncate">{sale.customer_name} · {sale.province}</p>
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${sale.payment_type === "เงินสด" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{sale.payment_type}</span>
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${sale.payment_type === "เงินสด" ? "bg-emerald-100 text-emerald-700" : sale.payment_type ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}>{sale.payment_type || "ไม่ระบุ"}</span>
                           {sale.contact_source && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${CONTACT_SOURCE_COLORS[sale.contact_source] ?? "bg-slate-100 text-slate-600"}`}>{sale.contact_source}</span>}
                           <span className="text-xs text-slate-500">{sale.created_at}</span>
                         </div>
