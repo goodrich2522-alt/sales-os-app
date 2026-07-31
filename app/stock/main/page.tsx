@@ -94,6 +94,8 @@ export default function StockMain() {
   const [detailLightbox, setDetailLightbox] = useState<{ imgs: string[]; idx: number } | null>(null);
   const [locEdit, setLocEdit]             = useState(""); // แก้สถานที่ที่รถอยู่ (ใน detail modal)
   const [locSaved, setLocSaved]           = useState(false);
+  const [noteEdit, setNoteEdit]           = useState(""); // หมายเหตุ/รายละเอียดการขาย (custom_fields["หมายเหตุการขาย"])
+  const [noteSaved, setNoteSaved]         = useState(false);
   const [orderDateEdit, setOrderDateEdit] = useState(""); // วันสั่งรถ (รถสั่งผลิต)
   const [orderSaved, setOrderSaved]       = useState(false);
   // ── ประวัติการขาย (เฟส 1): ดีลทุกเซลล์ ──
@@ -140,6 +142,7 @@ export default function StockMain() {
   // เปิดรถคันไหน → เติมสถานที่เดิมลงช่องแก้ไข
   useEffect(() => {
     setLocEdit(detailItem?.location ?? ""); setLocSaved(false);
+    setNoteEdit((detailItem?.custom_fields?.["หมายเหตุการขาย"] as string) ?? ""); setNoteSaved(false);
     setOrderDateEdit((detailItem?.custom_fields?.["วันสั่งรถ"] as string) ?? ""); setOrderSaved(false);
   }, [detailItem]);
 
@@ -1561,6 +1564,18 @@ export default function StockMain() {
                       {locSaved ? "บันทึกแล้ว ✓" : "บันทึก"}
                     </button>
                   </div>
+                </div>
+                {/* หมายเหตุ/รายละเอียดการขาย — ราคาขายจริง/ค่าขนส่ง/งาเท/เลขใบกำกับ ฯลฯ (นำเข้าจากไฟล์สต็อก + แก้ได้) */}
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" />หมายเหตุ / รายละเอียดการขาย</p>
+                  <textarea value={noteEdit} onChange={e => { setNoteEdit(e.target.value); setNoteSaved(false); }} rows={3}
+                    placeholder="เช่น ราคาขายจริง / ค่าขนส่ง+ผู้ให้บริการ / งาเท+ทุนงาเท / เลขใบกำกับ ..."
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none" />
+                  <button onClick={() => { const cf = { ...(it.custom_fields || {}) }; if (noteEdit.trim()) cf["หมายเหตุการขาย"] = noteEdit.trim(); else delete cf["หมายเหตุการขาย"]; const u = { ...it, custom_fields: cf }; updateForklift(u); setDetailItem(u); setNoteSaved(true); }}
+                    disabled={noteEdit.trim() === ((it.custom_fields?.["หมายเหตุการขาย"] as string) ?? "").trim()}
+                    className="mt-2 px-4 py-2 rounded-xl text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                    {noteSaved ? "บันทึกแล้ว ✓" : "บันทึกหมายเหตุ"}
+                  </button>
                 </div>
                 {/* วันสั่งรถ (สำหรับรถสั่งผลิต) — โชว์บนการ์ดหน้าขายด้วย */}
                 <div>
