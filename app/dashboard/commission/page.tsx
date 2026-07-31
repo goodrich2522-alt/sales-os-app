@@ -54,7 +54,7 @@ export default function CommissionPage() {
       const g = m.get(staff) ?? { staff, deals: [] as typeof rows, total: 0, missing: 0 };
       g.deals.push(r);
       g.total += r.comm.amount;
-      if (r.comm.note) g.missing += 1;
+      if (r.comm.group === "FORKLIFT" && r.comm.note) g.missing += 1;
       m.set(staff, g);
     });
     return [...m.values()].sort((a, b) => b.total - a.total);
@@ -62,7 +62,8 @@ export default function CommissionPage() {
 
   const grandTotal = byStaff.reduce((s, g) => s + g.total, 0);
   const totalDeals = rows.length;
-  const totalMissing = rows.filter(r => r.comm.note).length;
+  // นับเฉพาะดีลโฟล์คลิฟท์ที่ยังไม่เลือกหมวด (ไม่รวมดีลที่ไม่เข้าเงื่อนไขค่าคอม เช่น STAXX/แฮนด์ลิฟท์)
+  const totalMissing = rows.filter(r => r.comm.group === "FORKLIFT" && r.comm.note).length;
 
   // แก้หมวดลูกค้าของดีล (สำหรับดีลเก่าที่ยังไม่ได้เลือก) → บันทึกลง custom_fields
   const setCategory = (sale: Sale, cat: string) => {
