@@ -6,7 +6,7 @@ import {
   Package, Plus, LogOut, CheckCircle, AlertCircle, List, X,
   TrendingUp, Boxes, Trash2, Settings, Pencil, Check, ChevronDown, ChevronRight,
   Clock, Hash, Camera, ImageOff, Eye, Bell, MapPin, History,
-  Download, Upload, FileText, ShoppingCart, User, Truck
+  Download, Upload, FileText, ShoppingCart, User
 } from "lucide-react";
 import { Forklift, Sale, STOCK_APPROVAL_FIELD } from "@/lib/types";
 import { useApp, FieldConfig } from "@/lib/AppContext";
@@ -634,15 +634,6 @@ export default function StockMain() {
                 <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-orange-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{pendingBookings.length}</span>
               )}
             </button>
-            {/* กระดิ่ง 1 (ฟ้า) — รถรับเข้าใหม่ รอยืนยันนำเข้าสต็อก → คลิกเลื่อนไปการ์ด */}
-            <button onClick={() => document.getElementById("pending-import")?.scrollIntoView({ behavior: "smooth" })}
-              title="รถรับเข้าใหม่ รอยืนยันนำเข้าสต็อก"
-              className="relative flex items-center text-slate-600 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-lg transition-all border border-transparent hover:border-blue-200">
-              <Truck className="w-5 h-5" />
-              {pendingImport.length > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-blue-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{pendingImport.length}</span>
-              )}
-            </button>
             {/* กระดิ่ง 2 (ชมพู) — ออเดอร์ขายจากเซลล์ รอรับทราบ → คลิกเปิดกล่องแจ้งเตือน */}
             <button onClick={() => setShowAlerts(true)}
               title="ออเดอร์ขายจากเซลล์ รอรับทราบ"
@@ -674,10 +665,7 @@ export default function StockMain() {
 
       <main className="max-w-4xl mx-auto px-4 py-6 flex flex-col gap-5">
         {/* Stats — แยกตามสถานะให้ฝ่ายสต็อกเห็นชัดทุกกอง */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <StatCard label="รอยืนยันนำเข้า" value={pendingImport.length}
-            onClick={() => { document.getElementById("pending-import")?.scrollIntoView({ behavior: "smooth" }); }}
-            icon={<Bell className="w-4 h-4" />} color="text-blue-700" bg="bg-blue-50 border-blue-200" iconBg="bg-blue-100 text-blue-600" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <StatCard label="เหลือ (พร้อมขาย)" value={available} onClick={() => showStatus("พร้อมขาย")} icon={<TrendingUp className="w-4 h-4" />} color="text-emerald-700" bg="bg-emerald-50 border-emerald-100" iconBg="bg-emerald-100 text-emerald-600" />
           <StatCard label="จอง"              value={reserved}  onClick={() => showStatus("จอง")} icon={<Boxes className="w-4 h-4" />}       color="text-amber-700"   bg="bg-amber-50 border-amber-100"   iconBg="bg-amber-100 text-amber-600" />
           <StatCard label="ติดไฟแนนซ์"       value={financing} onClick={() => showStatus("รอผ่านไฟแนนซ์")} icon={<Clock className="w-4 h-4" />}       color="text-rose-700"    bg="bg-rose-50 border-rose-100"     iconBg="bg-rose-100 text-rose-600" />
