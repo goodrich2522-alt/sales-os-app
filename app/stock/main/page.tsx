@@ -8,7 +8,7 @@ import {
   Clock, Hash, Camera, ImageOff, Eye, Bell, MapPin, History,
   Download, Upload, FileText, ShoppingCart, User
 } from "lucide-react";
-import { Forklift, Sale, STOCK_APPROVAL_FIELD } from "@/lib/types";
+import { Forklift, Sale, STOCK_APPROVAL_FIELD, isVoidSale } from "@/lib/types";
 import { useApp, FieldConfig } from "@/lib/AppContext";
 import { isPendingId } from "@/lib/productId";
 import { thaiMonthShort } from "@/lib/format";
@@ -471,6 +471,7 @@ export default function StockMain() {
   const histFiltered = useMemo(() => {
     const q = histSearch.trim().toLowerCase();
     return sales
+      .filter(s => !isVoidSale(s)) // ตัดดีลที่ถูกปฏิเสธจากสต็อกออกจากประวัติการขาย
       .filter(s => {
         const okStaff = histStaff === "all" || s.sales_staff === histStaff;
         const okStatus = histStatus === "all" || (s.sale_status ?? "ขายแล้ว") === histStatus;

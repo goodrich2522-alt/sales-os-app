@@ -11,7 +11,7 @@ import { useApp } from "@/lib/AppContext";
 import { getRegion } from "@/lib/mockData";
 import { buildStaffMonthly, buildStaffWeekly, buildAllMonthlyWeekly } from "@/components/charts/Charts";
 import { CONTACT_SOURCE_COLORS } from "@/lib/constants";
-import { Sale, Forklift } from "@/lib/types";
+import { Sale, Forklift, isVoidSale } from "@/lib/types";
 import GoogleLoginButton, { type GoogleUser } from "@/components/GoogleLoginButton";
 import { checkAccess, hasActiveSession } from "@/lib/auth";
 import { apiEnabled } from "@/lib/api";
@@ -67,7 +67,9 @@ export default function Dashboard() {
   const [dashChecking, setDashChecking] = useState(false);
   const [dashNotice, setDashNotice] = useState(""); // แจ้งเหตุที่เข้าไม่ได้ (รออนุมัติ/ถูกระงับ/ยังไม่ลงทะเบียน)
 
-  const { sales: allSales, forklifts } = useApp();
+  const { sales: rawSales, forklifts } = useApp();
+  // ตัดดีลที่ถูกปฏิเสธจากสต็อก (ไม่ใช่ดีลจริง) ออกจากยอด/รายงานทั้งแดชบอร์ด
+  const allSales = useMemo(() => rawSales.filter((s) => !isVoidSale(s)), [rawSales]);
   const staffNames = Array.from(new Set(allSales.map((s) => s.sales_staff).filter(Boolean)));
   const [selectedStaff, setSelectedStaff] = useState("");
   useEffect(() => {

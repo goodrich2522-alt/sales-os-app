@@ -18,6 +18,9 @@ export const STOCK_APPROVAL_FIELD = "อนุมัติสต็อก";     
 export const STATUS_PENDING_APPROVAL = "รออนุมัติสต็อก";     // สถานะรถระหว่างรออนุมัติ
 // สถานะรถ (จาก sale_status) ที่กันสต็อก + ต้องอนุมัติก่อน (ยกเว้นปิดการขายจริง)
 export const GATED_STATUSES = ["จอง", "รอจัดส่ง", "รอไฟแนนซ์", "รอผ่านไฟแนนซ์"];
+// ดีลที่ "ถูกปฏิเสธจากสต็อก" (รถคืนสู่สต็อกแล้ว) — ไม่ใช่ดีลจริง ต้องกรองออกจากยอด/รายงาน
+export const isVoidSale = (s: { custom_fields?: Record<string, string> | null }) =>
+  String(s.custom_fields?.[STOCK_APPROVAL_FIELD] ?? "") === "ปฏิเสธ";
 
 export interface Forklift {
   id: string;
