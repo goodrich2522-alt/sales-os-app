@@ -48,7 +48,7 @@ export const DEFAULT_CUSTOMER_TYPES = ["บุคคลทั่วไป", "น
 export const DEFAULT_VEHICLE_GROUPS = ["รถยก 4 ล้อ", "รถยก 3 ล้อ", "Reach Truck", "Order Picker", "Pallet Truck", "Stacker"];
 export const DEFAULT_CONTROL_TYPES = ["แมนนวล", "เซมิออโต", "ออโต", "AC Drive", "IC Engine"];
 export const DEFAULT_PO_STATUSES = ["รอ PO", "PO ออกแล้ว", "รอชำระ", "ชำระแล้ว", "ยกเลิก"];
-export const DEFAULT_LOCATIONS = ["คลังกรุงเทพ", "คลังชลบุรี", "คลังระยอง", "โรงงาน", "ที่ลูกค้า"];
+export const DEFAULT_LOCATIONS = ["สำนักงานใหญ่", "สาขาชลบุรี", "สาขาขอนแก่น"];
 // ชุดสถานะมาตรฐาน 5 ค่า (ล็อกแล้ว — แก้ในหน้า settings ไม่ได้) · ตรงกับปุ่มในการ์ดปิดการขาย
 // รอรับ = สั่งแล้วรอเข้าคลัง · รอยืนยันนำเข้าสต็อก = ผู้ขนส่งรับแล้ว รอฝ่ายสต็อกยืนยัน · พร้อมขาย · จอง/รอผ่านไฟแนนซ์/ปิดการขายแล้ว = ผลจากปุ่มปิดการขาย
 export const DEFAULT_STOCK_STATUSES = ["รอรับ", "รอยืนยันนำเข้าสต็อก", "พร้อมขาย", "รออนุมัติสต็อก", "จอง", "รอผ่านไฟแนนซ์", "ปิดการขายแล้ว"];

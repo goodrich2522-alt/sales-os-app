@@ -326,12 +326,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (appr === "รออนุมัติ") return GATED.has(intended) ? STATUS_PENDING_APPROVAL : intended; // รอสต็อกอนุมัติ
     return intended;                                                       // อนุมัติแล้ว / เก่า / ปิดการขายจริง → สถานะจริง
   };
-  // ตั้งมาร์กอนุมัติให้ดีล: จอง/กันสต็อก → "รออนุมัติ" · ปิดการขายจริง (ไม่ gated) → ตัดจองออกอัตโนมัติ ไม่ต้องรอสต็อก
+  // ตั้งมาร์กอนุมัติให้ดีล:
+  //  · จอง/กันสต็อก + กรอกครบ (มีสลิปการชำระ) → อนุมัติอัตโนมัติ (ไม่ต้องรอสต็อก)
+  //  · จอง/กันสต็อก + ยังไม่มีสลิป (จอง/รอโอน, รอไฟแนนซ์) → "รออนุมัติ" ให้สต็อกกดอนุมัติ
+  //  · ปิดการขายจริง (ไม่ gated) → ตัดจองออกอัตโนมัติ
   const withApprovalMarker = (s: Sale): Sale => {
     const appr = approvalOf(s);
     if (appr === "อนุมัติแล้ว" || appr === "ปฏิเสธ") return s; // สต็อกตัดสินแล้ว คงไว้เป็นประวัติ
     const intended = forkliftStatusForSale(s);
     if (GATED.has(intended)) {
+      const complete = !!(s.payment_proof && String(s.payment_proof).trim()); // มีสลิป = ข้อมูลครบ
+      if (complete) return { ...s, custom_fields: { ...(s.custom_fields || {}), [STOCK_APPROVAL_FIELD]: "อนุมัติอัตโนมัติ" } };
       return appr === "รออนุมัติ" ? s : { ...s, custom_fields: { ...(s.custom_fields || {}), [STOCK_APPROVAL_FIELD]: "รออนุมัติ" } };
     }
     // ปิดการขายจริง/พร้อมขาย = ไม่ต้องอนุมัติ → ถ้าเคยติด "รออนุมัติ" ให้ตัดออก (ปิดการขายอัตโนมัติ)
