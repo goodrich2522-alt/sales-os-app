@@ -206,7 +206,7 @@ export default function CommissionPage() {
                           )
                         )}
                         {r.comm.group === "STACKER" && <p className="text-[11px] text-teal-600 mt-0.5">สแตกเกอร์ — คิดตามยอดขายอัตโนมัติ</p>}
-                        {r.comm.group === "none" && <p className="text-[11px] text-slate-400 mt-0.5">{r.comm.note}</p>}
+                        {r.comm.group === "none" && <p className="text-[11px] text-blue-600 mt-0.5">รถกลุ่มอื่น — 1% ของยอดขาย (ทุก 100,000 = 1,000){r.comm.note ? ` · ${r.comm.note}` : ""}</p>}
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className={`font-bold ${r.comm.amount > 0 ? "text-amber-600" : "text-slate-400"}`}>฿{fmt(r.comm.amount)}</p>
@@ -230,7 +230,8 @@ export default function CommissionPage() {
             <div><b className="text-indigo-700">FORKLIFT · ลูกค้าใหม่</b> — ตามกำไรสุทธิ · ≥100k=2,000 · 80k–99,999=1,500 · 50k–79,999=1,000 · 40k–49,999=800 · 30,001–40k=700 · 25k–30k=500 · ต่ำกว่า 25k=0</div>
             <div><b className="text-indigo-700">FORKLIFT · ลูกค้าใหม่+ออกพบเอง</b> — ≥100k=2,000 · 50k–99,999=1,200 · 40k–49,999=800 · ต่ำกว่า 40k=500</div>
             <div><b className="text-indigo-700">FORKLIFT · ลูกค้าเก่า/รับช่วงต่อ</b> — ≥100k=1,500 · 40k–99,999=800 · ต่ำกว่า 40k=500</div>
-            <div className="text-slate-400">กำไรสุทธิ = ราคาขาย − ทุน − อุปกรณ์เสริม − ของแถม − ค่าขนส่ง · นับเฉพาะดีลปิด/จัดส่งแล้ว · <b>ไม่รวมดีลนำเข้าจากบิลภาษี GR</b></div>
+            <div><b className="text-blue-700">รถกลุ่มอื่น (แฮนด์ลิฟท์/CBD/CNS ฯลฯ)</b> — 1% ของยอดขาย (ทุก 100,000 บาท = 1,000 บาท) · คำนวณจากยอดรวมทั้งเดือน</div>
+            <div className="text-slate-400">กำไรสุทธิ = ราคาขาย − ทุน − อุปกรณ์เสริม − ของแถม − ค่าขนส่ง · นับเฉพาะดีลปิด/จัดส่งแล้ว · <b>ไม่รวมดีลนำเข้าจากบิลภาษี GR</b> · ค่าคอมคำนวณอัตโนมัติ (แก้ไขไม่ได้)</div>
           </div>
         </details>
       </main>

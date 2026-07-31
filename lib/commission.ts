@@ -95,7 +95,9 @@ export const calcCommission = (s: Sale, f?: Forklift, allSales?: Sale[]): Commis
   const vtype = String(f?.vehicle_category ?? s.vehicle_type ?? "").trim();
   const isForklift = vtype === "Forklift" || vtype === "" || /^(CPC?D|CQD|CPD|FD|FG|H2000)/i.test(String(model ?? ""));
   if (!isForklift) {
-    return { amount: 0, group: "none", basis: "-", basisValue: 0, category: storedCat, note: "ไม่เข้าเงื่อนไขค่าคอม (คิดเอง)" };
+    // รถกลุ่มอื่น (แฮนด์ลิฟท์/CBD/CNS ฯลฯ) → 1% ของยอดขาย (ทุก 100,000 = 1,000)
+    const saleAmount = Number(s.actual_sale) || 0;
+    return { amount: Math.round(saleAmount * 0.01), group: "none", basis: "ยอดขาย", basisValue: saleAmount, category: "" };
   }
   // กติกา: มีประวัติซื้อมาก่อน = ลูกค้าเก่าเสมอ (บังคับ ทับค่าที่เซลล์เลือก)
   const returning = allSales ? priorPurchaseCount(s, allSales) > 0 : false;
