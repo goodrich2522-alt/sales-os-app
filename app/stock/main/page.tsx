@@ -25,7 +25,7 @@ import { driveImg } from "@/lib/img";
 
 
 // ฟิลด์ dropdown ฝั่งสต็อก — ไม่รวมประเภทการขาย/การชำระ (จัดการในหน้าฝ่ายขาย)
-type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "saleTypes" | "paymentTypes" | "knownUsers" | "adminEmails">;
+type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "saleTypes" | "paymentTypes" | "knownUsers" | "adminEmails" | "commissionLocks">;
 
 // หมายเหตุ: ไม่รวม stockStatuses — สถานะรถถูกล็อกเป็นชุดมาตรฐาน 5 ค่า แก้ไม่ได้
 // (รอรับ/พร้อมขาย/จอง/รอผ่านไฟแนนซ์/ปิดการขายแล้ว) ผูกกับปุ่มในการ์ดปิดการขาย

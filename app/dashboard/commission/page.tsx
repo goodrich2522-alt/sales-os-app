@@ -4,22 +4,22 @@ import Link from "next/link";
 import { useState, useMemo } from "react";
 import {
   ArrowLeft, DollarSign, Download, ChevronDown, ChevronRight,
-  User, AlertCircle, Award, Calendar,
+  User, AlertCircle, Award, Calendar, Lock, Unlock,
 } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
-import { Sale } from "@/lib/types";
 import {
   calcCommission, isClosedSale, isImportedSale, closeMonth, closeDate,
-  COMMISSION_FIELD, COMMISSION_CATEGORIES,
+  COMMISSION_FIELD, COMMISSION_CATEGORIES, CommissionLock,
 } from "@/lib/commission";
 import { DashboardGuard } from "@/components/DashboardGuard";
+import { supabase } from "@/lib/supabaseClient";
 
 const fmt = (n: number) => Number(n || 0).toLocaleString("th-TH");
 const MONTHS_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 const monthLabel = (ym: string) => { const [y, m] = ym.split("-"); return `${MONTHS_TH[Number(m) - 1] ?? m} ${Number(y) + 543}`; };
 
 function CommissionPageInner() {
-  const { sales, forklifts, updateSale } = useApp();
+  const { sales, forklifts, updateSale, fieldConfig, setCommissionLock } = useApp();
   const fkById = useMemo(() => new Map(forklifts.map(f => [f.id, f])), [forklifts]);
 
   // ประวัติซื้อทั้งหมด (รวมบิล GR) — ใช้ตรวจ "ลูกค้าเก่า" (เคยซื้อมาก่อน = ลูกค้าเก่าเสมอ)
@@ -27,10 +27,13 @@ function CommissionPageInner() {
   // ดีลที่นำมาคิดค่าคอม = ปิดจริง แต่ตัดดีลนำเข้าบิลภาษี GR ออก (ไม่จ่ายค่าคอม)
   const closedSales = useMemo(() => sales.filter(s => isClosedSale(s) && !isImportedSale(s)), [sales]);
 
-  // เดือนที่มีดีลปิด (ใหม่สุดก่อน)
+  // เดือนที่มีดีลปิด + เดือนที่ถูกล็อกไว้ (ใหม่สุดก่อน) — เดือนที่ล็อกต้องโชว์เสมอแม้ดีลเปลี่ยน
   const months = useMemo(
-    () => [...new Set(closedSales.map(closeMonth).filter(Boolean))].sort().reverse(),
-    [closedSales]
+    () => [...new Set([
+      ...closedSales.map(closeMonth).filter(Boolean),
+      ...Object.keys(fieldConfig.commissionLocks || {}),
+    ])].sort().reverse(),
+    [closedSales, fieldConfig.commissionLocks]
   );
   const [month, setMonth] = useState<string>("");
   const activeMonth = month || months[0] || "";
@@ -74,43 +77,99 @@ function CommissionPageInner() {
   // นับเฉพาะดีลโฟล์คลิฟท์ที่ยังไม่เลือกหมวด (ไม่รวมดีลที่ไม่เข้าเงื่อนไขค่าคอม เช่น STAXX/แฮนด์ลิฟท์)
   const totalMissing = rows.filter(r => r.comm.group === "FORKLIFT" && r.comm.note).length;
 
+  // ── ล็อก snapshot รายเดือน ── ถ้าเดือนนี้ถูกล็อก → แสดงตัวเลขจาก snapshot (คงที่)
+  const lock = fieldConfig.commissionLocks?.[activeMonth] || null;
+  const locked = !!lock;
+
+  // กลุ่มแสดงผล (normalize ให้เหมือนกันทั้งสด/ล็อก) — ล็อก: จาก snapshot · สด: จาก byStaff
+  const displayGroups = useMemo(() => {
+    if (lock) {
+      return lock.staff.map(s => ({
+        staff: s.staff, total: s.total, dealCount: s.dealCount, missing: s.missing,
+        noneCount: s.noneCount, noneSaleTotal: s.noneSaleTotal, noneComm: s.noneComm,
+        deals: lock.deals.filter(d => d.staff === s.staff).map(d => ({
+          key: d.saleId, saleId: d.saleId, brand: d.brand, model: d.model, customer: d.customer,
+          group: d.group, basis: d.basis, basisValue: d.basisValue, category: d.category,
+          returning: d.returning, amount: d.amount, closeDate: d.closeDate, note: "",
+        })),
+      }));
+    }
+    return byStaff.map(g => ({
+      staff: g.staff, total: g.total, dealCount: g.deals.length, missing: g.missing,
+      noneCount: g.noneCount, noneSaleTotal: g.noneSaleTotal, noneComm: g.noneComm,
+      deals: g.deals.map(r => ({
+        key: r.sale.id, saleId: r.sale.id, brand: r.sale.forklift_brand || "", model: r.sale.forklift_model || "",
+        customer: r.sale.customer_name || "", group: r.comm.group, basis: r.comm.basis, basisValue: r.comm.basisValue,
+        category: r.comm.category, returning: !!r.comm.returning, amount: r.comm.amount, closeDate: closeDate(r.sale), note: r.comm.note || "",
+      })),
+    }));
+  }, [lock, byStaff]);
+
+  const dGrand = locked ? lock!.grandTotal : grandTotal;
+  const dDeals = locked ? lock!.deals.length : totalDeals;
+  const dMissing = locked ? lock!.staff.reduce((a, s) => a + s.missing, 0) : totalMissing;
+
+  // ล็อกเดือน → เก็บ snapshot ตัวเลขปัจจุบัน · ปลดล็อก → กลับไปคำนวณสด
+  const doLock = async () => {
+    if (!activeMonth || byStaff.length === 0) return;
+    if (!window.confirm(`ล็อกค่าคอมเดือน ${monthLabel(activeMonth)}?\n\nตัวเลขจะถูกบันทึกคงที่ แม้แก้ไขดีลย้อนหลังก็จะไม่เปลี่ยน (ปลดล็อกได้ภายหลัง)`)) return;
+    let by = "ฝ่ายสต็อก";
+    try { const r = await supabase?.auth.getUser(); by = r?.data.user?.email || by; } catch {}
+    const snap: CommissionLock = {
+      month: activeMonth, lockedAt: new Date().toISOString(), lockedBy: by, grandTotal,
+      staff: byStaff.map(g => ({ staff: g.staff, total: g.total, dealCount: g.deals.length, missing: g.missing, noneCount: g.noneCount, noneSaleTotal: g.noneSaleTotal, noneComm: g.noneComm })),
+      deals: rows.map(r => ({
+        saleId: r.sale.id, staff: r.sale.sales_staff || "(ไม่ระบุเซลล์)", brand: r.sale.forklift_brand || "", model: r.sale.forklift_model || "",
+        customer: r.sale.customer_name || "", group: r.comm.group, basis: r.comm.basis, basisValue: r.comm.basisValue,
+        category: r.comm.category, returning: !!r.comm.returning, amount: r.comm.amount, closeDate: closeDate(r.sale),
+      })),
+    };
+    setCommissionLock(activeMonth, snap);
+  };
+  const doUnlock = () => {
+    if (!activeMonth || !lock) return;
+    if (!window.confirm(`ปลดล็อกค่าคอมเดือน ${monthLabel(activeMonth)}?\n\nระบบจะกลับไปคำนวณสดจากดีลปัจจุบัน (ตัวเลขอาจเปลี่ยน)`)) return;
+    setCommissionLock(activeMonth, null);
+  };
+
   // แก้หมวดลูกค้าของดีล (สำหรับดีลเก่าที่ยังไม่ได้เลือก) → บันทึกลง custom_fields
-  const setCategory = (sale: Sale, cat: string) => {
+  const setCategory = (saleId: string, cat: string) => {
+    const sale = sales.find(x => x.id === saleId);
+    if (!sale) return;
     const cf = { ...(sale.custom_fields || {}) };
     if (cat) cf[COMMISSION_FIELD] = cat; else delete cf[COMMISSION_FIELD];
     updateSale({ ...sale, custom_fields: cf });
   };
 
   const exportExcel = async () => {
-    if (rows.length === 0) return;
+    if (displayGroups.length === 0) return;
     const XLSX = await import("xlsx");
-    // ชีต 1: สรุปรายคน
-    const sumRows = byStaff.map((g, i) => ({
-      "อันดับ": i + 1, "เซลล์": g.staff, "จำนวนดีลปิด": g.deals.length,
+    // ชีต 1: สรุปรายคน (ใช้ตัวเลขที่แสดง — ล็อกแล้วก็ส่งออกตาม snapshot)
+    const sumRows = displayGroups.map((g, i) => ({
+      "อันดับ": i + 1, "เซลล์": g.staff, "จำนวนดีลปิด": g.dealCount,
       "รถกลุ่มอื่น: จำนวนใบ": g.noneCount, "รถกลุ่มอื่น: ยอดขายรวม": g.noneSaleTotal, "รถกลุ่มอื่น: ค่าคอม 1%": g.noneComm,
       "ค่าคอมรวม (บาท)": g.total, "ดีลที่ยังไม่เลือกหมวด": g.missing,
     }));
     const ws1 = XLSX.utils.json_to_sheet(sumRows);
     ws1["!cols"] = [8, 20, 14, 16, 18, 16, 18, 20].map(w => ({ wch: w }));
     // ชีต 2: รายดีล
-    const detRows = rows.map(r => ({
-      "เซลล์": r.sale.sales_staff || "", "วันปิด": closeDate(r.sale),
-      "รหัสรถ": r.sale.forklift_id || "", "SN": r.sale.forklift_unit_no || "",
-      "ยี่ห้อ/รุ่น": `${r.sale.forklift_brand ?? ""} ${r.sale.forklift_model ?? ""}`.trim(),
-      "กลุ่ม": r.comm.group === "STACKER" ? "STACKER" : r.comm.group === "FORKLIFT" ? "FORKLIFT" : "อื่นๆ",
-      "เกณฑ์": r.comm.basis, "ยอด/กำไร (บาท)": Math.round(r.comm.basisValue),
-      "หมวดลูกค้า": r.comm.category || "", "ลูกค้าเก่า(ประวัติ)": r.comm.returning ? "ใช่" : "",
-      "ลูกค้า": r.sale.customer_name || "",
+    const detRows = displayGroups.flatMap(g => g.deals.map(d => ({
+      "เซลล์": g.staff, "วันปิด": d.closeDate,
+      "ยี่ห้อ/รุ่น": `${d.brand} ${d.model}`.trim(),
+      "กลุ่ม": d.group === "STACKER" ? "STACKER" : d.group === "FORKLIFT" ? "FORKLIFT" : "อื่นๆ",
+      "เกณฑ์": d.basis, "ยอด/กำไร (บาท)": Math.round(d.basisValue),
+      "หมวดลูกค้า": d.category || "", "ลูกค้าเก่า(ประวัติ)": d.returning ? "ใช่" : "",
+      "ลูกค้า": d.customer,
       // รถกลุ่มอื่นคิดรวมทั้งเดือน (ดูชีตสรุป) → ไม่ลงค่าคอมทีละใบ กันนับซ้ำ
-      "ค่าคอม (บาท)": r.comm.group === "none" ? "" : r.comm.amount,
-      "หมายเหตุ": r.comm.group === "none" ? "รวมคิด 1% ที่ยอดเดือน (ดูชีตสรุป)" : (r.comm.note || ""),
-    }));
+      "ค่าคอม (บาท)": d.group === "none" ? "" : d.amount,
+      "หมายเหตุ": d.group === "none" ? "รวมคิด 1% ที่ยอดเดือน (ดูชีตสรุป)" : (d.note || ""),
+    })));
     const ws2 = XLSX.utils.json_to_sheet(detRows);
-    ws2["!cols"] = [18, 12, 16, 16, 22, 10, 8, 16, 18, 14, 20, 12, 22].map(w => ({ wch: w }));
+    ws2["!cols"] = [18, 12, 22, 10, 8, 16, 18, 14, 20, 12, 22].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws1, "สรุปรายคน");
     XLSX.utils.book_append_sheet(wb, ws2, "รายดีล");
-    XLSX.writeFile(wb, `ค่าคอม_${activeMonth}.xlsx`);
+    XLSX.writeFile(wb, `ค่าคอม_${activeMonth}${locked ? "_ล็อก" : ""}.xlsx`);
   };
 
   return (
@@ -127,10 +186,23 @@ function CommissionPageInner() {
               </div>
             </div>
           </div>
-          <button onClick={exportExcel} disabled={rows.length === 0}
-            className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg px-3 py-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-            <Download className="w-4 h-4" /><span className="hidden sm:inline">Export Excel</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {activeMonth && (locked ? (
+              <button onClick={doUnlock}
+                className="flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg px-3 py-2 transition-all">
+                <Unlock className="w-4 h-4" /><span className="hidden sm:inline">ปลดล็อก</span>
+              </button>
+            ) : (
+              <button onClick={doLock} disabled={byStaff.length === 0}
+                className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg px-3 py-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                <Lock className="w-4 h-4" /><span className="hidden sm:inline">ล็อกเดือนนี้</span>
+              </button>
+            ))}
+            <button onClick={exportExcel} disabled={displayGroups.length === 0}
+              className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg px-3 py-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+              <Download className="w-4 h-4" /><span className="hidden sm:inline">Export Excel</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -147,34 +219,45 @@ function CommissionPageInner() {
           ))}
         </div>
 
-        {/* ── สรุปยอดรวม ── */}
-        {activeMonth && (
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-              <p className="text-xs text-slate-500">ค่าคอมรวมทั้งเดือน</p>
-              <p className="text-2xl font-bold text-amber-600 mt-1">฿{fmt(grandTotal)}</p>
-            </div>
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-              <p className="text-xs text-slate-500">ดีลปิดการขาย</p>
-              <p className="text-2xl font-bold text-slate-800 mt-1">{totalDeals}</p>
-            </div>
-            <div className={`rounded-2xl border shadow-sm p-4 ${totalMissing > 0 ? "bg-red-50 border-red-200" : "bg-white border-slate-100"}`}>
-              <p className="text-xs text-slate-500">ยังไม่เลือกหมวด</p>
-              <p className={`text-2xl font-bold mt-1 ${totalMissing > 0 ? "text-red-600" : "text-slate-800"}`}>{totalMissing}</p>
+        {/* ── แบนเนอร์เมื่อเดือนนี้ถูกล็อก ── */}
+        {locked && lock && (
+          <div className="text-sm text-slate-700 bg-slate-800/[0.03] border border-slate-300 rounded-2xl px-4 py-3 flex items-start gap-2.5">
+            <Lock className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold text-slate-800">ค่าคอมเดือนนี้ถูกล็อกแล้ว</span> — ตัวเลขคงที่ แม้แก้ไขดีลย้อนหลังก็จะไม่เปลี่ยน
+              <span className="block text-xs text-slate-500 mt-0.5">ล็อกโดย {lock.lockedBy} · เมื่อ {String(lock.lockedAt).slice(0, 10)} · กด &ldquo;ปลดล็อก&rdquo; เพื่อกลับไปคำนวณสด</span>
             </div>
           </div>
         )}
 
-        {totalMissing > 0 && (
+        {/* ── สรุปยอดรวม ── */}
+        {activeMonth && (
+          <div className="grid grid-cols-3 gap-3">
+            <div className={`rounded-2xl border shadow-sm p-4 ${locked ? "bg-amber-50/60 border-amber-200" : "bg-white border-slate-100"}`}>
+              <p className="text-xs text-slate-500 flex items-center gap-1">ค่าคอมรวมทั้งเดือน{locked && <Lock className="w-3 h-3 text-amber-500" />}</p>
+              <p className="text-2xl font-bold text-amber-600 mt-1">฿{fmt(dGrand)}</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+              <p className="text-xs text-slate-500">ดีลปิดการขาย</p>
+              <p className="text-2xl font-bold text-slate-800 mt-1">{dDeals}</p>
+            </div>
+            <div className={`rounded-2xl border shadow-sm p-4 ${dMissing > 0 ? "bg-red-50 border-red-200" : "bg-white border-slate-100"}`}>
+              <p className="text-xs text-slate-500">ยังไม่เลือกหมวด</p>
+              <p className={`text-2xl font-bold mt-1 ${dMissing > 0 ? "text-red-600" : "text-slate-800"}`}>{dMissing}</p>
+            </div>
+          </div>
+        )}
+
+        {dMissing > 0 && !locked && (
           <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2.5 flex items-start gap-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            มีดีลโฟล์คลิฟท์ <b>{totalMissing}</b> รายการยังไม่ได้เลือก &ldquo;หมวดลูกค้า&rdquo; — กางดูรายดีลแล้วเลือกหมวดให้ครบ ค่าคอมถึงจะคำนวณถูก
+            มีดีลโฟล์คลิฟท์ <b>{dMissing}</b> รายการยังไม่ได้เลือก &ldquo;หมวดลูกค้า&rdquo; — กางดูรายดีลแล้วเลือกหมวดให้ครบ ค่าคอมถึงจะคำนวณถูก
           </div>
         )}
 
         {/* ── รายบุคคล ── */}
         <div className="flex flex-col gap-3">
-          {byStaff.map((g, idx) => (
+          {displayGroups.map((g, idx) => (
             <div key={g.staff} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
               <button onClick={() => setExpanded(expanded === g.staff ? null : g.staff)}
                 className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors text-left">
@@ -183,45 +266,46 @@ function CommissionPageInner() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-slate-800 text-sm">{g.staff}</p>
-                  <p className="text-xs text-slate-500">{g.deals.length} ดีล{g.missing > 0 && <span className="text-red-600 font-semibold"> · ยังไม่เลือกหมวด {g.missing}</span>}</p>
+                  <p className="text-xs text-slate-500">{g.dealCount} ดีล{g.missing > 0 && !locked && <span className="text-red-600 font-semibold"> · ยังไม่เลือกหมวด {g.missing}</span>}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-lg font-bold text-amber-600">฿{fmt(g.total)}</p>
+                  <p className="text-lg font-bold text-amber-600 flex items-center gap-1 justify-end">{locked && <Lock className="w-3.5 h-3.5 text-amber-500" />}฿{fmt(g.total)}</p>
                 </div>
                 {expanded === g.staff ? <ChevronDown className="w-5 h-5 text-slate-400" /> : <ChevronRight className="w-5 h-5 text-slate-400" />}
               </button>
 
               {expanded === g.staff && (
                 <div className="border-t border-slate-100 divide-y divide-slate-50">
-                  {g.deals.filter(r => r.comm.group !== "none").map(r => (
-                    <div key={r.sale.id} className="p-3.5 flex items-center gap-3 text-sm">
+                  {g.deals.filter(d => d.group !== "none").map(d => (
+                    <div key={d.key} className="p-3.5 flex items-center gap-3 text-sm">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-slate-800">{r.sale.forklift_brand} {r.sale.forklift_model}</span>
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${r.comm.group === "STACKER" ? "bg-teal-100 text-teal-700" : r.comm.group === "FORKLIFT" ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-500"}`}>{r.comm.group === "none" ? "อื่นๆ" : r.comm.group}</span>
+                          <span className="font-semibold text-slate-800">{d.brand} {d.model}</span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${d.group === "STACKER" ? "bg-teal-100 text-teal-700" : d.group === "FORKLIFT" ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-500"}`}>{d.group === "none" ? "อื่นๆ" : d.group}</span>
                         </div>
                         <p className="text-[11px] text-slate-500 mt-0.5">
-                          {r.sale.customer_name || "—"} · {r.comm.basis} ฿{fmt(Math.round(r.comm.basisValue))} · ปิด {closeDate(r.sale)}
+                          {d.customer || "—"} · {d.basis} ฿{fmt(Math.round(d.basisValue))} · ปิด {d.closeDate}
                         </p>
-                        {/* หมวดลูกค้า: forklift · ลูกค้าเก่า(จากประวัติ)ล็อกอัตโนมัติ · อื่นๆ เลือกเองได้ */}
-                        {r.comm.group === "FORKLIFT" && (
-                          r.comm.returning ? (
+                        {/* หมวดลูกค้า: forklift · ลูกค้าเก่า(จากประวัติ)ล็อกอัตโนมัติ · อื่นๆ เลือกเองได้ (ล็อกแล้วดูอย่างเดียว) */}
+                        {d.group === "FORKLIFT" && (
+                          d.returning ? (
                             <span className="inline-flex items-center gap-1 mt-1.5 text-[11px] font-bold text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-2 py-1">
                               🔁 ลูกค้าเก่า (ตรวจจากประวัติซื้อ) — คิดเรตลูกค้าเก่าอัตโนมัติ
                             </span>
+                          ) : locked ? (
+                            <span className="inline-block mt-1.5 text-[11px] text-slate-500">หมวด: <b className="text-slate-700">{d.category || "— ไม่ได้เลือก —"}</b></span>
                           ) : (
-                            <select value={r.comm.category} onChange={e => setCategory(r.sale, e.target.value)}
-                              className={`mt-1.5 text-xs border rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 ${r.comm.note ? "border-red-300 text-red-700" : "border-slate-200 text-slate-700"}`}>
+                            <select value={d.category} onChange={e => setCategory(d.saleId, e.target.value)}
+                              className={`mt-1.5 text-xs border rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 ${d.note ? "border-red-300 text-red-700" : "border-slate-200 text-slate-700"}`}>
                               <option value="">-- เลือกหมวดลูกค้า --</option>
                               {COMMISSION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                           )
                         )}
-                        {r.comm.group === "STACKER" && <p className="text-[11px] text-teal-600 mt-0.5">สแตกเกอร์ — คิดตามยอดขายอัตโนมัติ</p>}
-                        {r.comm.group === "none" && <p className="text-[11px] text-blue-600 mt-0.5">รถกลุ่มอื่น — 1% ของยอดขาย (ทุก 100,000 = 1,000){r.comm.note ? ` · ${r.comm.note}` : ""}</p>}
+                        {d.group === "STACKER" && <p className="text-[11px] text-teal-600 mt-0.5">สแตกเกอร์ — คิดตามยอดขายอัตโนมัติ</p>}
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <p className={`font-bold ${r.comm.amount > 0 ? "text-amber-600" : "text-slate-400"}`}>฿{fmt(r.comm.amount)}</p>
+                        <p className={`font-bold ${d.amount > 0 ? "text-amber-600" : "text-slate-400"}`}>฿{fmt(d.amount)}</p>
                       </div>
                     </div>
                   ))}
@@ -245,7 +329,7 @@ function CommissionPageInner() {
               )}
             </div>
           ))}
-          {activeMonth && byStaff.length === 0 && (
+          {activeMonth && displayGroups.length === 0 && (
             <div className="text-center py-14 text-slate-400"><DollarSign className="w-10 h-10 text-slate-300 mx-auto mb-2" /><p className="text-sm">ไม่มีดีลปิดการขายในเดือนนี้</p></div>
           )}
         </div>
@@ -260,6 +344,7 @@ function CommissionPageInner() {
             <div><b className="text-indigo-700">FORKLIFT · ลูกค้าเก่า/รับช่วงต่อ</b> — ≥100k=1,500 · 40k–99,999=800 · ต่ำกว่า 40k=500</div>
             <div><b className="text-blue-700">รถกลุ่มอื่น (แฮนด์ลิฟท์/CBD/CNS ฯลฯ)</b> — 1% ของยอดขาย (ทุก 100,000 บาท = 1,000 บาท) · คำนวณจากยอดรวมทั้งเดือน</div>
             <div className="text-slate-400">กำไรสุทธิ = ราคาขาย − ทุน − อุปกรณ์เสริม − ของแถม − ค่าขนส่ง · นับเฉพาะดีลปิด/จัดส่งแล้ว · <b>ไม่รวมดีลนำเข้าจากบิลภาษี GR</b> · ค่าคอมคำนวณอัตโนมัติ (แก้ไขไม่ได้)</div>
+            <div className="text-slate-500 flex items-start gap-1.5"><Lock className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-amber-500" /><span><b>ล็อกเดือน:</b> กด &ldquo;ล็อกเดือนนี้&rdquo; หลังจ่ายค่าคอมแล้ว → ตัวเลขจะคงที่ (freeze) แม้แก้ไขดีลย้อนหลัง · ปลดล็อกเพื่อกลับไปคำนวณสด</span></div>
           </div>
         </details>
       </main>

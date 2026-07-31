@@ -13,6 +13,7 @@ import {
 } from "./mockData";
 import * as api from "./api";
 import { supabase } from "./supabaseClient";
+import type { CommissionLock } from "./commission";
 
 // ── Field configuration ───────────────────────────────────────────────────────
 export interface FieldConfig {
@@ -41,6 +42,8 @@ export interface FieldConfig {
   knownUsers: Record<string, { name: string; role: string; status?: "approved" | "pending" | "blocked" }>;
   // อีเมลแอดมิน (จัดการสิทธิ์ที่ /admin/users)
   adminEmails: string[];
+  // ล็อก snapshot ค่าคอมรายเดือน (คีย์ = YYYY-MM) — freeze ตัวเลขหลังจ่าย
+  commissionLocks: Record<string, CommissionLock>;
 }
 
 const DEFAULT_FIELD_CFG: FieldConfig = {
@@ -62,9 +65,10 @@ const DEFAULT_FIELD_CFG: FieldConfig = {
   salesFilterRequests: [],
   knownUsers: {},
   adminEmails: ["goodrichforklift@gmail.com"], // แอดมินเริ่มต้น — แก้ได้ที่ /admin/users
+  commissionLocks: {},
 };
 
-type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "knownUsers" | "adminEmails">;
+type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "knownUsers" | "adminEmails" | "commissionLocks">;
 
 // ── รูปแบบไฟล์สำรอง/นำเข้าข้อมูล ──
 export interface BackupData {
@@ -119,6 +123,8 @@ interface AppContextType {
   // Sales filter requests
   addSalesFilterRequest: (name: string) => void;
   removeSalesFilterRequest: (name: string) => void;
+  // ล็อก/ปลดล็อก snapshot ค่าคอมรายเดือน
+  setCommissionLock: (month: string, lock: CommissionLock | null) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -601,6 +607,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setFieldConfig(prev => ({ ...prev, salesFilterRequests: prev.salesFilterRequests.filter(r => r !== name) }));
   }, []);
 
+  // ── ล็อก/ปลดล็อก snapshot ค่าคอมรายเดือน (freeze ตัวเลขหลังจ่าย) ──
+  const setCommissionLock = useCallback((month: string, lock: CommissionLock | null) => {
+    if (!month) return;
+    setFieldConfig(prev => {
+      const locks = { ...(prev.commissionLocks || {}) };
+      if (lock) locks[month] = lock; else delete locks[month];
+      return { ...prev, commissionLocks: locks };
+    });
+  }, []);
+
   // ── สำรอง / นำเข้าข้อมูล (กันข้อมูลหายถ้าระบบมีปัญหา) ──
   const exportData = useCallback((): BackupData => ({
     app: "SalesOS",
@@ -662,6 +678,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addSaleExtraFieldDef, removeSaleExtraFieldDef, renameSaleExtraFieldDef,
       addSaleExtraFieldOption, removeSaleExtraFieldOption, editSaleExtraFieldOption,
       addSalesFilterRequest, removeSalesFilterRequest,
+      setCommissionLock,
     }}>
       {children}
     </AppContext.Provider>
