@@ -1577,6 +1577,29 @@ export default function StockMain() {
                     {noteSaved ? "บันทึกแล้ว ✓" : "บันทึกหมายเหตุ"}
                   </button>
                 </div>
+                {/* ข้อมูลการขายจริง (จากไฟล์สต็อก) — ราคาขาย/ค่าขนส่ง/ทุนอุปกรณ์ + กำไรจริงคำนวณ (เฟส 3) */}
+                {(() => {
+                  const cf = (it.custom_fields || {}) as Record<string, unknown>;
+                  const sale = Number(cf["ราคาขายจริง"]) || 0, ship = Number(cf["ค่าขนส่งจริง"]) || 0, addon = Number(cf["ทุนอุปกรณ์เสริม"]) || 0;
+                  const fp = cf["กำไร(ไฟล์)"];
+                  if (!(sale || ship || addon || fp)) return null;
+                  const cost = Number(it.cost_price) || 0;
+                  const realProfit = sale ? sale - cost - ship - addon : null;
+                  const b = (n: unknown) => Number(n).toLocaleString("th-TH");
+                  return (
+                    <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                      <p className="text-xs font-bold text-emerald-700 mb-2">💰 ข้อมูลการขายจริง (จากไฟล์สต็อก)</p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-700">
+                        {sale > 0 && <div><span className="text-slate-400">ราคาขายจริง</span> <b>฿{b(sale)}</b></div>}
+                        <div><span className="text-slate-400">ต้นทุน</span> <b>฿{b(cost)}</b></div>
+                        {ship > 0 && <div><span className="text-slate-400">ค่าขนส่ง</span> <b>฿{b(ship)}</b></div>}
+                        {addon > 0 && <div><span className="text-slate-400">ทุนอุปกรณ์/งาเท</span> <b>฿{b(addon)}</b></div>}
+                        {realProfit != null && <div className="col-span-2 pt-1 mt-0.5 border-t border-emerald-100"><span className="text-emerald-600 font-semibold">กำไรจริง (คำนวณ)</span> <b className="text-emerald-700 text-sm">฿{b(realProfit)}</b></div>}
+                        {fp != null && <div className="col-span-2 text-[11px] text-slate-400">กำไรที่บันทึกในไฟล์: ฿{b(fp)}</div>}
+                      </div>
+                    </div>
+                  );
+                })()}
                 {/* วันสั่งรถ (สำหรับรถสั่งผลิต) — โชว์บนการ์ดหน้าขายด้วย */}
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />วันสั่งรถ (รถสั่งผลิต)</p>
