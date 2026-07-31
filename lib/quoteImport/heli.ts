@@ -23,8 +23,9 @@ function firstPrice(s: string): number | undefined {
 export function parseHeli(rawText: string): QuoteParseResult {
   const text = rawText.replace(/\s+/g, " ").trim();
 
-  // เลขสัญญา/PI: รูปแบบ C20726201-001 (ตัวอักษร + ตัวเลข + -เลข)
-  const pi = text.match(/\b([A-Z]\d{6,9}-\d{2,3})\b/)?.[1];
+  // เลขสัญญา/PI: รูปแบบ C20726201-120 (ตัวอักษร + ตัวเลข + -เลข) → เก็บเป็น PIxxx (เลขท้าย = เลข PI จริง)
+  const piRaw = text.match(/\b([A-Z]\d{6,9}-\d{2,3})\b/)?.[1];
+  const pi = piRaw ? (piRaw.match(/-(\d+)$/) ? `PI${piRaw.match(/-(\d+)$/)![1].padStart(3, "0")}` : piRaw) : undefined;
   // วันที่: 29-Dec-25
   const date = text.match(/\b(\d{1,2}-[A-Z][a-z]{2}-\d{2,4})\b/)?.[1];
 
@@ -34,8 +35,11 @@ export function parseHeli(rawText: string): QuoteParseResult {
   const modelRe = /\b((?:CPCD|CPD|PCD|CBD|CDD|CQD|CBS)\d{1,3}[A-Z0-9-]*)/gi;
   const models = [...new Set([...text.matchAll(modelRe)].map((m) => m[1].toUpperCase()))];
 
-  // ── หา SN ทั้งหมด (HELI SN: 6 หลัก + 1 ตัวอักษร + 4 หลัก เช่น 010353N6726) ──
-  const sns = [...new Set([...text.matchAll(/\b(\d{6}[A-Z]\d{4})\b/g)].map((m) => m[1]))];
+  // ── หา SN ทั้งหมด — HELI มี SN 2 รูปแบบ ──
+  //  · 6 ตัวเลข + 1 ตัวอักษร + 4 ตัวเลข  เช่น 010353N6726
+  //  · 5 ตัวเลข + 3 ตัวอักษร + 3 ตัวเลข  เช่น 08015JVF574
+  // ครอบคลุมด้วย \d{4,6}[A-Z]{1,3}\d{3,4} (ไม่ชนเลขทะเบียน/เลขบัญชีที่เป็นตัวเลขล้วน)
+  const sns = [...new Set([...text.matchAll(/\b(\d{4,6}[A-Z]{1,3}\d{3,4})\b/g)].map((m) => m[1]))];
 
   const vehicles: ParsedVehicle[] = [];
 
