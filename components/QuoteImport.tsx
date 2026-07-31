@@ -9,7 +9,7 @@ import { readPdfText, looksScanned, parseQuoteText, detectVendor, parseQuoteExce
 import { categorizeModel } from "@/lib/constants";
 import { today } from "@/lib/format";
 import { Forklift } from "@/lib/types";
-import { X, Upload, FileText, CheckCircle, AlertTriangle, Loader2, Trash2, Undo2 } from "lucide-react";
+import { X, Upload, FileText, CheckCircle, AlertTriangle, Loader2, Trash2, Undo2, Plus } from "lucide-react";
 
 export function QuoteImport({ onClose }: { onClose: () => void }) {
   const { addForkliftsBulk, forklifts, deleteForklift } = useApp();
@@ -83,6 +83,8 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
   const edit = (i: number, key: keyof ParsedVehicle, val: string) =>
     setRows((r) => r.map((v, j) => (j === i ? { ...v, [key]: val } : v)));
   const removeRow = (i: number) => setRows((r) => r.filter((_, j) => j !== i));
+  // เพิ่มรถเอง (กรอกมือ) — สำรองกรณีอ่านไฟล์ PDF ไม่ได้ / เอกสารรูปแบบไม่รองรับ
+  const addBlankRow = () => setRows((r) => [...r, { brand: "HELI", model: "", SN: "", vendor: "unknown", flags: ["เพิ่มเอง — ตรวจข้อมูลให้ครบ"] }]);
 
   const toForklift = (v: ParsedVehicle, i: number): Forklift => ({
     id: v.SN || `${v.pi_no || "PI"}#${i + 1}`,
@@ -90,7 +92,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
     brand: v.brand, model: v.model,
     capacity: v.capacity || "", capacity_kg: v.capacity_kg || "",
     height: v.height || "", fuel: v.fuel || "",
-    cost_price: v.cost_price || 0, stock_price: 0,
+    cost_price: Number(v.cost_price) || 0, stock_price: 0,
     // STAXX/CNC ไม่มีขั้นตอนผู้รับรถ (มาเป็นตู้คอนเทนเนอร์ทั้งล็อต) → ลงวันรับรถแล้วขายได้เลย
     status: (/^(STAXX|CNC)$/i.test(v.brand) && receivedDate) ? "พร้อมขาย" : "รอรับ",
     created_at: today(),
@@ -174,6 +176,15 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
 
               {notice && <div className="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-3 py-2 flex items-start gap-1.5"><AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />{notice}</div>}
 
+              {/* เพิ่มรถเอง — สำรองตอน PDF อ่านไม่ได้ (กรอกมือทีละคัน) */}
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <p className="text-xs text-slate-400">อ่านไฟล์ไม่ได้? เพิ่มรถเองแล้วกรอกข้อมูลในตารางได้เลย</p>
+                <button onClick={addBlankRow}
+                  className="flex items-center gap-1.5 text-sm font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl px-3.5 py-2 transition-all">
+                  <Plus className="w-4 h-4" />เพิ่มรถเอง (กรอกมือ)
+                </button>
+              </div>
+
               {rows.length > 0 && (
                 <>
                   <div className="flex items-center justify-between flex-wrap gap-2">
@@ -192,7 +203,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
                     <table className="w-full text-xs border-collapse">
                       <thead>
                         <tr className="text-slate-400 text-left">
-                          {["รุ่น", "SN", "พิกัด", "พลังงาน", "MAST", "Valve", "ราคาทุน", "ชนิด", ""].map((h) => <th key={h} className="px-2 py-1.5 font-semibold whitespace-nowrap">{h}</th>)}
+                          {["แบรนด์", "รุ่น", "SN", "PI", "พิกัด", "พลังงาน", "MAST", "Valve", "ราคาทุน", "ชนิด", ""].map((h) => <th key={h} className="px-2 py-1.5 font-semibold whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
                       <tbody>
@@ -200,8 +211,10 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
                           const dup = existingIds.has(toForklift(v, i).id);
                           return (
                             <tr key={i} className={`border-t border-slate-100 ${dup ? "bg-red-50/60" : ""}`}>
+                              <Cell val={v.brand ?? ""} onChange={(x) => edit(i, "brand", x)} w="w-20" />
                               <Cell val={v.model} onChange={(x) => edit(i, "model", x)} w="w-32" />
                               <Cell val={v.SN ?? ""} onChange={(x) => edit(i, "SN", x)} w="w-28" />
+                              <Cell val={v.pi_no ?? ""} onChange={(x) => edit(i, "pi_no", x)} w="w-20" />
                               <Cell val={v.capacity ?? ""} onChange={(x) => edit(i, "capacity", x)} w="w-16" />
                               <Cell val={v.fuel ?? ""} onChange={(x) => edit(i, "fuel", x)} w="w-16" />
                               <Cell val={v.mast ?? ""} onChange={(x) => edit(i, "mast", x)} w="w-16" />
