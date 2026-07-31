@@ -888,7 +888,7 @@ export default function SalesMain() {
 
         {/* แถบสลับมุมมอง + จำนวนที่แสดง */}
         <div className="flex items-center justify-between">
-          <p className="text-sm text-slate-500">แสดง <span className="font-bold text-slate-700">{sorted.length}</span> คัน</p>
+          <p className="text-sm text-slate-500">แสดง <span className="font-bold text-slate-700">{sorted.length}</span> คัน{searchHiddenHit && sorted.length === 0 && <span className="text-amber-600"> · พบ 1 คันที่ &ldquo;{searchHiddenHit.reason}&rdquo; (ดูด้านล่าง)</span>}</p>
           <div className="flex rounded-xl border border-slate-200 overflow-hidden text-sm font-semibold bg-white">
             <button onClick={() => setViewMode("card")}
               className={`px-3 py-1.5 flex items-center gap-1.5 transition ${viewMode === "card" ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>
@@ -905,13 +905,57 @@ export default function SalesMain() {
           </div>
         </div>
 
-        {sorted.length === 0 && (
+        {sorted.length === 0 && !searchHiddenHit && (
           <div className="text-center py-16 text-slate-400 bg-white rounded-2xl border border-slate-100">
             <Filter className="w-10 h-10 mx-auto mb-3 text-slate-300" />
             <p className="font-semibold text-slate-500">ไม่มีสินค้าในระบบ</p>
             <p className="text-sm mt-1">{hasFilter ? "ลองเปลี่ยนตัวกรองการค้นหา" : "ยังไม่มีรถพร้อมขายในสต็อก"}</p>
           </div>
         )}
+
+        {/* ค้นเจอรถที่ขายแล้ว/ถูกซ่อน → โชว์การ์ดแบบดูอย่างเดียว (กดปิดการขายไม่ได้) แทนจอ "0 คัน" */}
+        {searchHiddenHit && sorted.length === 0 && (() => {
+          const item = searchHiddenHit.f;
+          const recs = inspections.filter(r => r.unit_no === item.SN);
+          const photos = recs.flatMap(r => r.images);
+          const coverPhoto = recs.map(r => r.image_slots?.front).find(Boolean) || photos[0] || null;
+          return (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden opacity-95">
+                {coverPhoto ? (
+                  <div className="relative h-40 bg-slate-100 overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={driveImg(coverPhoto)} alt={`${item.brand} ${item.model}`} className="w-full h-full object-cover grayscale" />
+                    <span className="absolute top-2 left-2 flex items-center gap-1 text-xs text-white bg-slate-700/80 px-2 py-0.5 rounded-full"><Eye className="w-3 h-3" />ดูอย่างเดียว</span>
+                  </div>
+                ) : (
+                  <div className="h-40 bg-gradient-to-br from-slate-100 to-slate-50 flex flex-col items-center justify-center gap-1.5 border-b border-slate-100">
+                    <ImageOff className="w-7 h-7 text-slate-300" />
+                    <span className="text-xs text-slate-400">ยังไม่มีรูปรถ</span>
+                  </div>
+                )}
+                <div className="p-4 flex flex-col gap-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-md mb-1 ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{item.id}</span>
+                      <p className="font-bold text-slate-800 text-base">{item.brand}</p>
+                      <p className="text-sm text-slate-600 font-medium">{item.model}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{item.SN}{item.pi_no ? ` · PI ${item.pi_no}` : ""}</p>
+                    </div>
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${STATUS_BADGE[item.status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>{item.status}</span>
+                  </div>
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 text-xs text-amber-700 flex items-start gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                    <span>คันนี้ <span className="font-bold">{searchHiddenHit.reason}</span> — ขายซ้ำไม่ได้ · ถ้าคิดว่าผิด แจ้งฝ่ายสต็อกแก้สถานะ</span>
+                  </div>
+                  <button disabled className="w-full bg-slate-100 text-slate-400 text-sm font-bold py-2.5 rounded-xl cursor-not-allowed flex items-center justify-center gap-1.5">
+                    <Eye className="w-4 h-4" />ปิดการขายไม่ได้ ({item.status})
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── มุมมองตาราง ── */}
         {viewMode === "table" && sorted.length > 0 && (
