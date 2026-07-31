@@ -18,7 +18,7 @@ import { isPendingId } from "@/lib/productId";
 import { STATUS_BADGE, SALE_STATUS_BADGE, CONTACT_SOURCE_COLORS, VEHICLE_CATS } from "@/lib/constants";
 import { formatBaht } from "@/lib/format";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
-import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isStackerModel, priorPurchaseByCustomer } from "@/lib/commission";
+import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isStackerModel, isOtherGroup, priorPurchaseByCustomer } from "@/lib/commission";
 import { apiEnabled } from "@/lib/api";
 import AiAssistant from "@/components/AiAssistant";
 
@@ -492,8 +492,8 @@ export default function SalesMain() {
     fieldConfig.saleExtraFieldDefs.forEach(def => {
       if (saleCustomVals[def.id]?.trim()) customFields[def.name] = saleCustomVals[def.id].trim();
     });
-    // หมวดค่าคอม (เฉพาะโฟล์คลิฟท์) — ลูกค้าเก่า(จากประวัติ)บังคับอัตโนมัติ · สแตกเกอร์ไม่ต้องใช้
-    if (!isStackerModel(selected?.model)) {
+    // หมวดค่าคอม (เฉพาะโฟล์คลิฟท์) — ลูกค้าเก่า(จากประวัติ)บังคับอัตโนมัติ · สแตกเกอร์/รถกลุ่มอื่นไม่ต้องใช้
+    if (!isStackerModel(selected?.model) && !isOtherGroup(selected?.brand, selected?.model)) {
       const cat = custReturning > 0 ? "ลูกค้าเก่า/รับช่วงต่อ" : commCategory;
       if (cat) customFields[COMMISSION_FIELD] = cat;
     }
@@ -1255,6 +1255,10 @@ export default function SalesMain() {
                     {isStackerModel(selected?.model) ? (
                       <div className="text-xs text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
                         <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />สแตกเกอร์ ({selected?.model}) — ค่าคอมคิดตามยอดขายอัตโนมัติ ไม่ต้องเลือกหมวด
+                      </div>
+                    ) : isOtherGroup(selected?.brand, selected?.model) ? (
+                      <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />รถกลุ่มอื่น ({selected?.model}) — ค่าคอมคิด 1% ของยอดรวมทั้งเดือน ไม่ต้องเลือกหมวด
                       </div>
                     ) : custReturning > 0 ? (
                       <div className="text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2 flex items-start gap-1.5">

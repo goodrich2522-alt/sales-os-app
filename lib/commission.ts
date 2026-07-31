@@ -14,6 +14,22 @@ export type CommissionCategory = (typeof COMMISSION_CATEGORIES)[number];
 // รุ่นสแตกเกอร์ที่คิดค่าคอมตามยอดขาย (RE/CDD/CBS)
 export const isStackerModel = (model?: string) => /^(RE|CDD|CBS)/i.test(String(model ?? "").trim());
 
+// แบรนด์ที่เป็นแฮนด์ลิฟท์/รถคลังสินค้าทั้งแบรนด์ → รถกลุ่มอื่นเสมอ (ไม่ใช่โฟล์คลิฟท์)
+// (CNC ไม่เหมาทั้งแบรนด์ เพราะมีบางรุ่นกำกวม — ใช้จำแนกจากรุ่นแทน)
+export const OTHER_GROUP_BRANDS = ["STAXX", "เจนบรรเจิด"];
+
+// รถกลุ่มอื่น (คิด 1% ของยอดรวมทั้งเดือน) — แฮนด์ลิฟท์/รถลากพาเลท/โต๊ะยก/CBD/CNS
+// ⚠️ จำแนกจาก "รุ่น" ก่อนเสมอ เพราะ vehicle_category ในDB ของรถพวกนี้มักถูกใส่ผิดเป็น "Forklift"
+export const isOtherGroupModel = (model?: string) => {
+  const m = String(model ?? "").trim().toUpperCase();
+  if (!m) return false;
+  return /^(CBD|CNS|PWH|SDA|DG\d|EPS|PS\d|BF\d|AC\d|WH|WP|CBY|HPT|WMS|WS-)/.test(m) || /HAND\s*PALLET|PALLET\s*TRUCK|LIFT\s*TABLE/.test(m);
+};
+
+// จำแนกรถกลุ่มอื่น: จากแบรนด์ (STAXX/เจนบรรเจิด/CNC) หรือ จากรุ่น
+export const isOtherGroup = (brand?: string, model?: string) =>
+  OTHER_GROUP_BRANDS.includes(String(brand ?? "").trim()) || isOtherGroupModel(model);
+
 // ดีลปิดจริง (ปิด/จัดส่งแล้ว) — ค่าเก่า "ขายแล้ว"/"ปิดการขายแล้ว"/"ส่งมอบแล้ว" นับด้วย
 export const isClosedSale = (s: Sale) => {
   const st = String(s.sale_status ?? "").trim();
@@ -80,6 +96,28 @@ export interface CommissionResult {
   note?: string;        // เตือนถ้าคิดไม่ได้ (ยังไม่เลือกหมวด / ไม่เข้าเงื่อนไข)
 }
 
+// ── Snapshot ล็อกค่าคอมรายเดือน (freeze ตัวเลขหลังจ่าย กันเลขขยับเมื่อแก้ดีลย้อนหลัง) ──
+export interface CommissionLockDeal {
+  saleId: string; staff: string;
+  brand: string; model: string; customer: string;
+  group: "STACKER" | "FORKLIFT" | "none";
+  basis: string; basisValue: number;
+  category: string; returning: boolean;
+  amount: number; closeDate: string;
+}
+export interface CommissionLockStaff {
+  staff: string; total: number; dealCount: number;
+  missing: number; noneCount: number; noneSaleTotal: number; noneComm: number;
+}
+export interface CommissionLock {
+  month: string;      // YYYY-MM
+  lockedAt: string;   // ISO
+  lockedBy: string;
+  grandTotal: number;
+  staff: CommissionLockStaff[];
+  deals: CommissionLockDeal[];
+}
+
 // คำนวณค่าคอม 1 ดีล · ส่ง allSales มาด้วยเพื่อตรวจ "ลูกค้าเก่า" อัตโนมัติจากประวัติซื้อ
 export const calcCommission = (s: Sale, f?: Forklift, allSales?: Sale[]): CommissionResult => {
   const model = f?.model ?? s.forklift_model;
@@ -92,8 +130,11 @@ export const calcCommission = (s: Sale, f?: Forklift, allSales?: Sale[]): Commis
   }
 
   // FORKLIFT → ตามกำไรสุทธิ + หมวดลูกค้า
+  // จำแนกจากรุ่นก่อน: ถ้าเป็นรุ่นกลุ่มอื่น (CBD/CNS/แฮนด์ลิฟท์ ฯลฯ) → ไม่ใช่โฟล์คลิฟท์ แม้ DB จะใส่ประเภทเป็น "Forklift"
+  const brand = f?.brand ?? s.forklift_brand;
   const vtype = String(f?.vehicle_category ?? s.vehicle_type ?? "").trim();
-  const isForklift = vtype === "Forklift" || vtype === "" || /^(CPC?D|CQD|CPD|FD|FG|H2000)/i.test(String(model ?? ""));
+  const isForklift = !isOtherGroup(brand, model) &&
+    (vtype === "Forklift" || vtype === "" || /^(CPC?D|CQD|CPD|FD|FG|H2000)/i.test(String(model ?? "")));
   if (!isForklift) {
     // รถกลุ่มอื่น (แฮนด์ลิฟท์/CBD/CNS ฯลฯ) → คิด 1% ของ "ยอดรวมทั้งเดือน" (ทุก 100,000 = 1,000)
     // amount ต่อใบนี้เป็นค่าอ้างอิงเท่านั้น — หน้ารายงานรวมยอดทั้งเดือนแล้วคิด 1% ครั้งเดียว (กันเศษปัดต่อใบ)
