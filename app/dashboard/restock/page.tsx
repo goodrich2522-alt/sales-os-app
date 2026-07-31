@@ -23,6 +23,11 @@ const WINDOWS: { label: string; months: number | null }[] = [
   { label: "ทั้งหมด", months: null },
 ];
 const TARGETS = [2, 3, 4]; // เป้าหมายสต็อกพอขาย (เดือน)
+const SORTS: { key: "units" | "totalProfit" | "avgProfit"; label: string }[] = [
+  { key: "units", label: "ขายดี (คัน)" },
+  { key: "totalProfit", label: "กำไรรวม" },
+  { key: "avgProfit", label: "กำไร/คัน" },
+];
 
 interface ModelRow {
   brand: string; model: string;
@@ -34,13 +39,18 @@ interface ModelRow {
   coverage: number;       // พอขายอีกกี่เดือน (available / avgMonth)
   needQty: number;        // แนะนำสั่งเพิ่ม (คัน)
   needCost: number;       // งบสั่งเพิ่มโดยประมาณ
+  avgProfit: number;      // กำไรเฉลี่ย/คัน (ประมาณ)
+  totalProfit: number;    // กำไรรวมในช่วง (ประมาณ)
+  hasCost: boolean;       // มีข้อมูลทุนพอคำนวณกำไรไหม
 }
 
 function RestockPageInner() {
   const { sales, forklifts } = useApp();
+  const fkById = useMemo(() => new Map(forklifts.map(f => [f.id, f])), [forklifts]);
 
   const [winIdx, setWinIdx] = useState(1);       // ค่าเริ่มต้น 6 เดือน
   const [target, setTarget] = useState(3);       // เป้าหมาย 3 เดือน
+  const [sortBy, setSortBy] = useState<"units" | "totalProfit" | "avgProfit">("units");
   const [expandedBrand, setExpandedBrand] = useState<string | null>(null);
 
   // ดีลปิดจริงทั้งหมด (รวมบิล GR เพราะสะท้อน "ดีมานด์จริง" ที่ต้องเตรียมสต็อก)
@@ -71,15 +81,16 @@ function RestockPageInner() {
 
   // จัดกลุ่มยอดขายในช่วง → รุ่น → คำนวณตัวชี้วัดสั่งสต็อก
   const rows = useMemo(() => {
-    const m = new Map<string, { brand: string; model: string; units: number; revenue: number }>();
+    const m = new Map<string, { brand: string; model: string; units: number; revenue: number; sales: typeof closed }>();
     closed.filter(s => winSet.has(closeMonth(s))).forEach(s => {
       const brand = s.forklift_brand || "ไม่ระบุ";
       const model = s.forklift_model || "";
       if (!model) return;
       const key = `${brand}|${model}`;
-      const g = m.get(key) ?? { brand, model, units: 0, revenue: 0 };
+      const g = m.get(key) ?? { brand, model, units: 0, revenue: 0, sales: [] as typeof closed };
       g.units += 1;
       g.revenue += Number(s.actual_sale) || 0;
+      g.sales.push(s);
       m.set(key, g);
     });
     const out: ModelRow[] = [];
@@ -89,22 +100,39 @@ function RestockPageInner() {
       const avgCost = st.costN > 0 ? Math.round(st.costSum / st.costN) : 0;
       const coverage = avgMonth > 0 ? st.available / avgMonth : Infinity;
       const needQty = Math.max(0, Math.ceil(avgMonth * target) - st.available - st.incoming);
+      // กำไรประมาณ = ราคาขาย − ทุน − อุปกรณ์เสริม − ของแถม − ค่าขนส่ง
+      // ถ้าดีลไม่มีทุน (บิล GR ทุน=0) ใช้ทุนเฉลี่ยของรุ่นแทน กันกำไรเพี้ยนสูง
+      let profitSum = 0, hasCost = avgCost > 0;
+      g.sales.forEach(s => {
+        const f = fkById.get(s.forklift_id);
+        let cost = Number(f?.cost_price) || 0;
+        if (cost <= 0) cost = avgCost;
+        if (cost > 0) hasCost = true;
+        const addOns = (s.add_ons ?? []).reduce((t, a) => t + (Number(a.price) || 0), 0);
+        const free = s.freebie ? 2800 : 0;
+        const ship = Number(s.shipping_cost) || 0;
+        profitSum += (Number(s.actual_sale) || 0) - cost - addOns - free - ship;
+      });
       out.push({
         brand: g.brand, model: g.model, units: g.units, revenue: g.revenue,
         avgMonth, available: st.available, incoming: st.incoming, avgCost,
         coverage, needQty, needCost: needQty * avgCost,
+        avgProfit: hasCost ? Math.round(profitSum / g.units) : 0,
+        totalProfit: hasCost ? Math.round(profitSum) : 0,
+        hasCost,
       });
     });
-    return out.sort((a, b) => b.units - a.units);
-  }, [closed, winSet, stockByModel, denom, target]);
+    const cmp = (a: ModelRow, b: ModelRow) => sortBy === "units" ? b.units - a.units : sortBy === "avgProfit" ? b.avgProfit - a.avgProfit : b.totalProfit - a.totalProfit;
+    return out.sort(cmp);
+  }, [closed, winSet, stockByModel, denom, target, sortBy, fkById]);
 
   // จัดกลุ่มตามแบรนด์ (เรียงแบรนด์ตามยอดขายรวม)
   const byBrand = useMemo(() => {
-    const m = new Map<string, { brand: string; models: ModelRow[]; units: number; revenue: number; needCost: number; urgent: number }>();
+    const m = new Map<string, { brand: string; models: ModelRow[]; units: number; revenue: number; profit: number; needCost: number; urgent: number }>();
     rows.forEach(r => {
-      const g = m.get(r.brand) ?? { brand: r.brand, models: [], units: 0, revenue: 0, needCost: 0, urgent: 0 };
+      const g = m.get(r.brand) ?? { brand: r.brand, models: [], units: 0, revenue: 0, profit: 0, needCost: 0, urgent: 0 };
       g.models.push(r);
-      g.units += r.units; g.revenue += r.revenue; g.needCost += r.needCost;
+      g.units += r.units; g.revenue += r.revenue; g.profit += r.totalProfit; g.needCost += r.needCost;
       if (r.coverage < 1) g.urgent += 1;
       m.set(r.brand, g);
     });
@@ -113,6 +141,7 @@ function RestockPageInner() {
 
   const totalUnits = rows.reduce((s, r) => s + r.units, 0);
   const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0);
+  const totalProfit = rows.reduce((s, r) => s + r.totalProfit, 0);
   const totalNeedCost = rows.reduce((s, r) => s + r.needCost, 0);
   const urgentRows = rows.filter(r => r.coverage < 1).sort((a, b) => b.avgMonth - a.avgMonth);
 
@@ -128,6 +157,7 @@ function RestockPageInner() {
     const detRows = rows.map(r => ({
       "ยี่ห้อ": r.brand, "รุ่น": r.model,
       "ขายในช่วง (คัน)": r.units, "ยอดขายรวม (บาท)": r.revenue,
+      "กำไรเฉลี่ย/คัน (บาท)": r.hasCost ? r.avgProfit : "", "กำไรรวม (บาท)": r.hasCost ? r.totalProfit : "",
       "เฉลี่ย/เดือน (คัน)": Math.round(r.avgMonth * 10) / 10,
       "คงเหลือพร้อมขาย": r.available, "กำลังผลิต/รอรับ": r.incoming,
       "พอขายอีก (เดือน)": r.coverage === Infinity ? "" : Math.round(r.coverage * 10) / 10,
@@ -135,7 +165,7 @@ function RestockPageInner() {
       "แนะนำสั่งเพิ่ม (คัน)": r.needQty, "งบสั่งเพิ่มโดยประมาณ (บาท)": r.needCost,
     }));
     const ws = XLSX.utils.json_to_sheet(detRows);
-    ws["!cols"] = [12, 20, 14, 18, 14, 14, 14, 14, 16, 16, 20].map(w => ({ wch: w }));
+    ws["!cols"] = [12, 20, 14, 18, 16, 16, 14, 14, 14, 14, 16, 16, 20].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "วางแผนสั่งสต็อก");
     XLSX.writeFile(wb, `วางแผนสั่งสต็อก_${WINDOWS[winIdx].label}.xlsx`);
@@ -187,11 +217,20 @@ function RestockPageInner() {
               </button>
             ))}
           </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500">เรียงตาม</span>
+            {SORTS.map(so => (
+              <button key={so.key} onClick={() => setSortBy(so.key)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-bold border transition-all ${sortBy === so.key ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:border-emerald-300"}`}>
+                {so.label}
+              </button>
+            ))}
+          </div>
           <span className="text-xs text-slate-400 ml-auto">ข้อมูล {rangeLabel}</span>
         </div>
 
         {/* ── สรุปยอดรวม ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
             <p className="text-xs text-slate-500 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5 text-sky-500" />ขายในช่วง</p>
             <p className="text-2xl font-bold text-slate-800 mt-1">{fmt(totalUnits)} <span className="text-sm font-medium text-slate-400">คัน</span></p>
@@ -199,6 +238,10 @@ function RestockPageInner() {
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
             <p className="text-xs text-slate-500">ยอดขายรวม</p>
             <p className="text-2xl font-bold text-slate-800 mt-1">฿{fmt(totalRevenue)}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+            <p className="text-xs text-slate-500">กำไรรวม (ประมาณ)</p>
+            <p className="text-2xl font-bold text-emerald-600 mt-1">฿{fmt(totalProfit)}</p>
           </div>
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
             <p className="text-xs text-slate-500 flex items-center gap-1"><ShoppingCart className="w-3.5 h-3.5 text-indigo-500" />งบสั่งเพิ่ม (ประมาณ)</p>
@@ -238,7 +281,7 @@ function RestockPageInner() {
                   <p className="text-xs text-slate-500">{b.models.length} รุ่น · ขาย {b.units} คัน{b.urgent > 0 && <span className="text-red-600 font-semibold"> · ควรสั่งด่วน {b.urgent}</span>}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-sm font-bold text-slate-700">฿{fmt(b.revenue)}</p>
+                  <p className="text-sm font-bold text-slate-700">฿{fmt(b.revenue)} <span className="text-[11px] font-semibold text-emerald-600">· กำไร ฿{fmt(b.profit)}</span></p>
                   {b.needCost > 0 && <p className="text-[11px] text-indigo-600 font-semibold">งบสั่งเพิ่ม ฿{fmt(b.needCost)}</p>}
                 </div>
                 {expandedBrand === b.brand ? <ChevronDown className="w-5 h-5 text-slate-400" /> : <ChevronRight className="w-5 h-5 text-slate-400" />}
@@ -249,7 +292,7 @@ function RestockPageInner() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-left text-[11px] text-slate-400 border-b border-slate-100 bg-slate-50/50">
-                        {["#", "รุ่น", "ขาย(คัน)", "ยอดขาย", "เฉลี่ย/ด.", "คงเหลือ", "กำลังมา", "พอขาย(ด.)", "สั่งเพิ่ม", "งบสั่ง", "สถานะ"].map((h, i) => (
+                        {["#", "รุ่น", "ขาย(คัน)", "ยอดขาย", "กำไร/คัน", "กำไรรวม", "เฉลี่ย/ด.", "คงเหลือ", "กำลังมา", "พอขาย(ด.)", "สั่งเพิ่ม", "งบสั่ง", "สถานะ"].map((h, i) => (
                           <th key={i} className="px-3 py-2 font-semibold whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -263,6 +306,8 @@ function RestockPageInner() {
                             <td className="px-3 py-2.5 font-semibold text-slate-800 whitespace-nowrap">{r.model}</td>
                             <td className="px-3 py-2.5 text-slate-700 font-bold">{r.units}</td>
                             <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">฿{fmt(r.revenue)}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap">{r.hasCost ? <span className={`font-semibold ${r.avgProfit >= 0 ? "text-emerald-700" : "text-red-600"}`}>฿{fmt(r.avgProfit)}</span> : <span className="text-slate-300">—</span>}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap">{r.hasCost ? <span className={`font-semibold ${r.totalProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}>฿{fmt(r.totalProfit)}</span> : <span className="text-slate-300">—</span>}</td>
                             <td className="px-3 py-2.5 text-slate-600">{fmt1(r.avgMonth)}</td>
                             <td className="px-3 py-2.5 whitespace-nowrap"><span className={`font-bold ${r.available === 0 ? "text-red-600" : "text-slate-700"}`}>{r.available}</span></td>
                             <td className="px-3 py-2.5 text-slate-500">{r.incoming > 0 ? `+${r.incoming}` : "—"}</td>
@@ -292,6 +337,7 @@ function RestockPageInner() {
             <div><b>พอขาย (เดือน)</b> = คงเหลือพร้อมขาย ÷ เฉลี่ย/เดือน — น้อย = ของใกล้หมด</div>
             <div><b>แนะนำสั่งเพิ่ม</b> = (เฉลี่ย/เดือน × เป้าหมาย {target} เดือน) − คงเหลือ − กำลังมา (ปัดขึ้น)</div>
             <div><b>งบสั่งเพิ่ม</b> = แนะนำสั่งเพิ่ม × ทุนเฉลี่ย/คัน (ประมาณการงบซื้อสต็อก)</div>
+            <div><b>กำไร/คัน · กำไรรวม</b> (ประมาณ) = ราคาขาย − ทุน − อุปกรณ์เสริม − ของแถม − ค่าขนส่ง · ถ้าดีลไม่มีทุน (บิล GR) ใช้ทุนเฉลี่ยรุ่นแทน · เรียงตาม &ldquo;กำไรรวม/กำไรต่อคัน&rdquo; เพื่อดูรุ่นคุ้มสุด</div>
             <div className="text-slate-400">🔴 ควรสั่งด่วน (พอขาย &lt; 1 ด.) · 🟡 ควรเติม (&lt; {target} ด.) · 🟢 เพียงพอ · นับดีลปิด/จัดส่งแล้วทั้งหมด (รวมบิลย้อนหลัง) · คงเหลือ = สถานะ &ldquo;พร้อมขาย&rdquo; · กำลังมา = สั่งผลิต/รอรับ</div>
           </div>
         </details>
