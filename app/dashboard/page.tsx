@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState, useEffect, useMemo } from "react";
 import {
   ArrowLeft, TrendingUp, Package, Users, BarChart3, DollarSign, Award,
-  ChevronRight, User, X, Calendar, MapPin, Clock,
+  ChevronRight, User, X, Calendar, MapPin, Clock, ShieldCheck,
 } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
 import { getRegion } from "@/lib/mockData";
@@ -336,6 +336,9 @@ export default function Dashboard() {
           <div className="flex items-center gap-2">
             <Link href="/dashboard/commission" className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg px-3 py-1.5 transition-all">
               <DollarSign className="w-4 h-4" /><span className="hidden sm:inline">ค่าคอมรายเดือน</span>
+            </Link>
+            <Link href="/dashboard/audit" className="flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg px-3 py-1.5 transition-all">
+              <ShieldCheck className="w-4 h-4" /><span className="hidden sm:inline">ประวัติแก้ไข</span>
             </Link>
             {dashYear && <span className="text-xs font-medium bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full hidden sm:block">ปี {Number(dashYear) + 543}</span>}
           </div>

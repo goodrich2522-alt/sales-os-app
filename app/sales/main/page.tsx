@@ -100,7 +100,7 @@ function labeledPhotos(recs: InspectionRecord[]): LabeledPhoto[] {
 export default function SalesMain() {
   const router = useRouter();
   const {
-    forklifts, sales, addSale, updateSale, deleteSale, inspections, fieldConfig, refresh,
+    forklifts, sales, addSale, updateSale, deleteSale, inspections, fieldConfig, refresh, setActor,
     updateFieldOptions,
     addSaleExtraFieldDef, removeSaleExtraFieldDef, renameSaleExtraFieldDef,
     addSaleExtraFieldOption, removeSaleExtraFieldOption, editSaleExtraFieldOption,
@@ -225,7 +225,7 @@ export default function SalesMain() {
   useEffect(() => {
     const u = localStorage.getItem("sales_user");
     if (!u) { router.push("/sales/login"); return; }
-    setSalesUser(JSON.parse(u));
+    const su = JSON.parse(u); setSalesUser(su); setActor(`${su.name} (เซลล์)`);
     // มีข้อมูลค้างแต่ session Supabase หมดอายุ/ไม่มี → บังคับล็อกอินใหม่ (กันเซฟไม่เข้าแบบเงียบๆ)
     (async () => {
       if (apiEnabled && !(await hasActiveSession())) {

@@ -116,6 +116,19 @@ export const updateSaleApi = async (s: Sale) => {
 };
 export const deleteSaleApi = async (id: string) => { const { error } = await sb().from("sales").delete().eq("id", id); if (error) throw error; };
 
+// ── Audit log (บันทึกประวัติการแก้ไขจุดสำคัญ) ─────────────────────────────────
+export interface AuditEntry { id?: number; at?: string; actor?: string; action?: string; entity?: string; entity_id?: string; detail?: unknown; }
+export const addAuditApi = async (e: AuditEntry) => {
+  if (!apiEnabled) return;
+  const { error } = await sb().from("audit_log").insert(e);
+  if (error) throw error;
+};
+export const fetchAuditApi = async (limit = 1000): Promise<AuditEntry[]> => {
+  const { data, error } = await sb().from("audit_log").select("*").order("at", { ascending: false }).limit(limit);
+  if (error) throw error;
+  return (data ?? []) as AuditEntry[];
+};
+
 // ── Bulk upsert (นำเข้าข้อมูลสำรอง / อัปโหลดสต็อกหลายคัน) — แบ่งก้อนละ 200 ──
 async function bulkUpsert<T extends object>(table: string, rows: T[]) {
   for (let i = 0; i < rows.length; i += 200) {

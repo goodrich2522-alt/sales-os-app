@@ -13,7 +13,7 @@ type TransporterRole = "ผู้รับรถ" | "ผู้ส่งมอบ
 
 export default function TransporterMain() {
   const router = useRouter();
-  const { addInspection, deleteInspection, updateForklift, forklifts, sales, inspections } = useApp();
+  const { addInspection, deleteInspection, updateForklift, forklifts, sales, inspections, setActor } = useApp();
   const [username, setUsername] = useState("");
   const [userphone, setUserphone] = useState("");
   const [role, setRole] = useState<TransporterRole>("ผู้รับรถ");
@@ -54,7 +54,7 @@ export default function TransporterMain() {
     const name = localStorage.getItem("transporter_name");
     if (!name) { router.push("/transporter/login"); return; }
     // หน้าผู้ขนส่งจงใจไม่ผูก Supabase Auth (ล็อกอินด้วยชื่อเล่น+เบอร์) — ไม่ต้องเช็ค session
-    setUsername(name); setReceiverName(name); setSenderName(name);
+    setUsername(name); setReceiverName(name); setSenderName(name); setActor(`${name} (ขนส่ง)`);
     setUserphone(localStorage.getItem("transporter_phone") || "");
   }, [router]);
 

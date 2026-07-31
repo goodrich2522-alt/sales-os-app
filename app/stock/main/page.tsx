@@ -69,7 +69,7 @@ export default function StockMain() {
   const router = useRouter();
   const {
     forklifts, addForkliftsBulk, updateForklift, deleteForklift, inspections, sales, updateSale,
-    approveStockSale, rejectStockSale,
+    approveStockSale, rejectStockSale, setActor,
     exportData, importData,
     fieldConfig, updateFieldOptions,
     removeCustomFieldDef, renameCustomFieldDef,
@@ -126,7 +126,7 @@ export default function StockMain() {
   useEffect(() => {
     const u = localStorage.getItem("stock_user");
     if (!u) { router.push("/stock/login"); return; }
-    setUsername(JSON.parse(u).name);
+    const nm = JSON.parse(u).name; setUsername(nm); setActor(`${nm} (สต็อก)`);
     // มีข้อมูลค้างแต่ session Supabase หมดอายุ/ไม่มี → บังคับล็อกอินใหม่ (กันเซฟไม่เข้าแบบเงียบๆ)
     (async () => {
       if (apiEnabled && !(await hasActiveSession())) {

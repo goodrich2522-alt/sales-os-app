@@ -93,6 +93,7 @@ interface AppContextType {
   deleteSale: (saleId: string) => void;
   approveStockSale: (saleId: string, by?: string) => void;   // ฝ่ายสต็อกอนุมัติคำขอจอง
   rejectStockSale: (saleId: string, reason: string, by?: string) => void; // ฝ่ายสต็อกปฏิเสธ → คืนรถ
+  setActor: (name: string) => void;                          // ตั้งชื่อผู้ทำรายการ (สำหรับ audit log)
   exportData: () => BackupData;
   importData: (data: BackupData) => Promise<{ forklifts: number; sales: number; inspections: number }>;
   addInspection: (r: InspectionRecord) => void;
@@ -164,6 +165,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { forkliftsRef.current = forklifts; }, [forklifts]);
   useEffect(() => { salesRef.current = sales; }, [sales]);
   useEffect(() => { inspectionsRef.current = inspections; }, [inspections]);
+
+  // ── Audit log: ใครทำอะไรเมื่อไหร่ (จุดสำคัญ) ──
+  const actorRef = useRef<string>("ระบบ");
+  const setActor = useCallback((name: string) => { actorRef.current = (name || "").trim() || "ระบบ"; }, []);
+  const logAudit = useCallback((action: string, entity: string, entityId: string, detail?: unknown) => {
+    if (!api.apiEnabled) return;
+    api.addAuditApi({ actor: actorRef.current, action, entity, entity_id: entityId, detail: detail ?? null }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -285,16 +294,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     lastLocalEditRef.current = Date.now();
     setForklifts(p => [...fs, ...p]);
     if (api.apiEnabled) api.bulkUpsertForkliftsApi(fs).catch(e => console.warn("addForkliftsBulk", e));
+    logAudit(`นำเข้ารถเข้าสต็อก ${fs.length} คัน`, "forklift", fs[0].id, { count: fs.length, ids: fs.slice(0, 20).map(f => f.id), pi: fs[0].pi_no });
   }, []);
   const updateForklift = useCallback((f: Forklift) => {
+    const before = forkliftsRef.current.find(x => x.id === f.id);
     lastLocalEditRef.current = Date.now();
     setForklifts(p => p.map(x => x.id === f.id ? f : x));
     if (api.apiEnabled) api.updateForkliftApi(f).catch(e => console.warn("updateForklift", e));
+    // audit: log เฉพาะ field สำคัญที่เปลี่ยน
+    if (before) {
+      const ch: Record<string, { from: unknown; to: unknown }> = {};
+      (["status", "cost_price", "stock_price", "location", "SN", "received_date", "pi_no"] as (keyof Forklift)[])
+        .forEach(k => { if (String(before[k] ?? "") !== String(f[k] ?? "")) ch[k] = { from: before[k] ?? "", to: f[k] ?? "" }; });
+      if (Object.keys(ch).length) logAudit(ch.status ? "เปลี่ยนสถานะรถ" : "แก้ไขข้อมูลรถ", "forklift", f.id, { model: `${f.brand} ${f.model}`, changes: ch });
+    }
   }, []);
   const deleteForklift = useCallback((id: string) => {
+    const before = forkliftsRef.current.find(f => f.id === id);
     lastLocalEditRef.current = Date.now();
     setForklifts(p => p.filter(f => f.id !== id));
     if (api.apiEnabled) api.deleteForkliftApi(id).catch(e => console.warn("deleteForklift", e));
+    logAudit("ลบรถออกจากสต็อก", "forklift", id, before ? { model: `${before.brand} ${before.model}`, SN: before.SN, status: before.status } : null);
   }, []);
 
   // ── Sale CRUD ─────────────────────────────────────────────────────────────
@@ -360,6 +380,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (target) api.updateForkliftApi({ ...target, status: nextStatus }).catch(e => console.warn("updateForklift", e));
       })();
     }
+    logAudit("บันทึกการขาย/จอง", "sale", s.id, { forklift: s.forklift_id, model: `${s.forklift_brand} ${s.forklift_model}`, status: s.sale_status, customer: s.customer_name, amount: s.actual_sale });
   }, []);
   // แก้ไขดีลที่ทำไปแล้ว — อัปเดตข้อมูล + ปรับสถานะรถ (เคารพเกตอนุมัติ · ปิดการขายจริงตัดจองอัตโนมัติ)
   const updateSale = useCallback((s0: Sale) => {
@@ -393,6 +414,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const target = forkliftsRef.current.find(f => f.id === sale.forklift_id);
       if (target) api.updateForkliftApi({ ...target, status: finalStatus }).catch(e => console.warn("updateForklift", e));
     }
+    logAudit("อนุมัติจอง", "sale", saleId, { forklift: sale.forklift_id, model: `${sale.forklift_brand} ${sale.forklift_model}`, customer: sale.customer_name, by: by || "สต็อก" });
   }, []);
   const rejectStockSale = useCallback((saleId: string, reason: string, by?: string) => {
     lastLocalEditRef.current = Date.now();
@@ -407,6 +429,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const target = forkliftsRef.current.find(f => f.id === sale.forklift_id);
       if (target) api.updateForkliftApi({ ...target, status: "พร้อมขาย" }).catch(e => console.warn("updateForklift", e));
     }
+    logAudit("ปฏิเสธจอง", "sale", saleId, { forklift: sale.forklift_id, model: `${sale.forklift_brand} ${sale.forklift_model}`, customer: sale.customer_name, reason: reason || "", by: by || "สต็อก" });
   }, []);
 
   const deleteSale = useCallback((saleId: string) => {
@@ -629,7 +652,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     <AppContext.Provider value={{
       forklifts, sales, inspections, deletedInspections, fieldConfig,
       addForklift, addForkliftsBulk, updateForklift, deleteForklift,
-      addSale, updateSale, deleteSale, approveStockSale, rejectStockSale,
+      addSale, updateSale, deleteSale, approveStockSale, rejectStockSale, setActor,
       exportData, importData,
       addInspection, deleteInspection, restoreInspection, purgeInspection,
       refresh,
