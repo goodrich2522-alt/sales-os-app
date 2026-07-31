@@ -1538,10 +1538,12 @@ export default function StockMain() {
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />สถานที่ที่รถอยู่</p>
                   <div className="flex gap-2">
-                    <input list="stock-loc-list" value={locEdit} onChange={e => { setLocEdit(e.target.value); setLocSaved(false); }}
-                      placeholder="เช่น คลังขอนแก่น / โชว์รูมชลบุรี / ลานหน้าโรงงาน"
-                      className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
-                    <datalist id="stock-loc-list">{fieldConfig.locations.map(l => <option key={l} value={l} />)}</datalist>
+                    {/* dropdown จริง — โชว์ทุกสาขาเสมอ (สำนักงานใหญ่/ชลบุรี/ขอนแก่น) · รวมค่าปัจจุบันถ้าไม่อยู่ในลิสต์ */}
+                    <select value={locEdit} onChange={e => { setLocEdit(e.target.value); setLocSaved(false); }}
+                      className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 cursor-pointer">
+                      <option value="">— เลือกสาขา/สถานที่ —</option>
+                      {[...new Set([...fieldConfig.locations, ...(locEdit && !fieldConfig.locations.includes(locEdit) ? [locEdit] : [])])].map(l => <option key={l} value={l}>{l}</option>)}
+                    </select>
                     <button onClick={() => { const u = { ...it, location: locEdit.trim() }; updateForklift(u); setDetailItem(u); setLocSaved(true); }}
                       disabled={locEdit.trim() === (it.location ?? "").trim()}
                       className="px-4 py-2 rounded-xl text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
