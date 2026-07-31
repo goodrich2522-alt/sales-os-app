@@ -1,0 +1,305 @@
+"use client";
+
+import Link from "next/link";
+import { useState, useMemo } from "react";
+import {
+  ArrowLeft, Boxes, Download, ChevronDown, ChevronRight,
+  Calendar, ShoppingCart, TrendingUp, AlertTriangle, Package,
+} from "lucide-react";
+import { useApp } from "@/lib/AppContext";
+import { isClosedSale, closeMonth } from "@/lib/commission";
+import { DashboardGuard } from "@/components/DashboardGuard";
+
+const fmt = (n: number) => Number(n || 0).toLocaleString("th-TH");
+const fmt1 = (n: number) => (Math.round((Number(n) || 0) * 10) / 10).toLocaleString("th-TH");
+const MONTHS_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+const monthLabel = (ym: string) => { const [y, m] = ym.split("-"); return `${MONTHS_TH[Number(m) - 1] ?? m} ${Number(y) + 543}`; };
+
+// ช่วงเวลาให้เลือก (จำนวนเดือนล่าสุด · null = ทั้งหมด)
+const WINDOWS: { label: string; months: number | null }[] = [
+  { label: "3 เดือน", months: 3 },
+  { label: "6 เดือน", months: 6 },
+  { label: "12 เดือน", months: 12 },
+  { label: "ทั้งหมด", months: null },
+];
+const TARGETS = [2, 3, 4]; // เป้าหมายสต็อกพอขาย (เดือน)
+
+interface ModelRow {
+  brand: string; model: string;
+  units: number; revenue: number;
+  avgMonth: number;       // เฉลี่ยขายต่อเดือน
+  available: number;      // คงเหลือพร้อมขาย
+  incoming: number;       // กำลังผลิต/รอรับ
+  avgCost: number;        // ทุนเฉลี่ย/คัน
+  coverage: number;       // พอขายอีกกี่เดือน (available / avgMonth)
+  needQty: number;        // แนะนำสั่งเพิ่ม (คัน)
+  needCost: number;       // งบสั่งเพิ่มโดยประมาณ
+}
+
+function RestockPageInner() {
+  const { sales, forklifts } = useApp();
+
+  const [winIdx, setWinIdx] = useState(1);       // ค่าเริ่มต้น 6 เดือน
+  const [target, setTarget] = useState(3);       // เป้าหมาย 3 เดือน
+  const [expandedBrand, setExpandedBrand] = useState<string | null>(null);
+
+  // ดีลปิดจริงทั้งหมด (รวมบิล GR เพราะสะท้อน "ดีมานด์จริง" ที่ต้องเตรียมสต็อก)
+  const closed = useMemo(() => sales.filter(isClosedSale), [sales]);
+  const allMonths = useMemo(() => [...new Set(closed.map(closeMonth).filter(Boolean))].sort(), [closed]);
+
+  // เดือนในช่วงที่เลือก (เอาเดือนล่าสุดย้อนหลัง N เดือน)
+  const win = WINDOWS[winIdx].months;
+  const windowMonths = useMemo(() => (win === null ? allMonths : allMonths.slice(-win)), [allMonths, win]);
+  const winSet = useMemo(() => new Set(windowMonths), [windowMonths]);
+  const denom = Math.max(1, windowMonths.length); // จำนวนเดือนที่ใช้หารเฉลี่ย
+
+  // สต็อกปัจจุบันต่อรุ่น: พร้อมขาย / กำลังผลิต-รอรับ / ทุนเฉลี่ย
+  const stockByModel = useMemo(() => {
+    const m = new Map<string, { available: number; incoming: number; costSum: number; costN: number }>();
+    forklifts.forEach(f => {
+      const key = `${f.brand ?? ""}|${f.model ?? ""}`;
+      const g = m.get(key) ?? { available: 0, incoming: 0, costSum: 0, costN: 0 };
+      const st = String(f.status ?? "").trim();
+      if (st === "พร้อมขาย") g.available += 1;
+      else if (st === "สั่งผลิต" || st === "รอรับ" || st === "รอยืนยันนำเข้าสต็อก") g.incoming += 1;
+      const c = Number(f.cost_price) || 0;
+      if (c > 0) { g.costSum += c; g.costN += 1; }
+      m.set(key, g);
+    });
+    return m;
+  }, [forklifts]);
+
+  // จัดกลุ่มยอดขายในช่วง → รุ่น → คำนวณตัวชี้วัดสั่งสต็อก
+  const rows = useMemo(() => {
+    const m = new Map<string, { brand: string; model: string; units: number; revenue: number }>();
+    closed.filter(s => winSet.has(closeMonth(s))).forEach(s => {
+      const brand = s.forklift_brand || "ไม่ระบุ";
+      const model = s.forklift_model || "";
+      if (!model) return;
+      const key = `${brand}|${model}`;
+      const g = m.get(key) ?? { brand, model, units: 0, revenue: 0 };
+      g.units += 1;
+      g.revenue += Number(s.actual_sale) || 0;
+      m.set(key, g);
+    });
+    const out: ModelRow[] = [];
+    m.forEach((g, key) => {
+      const st = stockByModel.get(key) ?? { available: 0, incoming: 0, costSum: 0, costN: 0 };
+      const avgMonth = g.units / denom;
+      const avgCost = st.costN > 0 ? Math.round(st.costSum / st.costN) : 0;
+      const coverage = avgMonth > 0 ? st.available / avgMonth : Infinity;
+      const needQty = Math.max(0, Math.ceil(avgMonth * target) - st.available - st.incoming);
+      out.push({
+        brand: g.brand, model: g.model, units: g.units, revenue: g.revenue,
+        avgMonth, available: st.available, incoming: st.incoming, avgCost,
+        coverage, needQty, needCost: needQty * avgCost,
+      });
+    });
+    return out.sort((a, b) => b.units - a.units);
+  }, [closed, winSet, stockByModel, denom, target]);
+
+  // จัดกลุ่มตามแบรนด์ (เรียงแบรนด์ตามยอดขายรวม)
+  const byBrand = useMemo(() => {
+    const m = new Map<string, { brand: string; models: ModelRow[]; units: number; revenue: number; needCost: number; urgent: number }>();
+    rows.forEach(r => {
+      const g = m.get(r.brand) ?? { brand: r.brand, models: [], units: 0, revenue: 0, needCost: 0, urgent: 0 };
+      g.models.push(r);
+      g.units += r.units; g.revenue += r.revenue; g.needCost += r.needCost;
+      if (r.coverage < 1) g.urgent += 1;
+      m.set(r.brand, g);
+    });
+    return [...m.values()].sort((a, b) => b.revenue - a.revenue);
+  }, [rows]);
+
+  const totalUnits = rows.reduce((s, r) => s + r.units, 0);
+  const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0);
+  const totalNeedCost = rows.reduce((s, r) => s + r.needCost, 0);
+  const urgentRows = rows.filter(r => r.coverage < 1).sort((a, b) => b.avgMonth - a.avgMonth);
+
+  // ป้ายสถานะสั่งสต็อก
+  const statusOf = (r: ModelRow) =>
+    r.coverage < 1 ? { t: "🔴 ควรสั่งด่วน", c: "bg-red-100 text-red-700 border-red-200" }
+      : r.coverage < target ? { t: "🟡 ควรเติม", c: "bg-amber-100 text-amber-700 border-amber-200" }
+      : { t: "🟢 เพียงพอ", c: "bg-emerald-100 text-emerald-700 border-emerald-200" };
+
+  const exportExcel = async () => {
+    if (rows.length === 0) return;
+    const XLSX = await import("xlsx");
+    const detRows = rows.map(r => ({
+      "ยี่ห้อ": r.brand, "รุ่น": r.model,
+      "ขายในช่วง (คัน)": r.units, "ยอดขายรวม (บาท)": r.revenue,
+      "เฉลี่ย/เดือน (คัน)": Math.round(r.avgMonth * 10) / 10,
+      "คงเหลือพร้อมขาย": r.available, "กำลังผลิต/รอรับ": r.incoming,
+      "พอขายอีก (เดือน)": r.coverage === Infinity ? "" : Math.round(r.coverage * 10) / 10,
+      "ทุนเฉลี่ย/คัน (บาท)": r.avgCost,
+      "แนะนำสั่งเพิ่ม (คัน)": r.needQty, "งบสั่งเพิ่มโดยประมาณ (บาท)": r.needCost,
+    }));
+    const ws = XLSX.utils.json_to_sheet(detRows);
+    ws["!cols"] = [12, 20, 14, 18, 14, 14, 14, 14, 16, 16, 20].map(w => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "วางแผนสั่งสต็อก");
+    XLSX.writeFile(wb, `วางแผนสั่งสต็อก_${WINDOWS[winIdx].label}.xlsx`);
+  };
+
+  const rangeLabel = windowMonths.length > 0
+    ? `${monthLabel(windowMonths[0])} – ${monthLabel(windowMonths[windowMonths.length - 1])}`
+    : "—";
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard" className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all"><ArrowLeft className="w-5 h-5" /></Link>
+            <div className="flex items-center gap-2.5">
+              <div className="bg-gradient-to-br from-sky-500 to-blue-600 rounded-xl p-2"><Boxes className="w-5 h-5 text-white" /></div>
+              <div>
+                <h1 className="text-base font-bold text-slate-800 leading-tight">วางแผนสั่งสต็อก</h1>
+                <p className="text-slate-500 text-xs">รถขายดีแต่ละแบรนด์ + คงเหลือ → วางแผนงบสั่งซื้อล่วงหน้า</p>
+              </div>
+            </div>
+          </div>
+          <button onClick={exportExcel} disabled={rows.length === 0}
+            className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg px-3 py-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+            <Download className="w-4 h-4" /><span className="hidden sm:inline">Export Excel</span>
+          </button>
+        </div>
+      </header>
+
+      <main className="max-w-6xl mx-auto px-4 py-6 flex flex-col gap-5">
+        {/* ── ตัวเลือกช่วงเวลา + เป้าหมายสต็อก ── */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" />ช่วงยอดขาย</span>
+            {WINDOWS.map((w, i) => (
+              <button key={w.label} onClick={() => setWinIdx(i)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-bold border transition-all ${winIdx === i ? "bg-sky-600 text-white border-sky-600" : "bg-white text-slate-600 border-slate-200 hover:border-sky-300"}`}>
+                {w.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500">อยากมีสต็อกพอขาย</span>
+            {TARGETS.map(t => (
+              <button key={t} onClick={() => setTarget(t)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-bold border transition-all ${target === t ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200 hover:border-indigo-300"}`}>
+                {t} เดือน
+              </button>
+            ))}
+          </div>
+          <span className="text-xs text-slate-400 ml-auto">ข้อมูล {rangeLabel}</span>
+        </div>
+
+        {/* ── สรุปยอดรวม ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+            <p className="text-xs text-slate-500 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5 text-sky-500" />ขายในช่วง</p>
+            <p className="text-2xl font-bold text-slate-800 mt-1">{fmt(totalUnits)} <span className="text-sm font-medium text-slate-400">คัน</span></p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+            <p className="text-xs text-slate-500">ยอดขายรวม</p>
+            <p className="text-2xl font-bold text-slate-800 mt-1">฿{fmt(totalRevenue)}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+            <p className="text-xs text-slate-500 flex items-center gap-1"><ShoppingCart className="w-3.5 h-3.5 text-indigo-500" />งบสั่งเพิ่ม (ประมาณ)</p>
+            <p className="text-2xl font-bold text-indigo-600 mt-1">฿{fmt(totalNeedCost)}</p>
+          </div>
+          <div className={`rounded-2xl border shadow-sm p-4 ${urgentRows.length > 0 ? "bg-red-50 border-red-200" : "bg-white border-slate-100"}`}>
+            <p className="text-xs text-slate-500 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5 text-red-500" />รุ่นควรสั่งด่วน</p>
+            <p className={`text-2xl font-bold mt-1 ${urgentRows.length > 0 ? "text-red-600" : "text-slate-800"}`}>{urgentRows.length}</p>
+          </div>
+        </div>
+
+        {/* ── รุ่นที่ควรสั่งด่วน (คงเหลือ < 1 เดือน) ── */}
+        {urgentRows.length > 0 && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
+            <p className="text-sm font-bold text-red-700 flex items-center gap-1.5 mb-2"><AlertTriangle className="w-4 h-4" />ควรสั่งเพิ่มด่วน — ของใกล้หมด (พอขายไม่ถึง 1 เดือน)</p>
+            <div className="flex flex-col gap-1.5">
+              {urgentRows.slice(0, 8).map(r => (
+                <div key={`${r.brand}|${r.model}`} className="flex items-center gap-2 text-sm flex-wrap">
+                  <span className="font-semibold text-slate-800">{r.brand} {r.model}</span>
+                  <span className="text-xs text-slate-500">ขายเฉลี่ย {fmt1(r.avgMonth)}/เดือน · เหลือ {r.available} คัน{r.incoming > 0 ? ` (+${r.incoming} กำลังมา)` : ""}</span>
+                  <span className="ml-auto text-xs font-bold text-red-700 bg-white border border-red-200 rounded-lg px-2 py-0.5">สั่งเพิ่ม {r.needQty} คัน ≈ ฿{fmt(r.needCost)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── รายแบรนด์ ── */}
+        <div className="flex flex-col gap-3">
+          {byBrand.map(b => (
+            <div key={b.brand} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <button onClick={() => setExpandedBrand(expandedBrand === b.brand ? null : b.brand)}
+                className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors text-left">
+                <div className="rounded-xl p-2 flex-shrink-0 bg-sky-100 text-sky-600"><Package className="w-5 h-5" /></div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-slate-800 text-sm">{b.brand}</p>
+                  <p className="text-xs text-slate-500">{b.models.length} รุ่น · ขาย {b.units} คัน{b.urgent > 0 && <span className="text-red-600 font-semibold"> · ควรสั่งด่วน {b.urgent}</span>}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-bold text-slate-700">฿{fmt(b.revenue)}</p>
+                  {b.needCost > 0 && <p className="text-[11px] text-indigo-600 font-semibold">งบสั่งเพิ่ม ฿{fmt(b.needCost)}</p>}
+                </div>
+                {expandedBrand === b.brand ? <ChevronDown className="w-5 h-5 text-slate-400" /> : <ChevronRight className="w-5 h-5 text-slate-400" />}
+              </button>
+
+              {expandedBrand === b.brand && (
+                <div className="border-t border-slate-100 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-[11px] text-slate-400 border-b border-slate-100 bg-slate-50/50">
+                        {["#", "รุ่น", "ขาย(คัน)", "ยอดขาย", "เฉลี่ย/ด.", "คงเหลือ", "กำลังมา", "พอขาย(ด.)", "สั่งเพิ่ม", "งบสั่ง", "สถานะ"].map((h, i) => (
+                          <th key={i} className="px-3 py-2 font-semibold whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {b.models.map((r, i) => {
+                        const s = statusOf(r);
+                        return (
+                          <tr key={`${r.brand}|${r.model}`} className="border-b border-slate-50 hover:bg-sky-50/40">
+                            <td className="px-3 py-2.5 text-slate-400 font-bold">{i + 1}</td>
+                            <td className="px-3 py-2.5 font-semibold text-slate-800 whitespace-nowrap">{r.model}</td>
+                            <td className="px-3 py-2.5 text-slate-700 font-bold">{r.units}</td>
+                            <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">฿{fmt(r.revenue)}</td>
+                            <td className="px-3 py-2.5 text-slate-600">{fmt1(r.avgMonth)}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap"><span className={`font-bold ${r.available === 0 ? "text-red-600" : "text-slate-700"}`}>{r.available}</span></td>
+                            <td className="px-3 py-2.5 text-slate-500">{r.incoming > 0 ? `+${r.incoming}` : "—"}</td>
+                            <td className="px-3 py-2.5 text-slate-600">{r.coverage === Infinity ? "—" : fmt1(r.coverage)}</td>
+                            <td className="px-3 py-2.5">{r.needQty > 0 ? <span className="font-bold text-indigo-700">{r.needQty}</span> : <span className="text-slate-300">—</span>}</td>
+                            <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{r.needCost > 0 ? `฿${fmt(r.needCost)}` : "—"}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap"><span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${s.c}`}>{s.t}</span></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ))}
+          {rows.length === 0 && (
+            <div className="text-center py-14 text-slate-400"><Boxes className="w-10 h-10 text-slate-300 mx-auto mb-2" /><p className="text-sm">ยังไม่มีข้อมูลการขายในช่วงที่เลือก</p></div>
+          )}
+        </div>
+
+        {/* ── วิธีอ่าน ── */}
+        <details className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 text-sm text-slate-600">
+          <summary className="font-bold text-slate-700 cursor-pointer">วิธีอ่าน / การคำนวณ</summary>
+          <div className="mt-3 flex flex-col gap-2 text-xs leading-relaxed">
+            <div><b>เฉลี่ย/เดือน</b> = จำนวนที่ขายในช่วง ÷ จำนวนเดือนในช่วง (สะท้อนความเร็วขาย)</div>
+            <div><b>พอขาย (เดือน)</b> = คงเหลือพร้อมขาย ÷ เฉลี่ย/เดือน — น้อย = ของใกล้หมด</div>
+            <div><b>แนะนำสั่งเพิ่ม</b> = (เฉลี่ย/เดือน × เป้าหมาย {target} เดือน) − คงเหลือ − กำลังมา (ปัดขึ้น)</div>
+            <div><b>งบสั่งเพิ่ม</b> = แนะนำสั่งเพิ่ม × ทุนเฉลี่ย/คัน (ประมาณการงบซื้อสต็อก)</div>
+            <div className="text-slate-400">🔴 ควรสั่งด่วน (พอขาย &lt; 1 ด.) · 🟡 ควรเติม (&lt; {target} ด.) · 🟢 เพียงพอ · นับดีลปิด/จัดส่งแล้วทั้งหมด (รวมบิลย้อนหลัง) · คงเหลือ = สถานะ &ldquo;พร้อมขาย&rdquo; · กำลังมา = สั่งผลิต/รอรับ</div>
+          </div>
+        </details>
+      </main>
+    </div>
+  );
+}
+
+export default function RestockPage() {
+  return <DashboardGuard><RestockPageInner /></DashboardGuard>;
+}

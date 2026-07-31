@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState, useEffect, useMemo } from "react";
 import {
   ArrowLeft, TrendingUp, Package, Users, BarChart3, DollarSign, Award,
-  ChevronRight, User, X, Calendar, MapPin, Clock, ShieldCheck,
+  ChevronRight, User, X, Calendar, MapPin, Clock, ShieldCheck, Boxes,
 } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
 import { getRegion } from "@/lib/mockData";
@@ -340,6 +340,9 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Link href="/dashboard/restock" className="flex items-center gap-1.5 text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg px-3 py-1.5 transition-all">
+              <Boxes className="w-4 h-4" /><span className="hidden sm:inline">วางแผนสั่งสต็อก</span>
+            </Link>
             <Link href="/dashboard/commission" className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg px-3 py-1.5 transition-all">
               <DollarSign className="w-4 h-4" /><span className="hidden sm:inline">ค่าคอมรายเดือน</span>
             </Link>
