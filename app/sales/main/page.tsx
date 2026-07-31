@@ -1091,7 +1091,10 @@ export default function SalesMain() {
 
                   {/* สถานที่ที่รถอยู่ (จุดรับ/ส่ง) — ดูอย่างเดียว (แก้ได้เฉพาะฝ่ายสต็อก) */}
                   <div className="bg-teal-50 border border-teal-100 rounded-xl p-3">
-                    <p className="text-xs text-teal-600 font-medium flex items-center gap-1.5 mb-0.5"><MapPin className="w-3.5 h-3.5" />สถานที่ที่รถอยู่ (จุดรับ/ส่ง)</p>
+                    <p className="text-xs text-teal-600 font-medium flex items-center gap-1.5 mb-0.5">
+                      <MapPin className="w-3.5 h-3.5" />สถานที่ที่รถอยู่ (จุดรับ/ส่ง)
+                      <span className="ml-auto text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-md">🔒 แก้ได้เฉพาะฝ่ายสต็อก</span>
+                    </p>
                     <p className="text-sm font-semibold text-slate-700">{selected.location?.trim() ? selected.location : <span className="text-slate-400 font-normal">— ยังไม่ระบุ (ให้ฝ่ายสต็อกกรอก) —</span>}</p>
                   </div>
 
