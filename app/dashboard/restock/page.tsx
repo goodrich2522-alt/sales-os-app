@@ -10,8 +10,9 @@ import { useApp } from "@/lib/AppContext";
 import { isClosedSale, closeMonth } from "@/lib/commission";
 import { DashboardGuard } from "@/components/DashboardGuard";
 
-const fmt = (n: number) => Number(n || 0).toLocaleString("th-TH");
-const fmt1 = (n: number) => (Math.round((Number(n) || 0) * 10) / 10).toLocaleString("th-TH");
+const fmt = (n: number) => Math.round(Number(n) || 0).toLocaleString("th-TH"); // จำนวนเต็ม ไม่มีทศนิยม
+// อัตรา/จำนวนเดือน: ปัดเป็นจำนวนเต็ม แต่ถ้ามากกว่า 0 แต่ไม่ถึง 0.5 โชว์ "<1" (กันแสดงเป็น 0 ทั้งที่ยังขายได้)
+const wrate = (n: number) => (n > 0 && n < 0.5 ? "<1" : String(Math.round(Number(n) || 0)));
 const MONTHS_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 const monthLabel = (ym: string) => { const [y, m] = ym.split("-"); return `${MONTHS_TH[Number(m) - 1] ?? m} ${Number(y) + 543}`; };
 
@@ -156,11 +157,11 @@ function RestockPageInner() {
     const XLSX = await import("xlsx");
     const detRows = rows.map(r => ({
       "ยี่ห้อ": r.brand, "รุ่น": r.model,
-      "ขายในช่วง (คัน)": r.units, "ยอดขายรวม (บาท)": r.revenue,
+      "ขายในช่วง (คัน)": r.units, "ยอดขายรวม (บาท)": Math.round(r.revenue),
       "กำไรเฉลี่ย/คัน (บาท)": r.hasCost ? r.avgProfit : "", "กำไรรวม (บาท)": r.hasCost ? r.totalProfit : "",
-      "เฉลี่ย/เดือน (คัน)": Math.round(r.avgMonth * 10) / 10,
+      "เฉลี่ย/เดือน (คัน)": Math.round(r.avgMonth),
       "คงเหลือพร้อมขาย": r.available, "กำลังผลิต/รอรับ": r.incoming,
-      "พอขายอีก (เดือน)": r.coverage === Infinity ? "" : Math.round(r.coverage * 10) / 10,
+      "พอขายอีก (เดือน)": r.coverage === Infinity ? "" : Math.round(r.coverage),
       "ทุนเฉลี่ย/คัน (บาท)": r.avgCost,
       "แนะนำสั่งเพิ่ม (คัน)": r.needQty, "งบสั่งเพิ่มโดยประมาณ (บาท)": r.needCost,
     }));
@@ -261,8 +262,8 @@ function RestockPageInner() {
               {urgentRows.slice(0, 8).map(r => (
                 <div key={`${r.brand}|${r.model}`} className="flex items-center gap-2 text-sm flex-wrap">
                   <span className="font-semibold text-slate-800">{r.brand} {r.model}</span>
-                  <span className="text-xs text-slate-500">ขายเฉลี่ย {fmt1(r.avgMonth)}/เดือน · เหลือ {r.available} คัน{r.incoming > 0 ? ` (+${r.incoming} กำลังมา)` : ""}</span>
-                  <span className="ml-auto text-xs font-bold text-red-700 bg-white border border-red-200 rounded-lg px-2 py-0.5">สั่งเพิ่ม {r.needQty} คัน ≈ ฿{fmt(r.needCost)}</span>
+                  <span className="text-xs text-slate-500">ขายเฉลี่ย {wrate(r.avgMonth)} คัน/เดือน · เหลือ {fmt(r.available)} คัน{r.incoming > 0 ? ` (+${fmt(r.incoming)} กำลังมา)` : ""}</span>
+                  <span className="ml-auto text-xs font-bold text-red-700 bg-white border border-red-200 rounded-lg px-2 py-0.5">สั่งเพิ่ม {fmt(r.needQty)} คัน ≈ ฿{fmt(r.needCost)}</span>
                 </div>
               ))}
             </div>
@@ -292,7 +293,7 @@ function RestockPageInner() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-left text-[11px] text-slate-400 border-b border-slate-100 bg-slate-50/50">
-                        {["#", "รุ่น", "ขาย(คัน)", "ยอดขาย", "กำไร/คัน", "กำไรรวม", "เฉลี่ย/ด.", "คงเหลือ", "กำลังมา", "พอขาย(ด.)", "สั่งเพิ่ม", "งบสั่ง", "สถานะ"].map((h, i) => (
+                        {["#", "รุ่น", "ขาย", "ยอดขาย", "กำไร/คัน", "กำไรรวม", "เฉลี่ย/เดือน", "คงเหลือ", "กำลังมา", "พอขาย", "สั่งเพิ่ม", "งบสั่ง", "สถานะ"].map((h, i) => (
                           <th key={i} className="px-3 py-2 font-semibold whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -304,15 +305,15 @@ function RestockPageInner() {
                           <tr key={`${r.brand}|${r.model}`} className="border-b border-slate-50 hover:bg-sky-50/40">
                             <td className="px-3 py-2.5 text-slate-400 font-bold">{i + 1}</td>
                             <td className="px-3 py-2.5 font-semibold text-slate-800 whitespace-nowrap">{r.model}</td>
-                            <td className="px-3 py-2.5 text-slate-700 font-bold">{r.units}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap"><span className="text-slate-700 font-bold">{fmt(r.units)}</span> <span className="text-[11px] text-slate-400">คัน</span></td>
                             <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">฿{fmt(r.revenue)}</td>
                             <td className="px-3 py-2.5 whitespace-nowrap">{r.hasCost ? <span className={`font-semibold ${r.avgProfit >= 0 ? "text-emerald-700" : "text-red-600"}`}>฿{fmt(r.avgProfit)}</span> : <span className="text-slate-300">—</span>}</td>
                             <td className="px-3 py-2.5 whitespace-nowrap">{r.hasCost ? <span className={`font-semibold ${r.totalProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}>฿{fmt(r.totalProfit)}</span> : <span className="text-slate-300">—</span>}</td>
-                            <td className="px-3 py-2.5 text-slate-600">{fmt1(r.avgMonth)}</td>
-                            <td className="px-3 py-2.5 whitespace-nowrap"><span className={`font-bold ${r.available === 0 ? "text-red-600" : "text-slate-700"}`}>{r.available}</span></td>
-                            <td className="px-3 py-2.5 text-slate-500">{r.incoming > 0 ? `+${r.incoming}` : "—"}</td>
-                            <td className="px-3 py-2.5 text-slate-600">{r.coverage === Infinity ? "—" : fmt1(r.coverage)}</td>
-                            <td className="px-3 py-2.5">{r.needQty > 0 ? <span className="font-bold text-indigo-700">{r.needQty}</span> : <span className="text-slate-300">—</span>}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap"><span className="text-slate-600">{wrate(r.avgMonth)}</span> <span className="text-[11px] text-slate-400">คัน/ด.</span></td>
+                            <td className="px-3 py-2.5 whitespace-nowrap"><span className={`font-bold ${r.available === 0 ? "text-red-600" : "text-slate-700"}`}>{fmt(r.available)}</span> <span className="text-[11px] text-slate-400">คัน</span></td>
+                            <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{r.incoming > 0 ? <>+{fmt(r.incoming)} <span className="text-[11px] text-slate-400">คัน</span></> : "—"}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap">{r.coverage === Infinity ? "—" : <><span className="text-slate-600">{wrate(r.coverage)}</span> <span className="text-[11px] text-slate-400">เดือน</span></>}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap">{r.needQty > 0 ? <><span className="font-bold text-indigo-700">{fmt(r.needQty)}</span> <span className="text-[11px] text-slate-400">คัน</span></> : <span className="text-slate-300">—</span>}</td>
                             <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{r.needCost > 0 ? `฿${fmt(r.needCost)}` : "—"}</td>
                             <td className="px-3 py-2.5 whitespace-nowrap"><span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${s.c}`}>{s.t}</span></td>
                           </tr>
