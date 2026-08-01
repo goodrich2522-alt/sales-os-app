@@ -146,22 +146,29 @@ export default function Dashboard() {
     return m;
   }, [forklifts]);
 
+  // กรอง "รุ่นขายดี" ตามแบรนด์ ("" = ทุกแบรนด์) — คลิกยี่ห้อที่ legend ใต้โดนัท
+  const [modelBrand, setModelBrand] = useState<string>("");
+  const modelSales = useMemo(
+    () => (modelBrand ? sales.filter(s => (s.forklift_brand || "อื่นๆ") === modelBrand) : sales),
+    [sales, modelBrand]
+  );
   const liveTopModels = useMemo(() => {
     const map: Record<string, number> = {};
-    sales.forEach(s => {
+    modelSales.forEach(s => {
       const meta = fkMeta.get(s.forklift_id);
       const isForklift = (meta?.cat ?? s.vehicle_type) === "Forklift";
       const mast = meta?.mast ?? "";
-      // forklift → แยกตามความสูงเสา (เช่น CPCD25-Q22K2 · เสา M400) · ชนิดอื่นรวมตามรุ่น
-      const key = isForklift && mast ? `${s.forklift_brand} ${s.forklift_model} · เสา ${mast}` : `${s.forklift_brand} ${s.forklift_model}`;
+      // กรองแบรนด์แล้ว → ตัดชื่อแบรนด์ออกจากป้าย (ไม่ต้องซ้ำ) · forklift แยกตามความสูงเสา
+      const label = modelBrand ? (s.forklift_model || "") : `${s.forklift_brand} ${s.forklift_model}`;
+      const key = isForklift && mast ? `${label} · เสา ${mast}` : `${label}`;
       map[key] = (map[key] ?? 0) + 1;
     });
-    const total = sales.length || 1;
+    const total = modelSales.length || 1; // สัดส่วนเทียบ "ภายในแบรนด์" เมื่อกรอง
     return Object.entries(map)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 6)
+      .slice(0, modelBrand ? 8 : 6)
       .map(([model, count]) => ({ model, count, pct: Math.round((count / total) * 100) }));
-  }, [sales, fkMeta]);
+  }, [modelSales, fkMeta, modelBrand]);
 
   // ── FIFO เฟส 5: สุขภาพสต็อก (อายุค้าง) — จากรถ "พร้อมขาย" ปัจจุบัน (ไม่ขึ้นกับตัวกรองปี) ──
   const agingMetrics = useMemo(() => {
@@ -526,17 +533,30 @@ export default function Dashboard() {
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
             <SectionHeader icon={<Package className="w-4 h-4 text-indigo-600" />} title="สัดส่วนยี่ห้อ" sub="Brand Market Share" iconBg="bg-indigo-50" />
             <div className="h-48 mt-2"><BrandShareChart data={realBrandShare} /></div>
+            <p className="text-[11px] text-slate-400 text-center mt-1">👆 คลิกยี่ห้อเพื่อดูรุ่นขายดีของแบรนด์นั้น</p>
             <div className="grid grid-cols-2 gap-1.5 mt-2">
-              {realBrandShare.map((b) => (
-                <div key={b.name} className="flex items-center gap-1.5 text-xs text-slate-600">
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: b.color }} />
-                  <span className="truncate">{b.name} <span className="text-slate-400">{b.value} คัน ({b.pct}%)</span></span>
-                </div>
-              ))}
+              {realBrandShare.map((b) => {
+                const active = modelBrand === b.name;
+                return (
+                  <button key={b.name} onClick={() => setModelBrand(active ? "" : b.name)}
+                    className={`flex items-center gap-1.5 text-xs rounded-lg px-1.5 py-1 text-left transition-all ${active ? "bg-indigo-50 ring-1 ring-indigo-200 text-indigo-700 font-semibold" : "text-slate-600 hover:bg-slate-50"}`}>
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: b.color }} />
+                    <span className="truncate">{b.name} <span className={active ? "text-indigo-400" : "text-slate-400"}>{b.value} คัน ({b.pct}%)</span></span>
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-            <SectionHeader icon={<BarChart3 className="w-4 h-4 text-indigo-600" />} title="รุ่นขายดี" sub="Top Selling Models — คลิก % เพื่อดูสัดส่วน" iconBg="bg-indigo-50" />
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <SectionHeader icon={<BarChart3 className="w-4 h-4 text-indigo-600" />} title="รุ่นขายดี" sub="Top Selling Models — คลิกยี่ห้อด้านซ้ายเพื่อดูเฉพาะแบรนด์" iconBg="bg-indigo-50" />
+              {modelBrand && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-full">เฉพาะ {modelBrand}</span>
+                  <button onClick={() => setModelBrand("")} className="text-slate-400 hover:text-slate-700 font-medium underline">ดูทุกยี่ห้อ</button>
+                </div>
+              )}
+            </div>
             <div className="flex flex-col gap-3.5 mt-5">
               {liveTopModels.length === 0 && <p className="text-xs text-slate-400 text-center py-4">ยังไม่มีข้อมูลการขาย</p>}
               {liveTopModels.map((m, i) => (
@@ -558,8 +578,8 @@ export default function Dashboard() {
                 </div>
               ))}
               <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                <span className="text-xs text-slate-500">รวมทั้งหมด</span>
-                <span className="text-sm font-bold text-slate-700">{sales.length} คัน</span>
+                <span className="text-xs text-slate-500">{modelBrand ? `รวมยี่ห้อ ${modelBrand}` : "รวมทั้งหมด"}</span>
+                <span className="text-sm font-bold text-slate-700">{modelSales.length} คัน</span>
               </div>
             </div>
           </div>
