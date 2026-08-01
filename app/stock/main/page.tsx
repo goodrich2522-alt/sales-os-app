@@ -16,7 +16,7 @@ import { thaiMonthShort } from "@/lib/format";
 import { Lightbox } from "@/components/ui/Lightbox";
 import { Chip } from "@/components/ui/Chip";
 import { StatusBadge } from "@/components/ui/Badge";
-import { VEHICLE_CATS, CatFilter, SALE_STATUS_BADGE } from "@/lib/constants";
+import { VEHICLE_CATS, CatFilter, SALE_STATUS_BADGE, saleStatusGroup, SALE_STATUS_FILTER_GROUPS, SALE_STATUS_OPTIONS } from "@/lib/constants";
 import { QuoteImport } from "@/components/QuoteImport";
 import { parseForkliftCsv, assignIdsAndStamp, buildCsvTemplate } from "@/lib/forkliftCsv";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
@@ -478,7 +478,7 @@ export default function StockMain() {
       .filter(s => !isVoidSale(s)) // ตัดดีลที่ถูกปฏิเสธจากสต็อกออกจากประวัติการขาย
       .filter(s => {
         const okStaff = histStaff === "all" || s.sales_staff === histStaff;
-        const okStatus = histStatus === "all" || (s.sale_status ?? "ขายแล้ว") === histStatus;
+        const okStatus = histStatus === "all" || saleStatusGroup(s.sale_status) === histStatus;
         const okQ = !q || [s.customer_name, s.customer_tel, s.forklift_unit_no, s.forklift_brand, s.forklift_model, s.sales_staff].some(v => String(v ?? "").toLowerCase().includes(q));
         return okStaff && okStatus && okQ;
       })
@@ -493,8 +493,7 @@ export default function StockMain() {
       const g = m.get(staff) ?? { staff, deals: 0, revenue: 0, closed: 0, pending: 0 };
       g.deals++;
       g.revenue += Number(s.actual_sale) || 0;
-      const st = s.sale_status ?? "ขายแล้ว";
-      if (st === "ปิดการขาย/จัดส่งแล้ว" || st === "ขายแล้ว") g.closed++; else g.pending++;
+      if (saleStatusGroup(s.sale_status) === "ขายแล้ว/ปิดการขาย") g.closed++; else g.pending++;
       m.set(staff, g);
     });
     return [...m.values()].sort((a, b) => b.revenue - a.revenue);
@@ -1260,7 +1259,7 @@ export default function StockMain() {
               </select>
               <select value={histStatus} onChange={e => setHistStatus(e.target.value)} className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
                 <option value="all">ทุกสถานะ</option>
-                {Object.keys(SALE_STATUS_BADGE).map(s => <option key={s} value={s}>{s}</option>)}
+                {SALE_STATUS_FILTER_GROUPS.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
               <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold">
                 <button onClick={() => setHistView("deals")} className={`px-3 py-1.5 transition ${histView === "deals" ? "bg-indigo-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>📋 รายดีล</button>
@@ -1409,7 +1408,8 @@ export default function StockMain() {
                     <p className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><Pencil className="w-3.5 h-3.5" />แก้ไข (ฝ่ายสต็อก)</p>
                     <label className="text-xs text-slate-500">สถานะ
                       <select value={histEdit.sale_status} onChange={e => setHistEdit({ ...histEdit, sale_status: e.target.value })} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white text-slate-800">
-                        {Object.keys(SALE_STATUS_BADGE).map(s => <option key={s} value={s}>{s}</option>)}
+                        {/* สถานะให้เลือกชุดเดียว + คงค่าปัจจุบันของดีลไว้ (ถ้าเป็นสถานะเก่า) */}
+                        {(SALE_STATUS_OPTIONS.includes(histEdit.sale_status) ? SALE_STATUS_OPTIONS : [histEdit.sale_status, ...SALE_STATUS_OPTIONS]).map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </label>
                     <label className="text-xs text-slate-500">วันส่งมอบ

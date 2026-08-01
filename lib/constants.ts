@@ -72,6 +72,27 @@ export const SALE_STATUS_BADGE: Record<string, string> = {
 export const saleStatusBadgeClass = (status: unknown): string =>
   SALE_STATUS_BADGE[String(status ?? "ขายแล้ว").trim()] ?? "bg-slate-100 text-slate-600 border-slate-200";
 
+// จัดกลุ่มสถานะการขายให้เหลือชุดเดียว (ใช้ในตัวกรองประวัติการขาย)
+// ขายแล้ว = ปิดการขาย/จัดส่งแล้ว · รอไฟแนนซ์ = รอผ่านไฟแนนซ์ · มัดจำแล้ว → จอง/โอนมัดจำแล้ว
+export const saleStatusGroup = (status: unknown): string => {
+  const st = String(status ?? "ขายแล้ว").trim();
+  if (!st || st.includes("ปิด") || st.includes("จัดส่งแล้ว") || st.includes("ส่งมอบ") || st === "ขายแล้ว") return "ขายแล้ว/ปิดการขาย";
+  if (st.includes("ไฟแนนซ์")) return "รอไฟแนนซ์";
+  if (st.includes("มัดจำ")) return "จอง/โอนมัดจำแล้ว";
+  if (st.includes("จอง")) return "จอง/รอโอน";
+  if (st.includes("รอจัดส่ง") || st.includes("รอโอน")) return "รอจัดส่ง";
+  return st;
+};
+
+// รายการสถานะในตัวกรองประวัติการขาย (ชุดเดียว ไม่ซ้ำ)
+export const SALE_STATUS_FILTER_GROUPS = [
+  "จอง/รอโอน", "จอง/โอนมัดจำแล้ว", "รอจัดส่ง", "รอไฟแนนซ์", "ขายแล้ว/ปิดการขาย",
+];
+// สถานะที่ให้เลือกตอนแก้ไข (ตัดตัวซ้ำ/เก่าออก: มัดจำแล้ว, ขายแล้ว, จอง, รอผ่านไฟแนนซ์)
+export const SALE_STATUS_OPTIONS = [
+  "จอง/รอโอน", "จอง/โอนมัดจำแล้ว", "รอจัดส่ง", "รอไฟแนนซ์", "ปิดการขาย/จัดส่งแล้ว",
+];
+
 // ── สีแท็กแหล่งที่มาลูกค้า (sale.contact_source) ─────────────────────────────
 export const CONTACT_SOURCE_COLORS: Record<string, string> = {
   "Line":          "bg-green-100 text-green-700",
