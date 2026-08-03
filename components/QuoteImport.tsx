@@ -22,6 +22,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
   const [importedIds, setImportedIds] = useState<string[]>([]); // สำหรับปุ่มยกเลิกการนำเข้า
   const [done, setDone] = useState(false);           // บันทึกเสร็จแล้ว → แสดงหน้าสรุป
   const [receivedDate, setReceivedDate] = useState(""); // วันรับรถเข้า — ใส่ให้ทั้งล็อตตอนบันทึก
+  const [orderDate, setOrderDate] = useState("");       // วันสั่งซื้อรถ (วันสั่งรถ) — ใส่ให้ทั้งล็อตตอนบันทึก
 
   const existingIds = new Set(forklifts.map((f) => String(f.id)));
 
@@ -103,6 +104,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
       ...(v.mast ? { MAST: v.mast } : {}),
       ...(v.valve ? { Valve: v.valve } : {}),
       ...(v.fobUsd ? { "ราคา FOB (USD)": String(v.fobUsd) } : {}),
+      ...(orderDate ? { "วันสั่งรถ": orderDate } : {}), // วันสั่งซื้อรถ (ทั้งล็อต)
       ชีตต้นทาง: "ใบเสนอราคา",
     },
   } as Forklift);
@@ -190,6 +192,14 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <p className="text-sm font-semibold text-slate-700">อ่านได้ {rows.length} คัน — ตรวจ/แก้ก่อนบันทึก</p>
                     {dupCount > 0 && <span className="text-xs text-red-600 font-semibold">⚠️ {dupCount} คัน SN ซ้ำกับที่มีในสต็อก</span>}
+                  </div>
+                  {/* วันสั่งซื้อรถ — วันที่สั่งซื้อ/ออก PI (ใส่ให้ทั้งล็อต ไม่บังคับ) */}
+                  <div className="flex items-center gap-2 bg-violet-50/60 border border-violet-100 rounded-xl px-3 py-2.5">
+                    <label className="text-sm font-semibold text-slate-700 flex items-center gap-1.5 whitespace-nowrap">🏭 วันสั่งซื้อรถ (ทั้งล็อต)</label>
+                    <input type="date" value={orderDate} onChange={(e) => setOrderDate(e.target.value)}
+                      className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white" />
+                    {orderDate && <button onClick={() => setOrderDate("")} className="text-xs text-slate-400 hover:text-red-500">ล้าง</button>}
+                    <span className="text-[11px] text-slate-400">วันที่สั่งซื้อ/ออกเอกสาร PI</span>
                   </div>
                   {/* วันรับรถเข้า — ใส่ให้ทั้งล็อตพร้อมกัน (ไม่กรอกก็ได้ ค่อยมาเติมทีหลัง) */}
                   <div className="flex items-center gap-2 bg-emerald-50/60 border border-emerald-100 rounded-xl px-3 py-2.5">
