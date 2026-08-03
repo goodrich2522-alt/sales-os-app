@@ -78,6 +78,7 @@ export default function StockMain() {
   } = useApp();
 
   const [username, setUsername]     = useState("");
+  const [stockEmail, setStockEmail] = useState("");      // อีเมลผู้ล็อกอิน (ใช้เช็คสิทธิ์แก้ข้อมูลการเงิน)
   const [showImport, setShowImport] = useState(false);   // นำเข้าจากใบเสนอราคา (เฟส 4)
   const [listSearch, setListSearch] = useState("");
   const [listCat, setListCat]       = useState<CatFilter>("all");
@@ -98,6 +99,9 @@ export default function StockMain() {
   const [noteSaved, setNoteSaved]         = useState(false);
   const [orderDateEdit, setOrderDateEdit] = useState(""); // วันสั่งรถ (รถสั่งผลิต)
   const [orderSaved, setOrderSaved]       = useState(false);
+  // แก้ไขข้อมูลการเงิน (เฉพาะวรลักษณ์) — ต้นทุน/ราคาขายจริง/ค่าขนส่ง/ทุนอุปกรณ์ · แก้ได้ทุกสถานะ
+  const [finEdit, setFinEdit]             = useState({ cost: "", sale: "", ship: "", addon: "", profit: "" });
+  const [finSaved, setFinSaved]           = useState(false);
   // ── ประวัติการขาย (เฟส 1): ดีลทุกเซลล์ ──
   const [showSaleHistory, setShowSaleHistory] = useState(false);
   const [showReorder, setShowReorder]     = useState(false); // กางรายการเตรียมสั่งสินค้า (คลิกจากการ์ด)
@@ -129,7 +133,7 @@ export default function StockMain() {
   useEffect(() => {
     const u = localStorage.getItem("stock_user");
     if (!u) { router.push("/stock/login"); return; }
-    const nm = JSON.parse(u).name; setUsername(nm); setActor(`${nm} (สต็อก)`);
+    const parsed = JSON.parse(u); const nm = parsed.name; setUsername(nm); setStockEmail(String(parsed.email || "").toLowerCase()); setActor(`${nm} (สต็อก)`);
     // มีข้อมูลค้างแต่ session Supabase หมดอายุ/ไม่มี → บังคับล็อกอินใหม่ (กันเซฟไม่เข้าแบบเงียบๆ)
     (async () => {
       if (apiEnabled && !(await hasActiveSession())) {
@@ -144,7 +148,19 @@ export default function StockMain() {
     setLocEdit(detailItem?.location ?? ""); setLocSaved(false);
     setNoteEdit((detailItem?.custom_fields?.["หมายเหตุการขาย"] as string) ?? ""); setNoteSaved(false);
     setOrderDateEdit((detailItem?.custom_fields?.["วันสั่งรถ"] as string) ?? ""); setOrderSaved(false);
+    const cf = (detailItem?.custom_fields ?? {}) as Record<string, unknown>;
+    setFinEdit({
+      cost: detailItem?.cost_price ? String(detailItem.cost_price) : "",
+      sale: cf["ราคาขายจริง"] != null ? String(cf["ราคาขายจริง"]) : "",
+      ship: cf["ค่าขนส่งจริง"] != null ? String(cf["ค่าขนส่งจริง"]) : "",
+      addon: cf["ทุนอุปกรณ์เสริม"] != null ? String(cf["ทุนอุปกรณ์เสริม"]) : "",
+      profit: cf["กำไร(ไฟล์)"] != null ? String(cf["กำไร(ไฟล์)"]) : "",
+    });
+    setFinSaved(false);
   }, [detailItem]);
+
+  // สิทธิ์แก้ไขข้อมูลการเงิน (ต้นทุน/ค่าขนส่ง ฯลฯ) — เฉพาะวรลักษณ์เท่านั้น (ชื่อ หรือ อีเมลแอดมิน)
+  const canEditFinance = /วรลักษณ์/.test(username) || ["goodrichforklift@gmail.com"].includes(stockEmail);
 
   // โหลดรายการที่ "รับทราบแล้ว" · ครั้งแรกที่เปิด (ยังไม่มี key) ถือว่าดีลเก่าทั้งหมดรับทราบแล้ว กันสแปมของเก่า
   useEffect(() => {
@@ -1597,6 +1613,46 @@ export default function StockMain() {
                         {realProfit != null && <div className="col-span-2 pt-1 mt-0.5 border-t border-emerald-100"><span className="text-emerald-600 font-semibold">กำไรจริง (คำนวณ)</span> <b className="text-emerald-700 text-sm">฿{b(realProfit)}</b></div>}
                         {fp != null && <div className="col-span-2 text-[11px] text-slate-400">กำไรที่บันทึกในไฟล์: ฿{b(fp)}</div>}
                       </div>
+                    </div>
+                  );
+                })()}
+                {/* แก้ไขข้อมูลการเงิน — เฉพาะวรลักษณ์ · แก้ได้ทุกสถานะ (รวมปิดการขายแล้ว) สำหรับลงข้อมูลย้อนหลัง */}
+                {canEditFinance && (() => {
+                  const inp = "w-full mt-0.5 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-400";
+                  const cf = (it.custom_fields ?? {}) as Record<string, unknown>;
+                  const dirty = finEdit.cost !== (it.cost_price ? String(it.cost_price) : "")
+                    || finEdit.sale !== (cf["ราคาขายจริง"] != null ? String(cf["ราคาขายจริง"]) : "")
+                    || finEdit.ship !== (cf["ค่าขนส่งจริง"] != null ? String(cf["ค่าขนส่งจริง"]) : "")
+                    || finEdit.addon !== (cf["ทุนอุปกรณ์เสริม"] != null ? String(cf["ทุนอุปกรณ์เสริม"]) : "")
+                    || finEdit.profit !== (cf["กำไร(ไฟล์)"] != null ? String(cf["กำไร(ไฟล์)"]) : "");
+                  return (
+                    <div className="border border-violet-200 bg-violet-50/50 rounded-xl p-3">
+                      <p className="text-xs font-bold text-violet-700 mb-2 flex items-center gap-1.5"><Pencil className="w-3.5 h-3.5" />แก้ไขข้อมูลการเงิน (วรลักษณ์) · แก้ได้ทุกสถานะ</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="text-[11px] text-slate-500">ต้นทุน (บาท)
+                          <input type="number" value={finEdit.cost} onChange={e => { setFinEdit({ ...finEdit, cost: e.target.value }); setFinSaved(false); }} className={inp} /></label>
+                        <label className="text-[11px] text-slate-500">ราคาขายจริง (บาท)
+                          <input type="number" value={finEdit.sale} onChange={e => { setFinEdit({ ...finEdit, sale: e.target.value }); setFinSaved(false); }} className={inp} /></label>
+                        <label className="text-[11px] text-slate-500">ค่าขนส่งจริง (บาท)
+                          <input type="number" value={finEdit.ship} onChange={e => { setFinEdit({ ...finEdit, ship: e.target.value }); setFinSaved(false); }} className={inp} /></label>
+                        <label className="text-[11px] text-slate-500">ทุนอุปกรณ์/งาเท (บาท)
+                          <input type="number" value={finEdit.addon} onChange={e => { setFinEdit({ ...finEdit, addon: e.target.value }); setFinSaved(false); }} className={inp} /></label>
+                        <label className="text-[11px] text-slate-500 col-span-2">กำไรที่บันทึกในไฟล์ (บาท · ไม่บังคับ)
+                          <input type="number" value={finEdit.profit} onChange={e => { setFinEdit({ ...finEdit, profit: e.target.value }); setFinSaved(false); }} className={inp} /></label>
+                      </div>
+                      <button onClick={() => {
+                          const ncf = { ...(it.custom_fields || {}) } as Record<string, string>;
+                          const setNum = (k: string, v: string) => { const t = v.trim(); if (t !== "" && !isNaN(Number(t))) ncf[k] = String(Number(t)); else delete ncf[k]; };
+                          setNum("ราคาขายจริง", finEdit.sale); setNum("ค่าขนส่งจริง", finEdit.ship);
+                          setNum("ทุนอุปกรณ์เสริม", finEdit.addon); setNum("กำไร(ไฟล์)", finEdit.profit);
+                          const cost = finEdit.cost.trim() === "" ? 0 : (Number(finEdit.cost) || 0);
+                          const u = { ...it, cost_price: cost, custom_fields: ncf }; updateForklift(u); setDetailItem(u); setFinSaved(true);
+                        }}
+                        disabled={!dirty}
+                        className="mt-2 px-4 py-2 rounded-xl text-sm font-bold bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                        {finSaved ? "บันทึกแล้ว ✓" : "บันทึกข้อมูลการเงิน"}
+                      </button>
+                      <p className="text-[10px] text-slate-400 mt-1.5">* มีผลกับ &ldquo;กำไรจริง (คำนวณ)&rdquo; + หน้าค่าคอม/วางแผนสั่งสต็อก · บันทึกทุกครั้งจะเข้า audit log</p>
                     </div>
                   );
                 })()}
