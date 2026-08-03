@@ -100,7 +100,7 @@ export default function StockMain() {
   const [orderDateEdit, setOrderDateEdit] = useState(""); // วันสั่งรถ (รถสั่งผลิต)
   const [orderSaved, setOrderSaved]       = useState(false);
   // แก้ไขข้อมูลการเงิน (เฉพาะวรลักษณ์) — ต้นทุน/ราคาขายจริง/ค่าขนส่ง/ทุนอุปกรณ์ · แก้ได้ทุกสถานะ
-  const [finEdit, setFinEdit]             = useState({ cost: "", sale: "", ship: "", addon: "", profit: "" });
+  const [finEdit, setFinEdit]             = useState({ pi: "", cost: "", sale: "", ship: "", addon: "", profit: "" });
   const [finSaved, setFinSaved]           = useState(false);
   // ── ประวัติการขาย (เฟส 1): ดีลทุกเซลล์ ──
   const [showSaleHistory, setShowSaleHistory] = useState(false);
@@ -150,6 +150,7 @@ export default function StockMain() {
     setOrderDateEdit((detailItem?.custom_fields?.["วันสั่งรถ"] as string) ?? ""); setOrderSaved(false);
     const cf = (detailItem?.custom_fields ?? {}) as Record<string, unknown>;
     setFinEdit({
+      pi: detailItem?.pi_no ?? "",
       cost: detailItem?.cost_price ? String(detailItem.cost_price) : "",
       sale: cf["ราคาขายจริง"] != null ? String(cf["ราคาขายจริง"]) : "",
       ship: cf["ค่าขนส่งจริง"] != null ? String(cf["ค่าขนส่งจริง"]) : "",
@@ -1487,7 +1488,7 @@ export default function StockMain() {
         const info: [string, string][] = [
           ["เซลล์เจ้าของงาน", it.status !== "พร้อมขาย" ? (saleOwnerByFk.get(it.id) ?? cf["เซลล์ผู้ดูแล"] ?? "") : ""],
           ["ลูกค้า", cf["รายละเอียด (ลูกค้า)"] ?? ""],
-          ["SALE CONTRACT / PI", it.pi_no ?? ""],
+          ["เลขที่ PI (ใบสั่งซื้อ)", it.pi_no?.trim() || "— ยังไม่ระบุ"], // โชว์เสมอ (ให้รู้ว่ารถมาจาก PI ไหน)
           ["เลขที่ใบกำกับภาษี", cf["เลขที่ใบกำกับภาษี"] ?? ""],
           ["วันรับรถ", it.received_date ?? ""],
           ["ราคาทุน", it.cost_price ? `฿${it.cost_price.toLocaleString()}` : ""],
@@ -1621,15 +1622,18 @@ export default function StockMain() {
                 {canEditFinance && (() => {
                   const inp = "w-full mt-0.5 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-400";
                   const cf = (it.custom_fields ?? {}) as Record<string, unknown>;
-                  const dirty = finEdit.cost !== (it.cost_price ? String(it.cost_price) : "")
+                  const dirty = finEdit.pi !== (it.pi_no ?? "")
+                    || finEdit.cost !== (it.cost_price ? String(it.cost_price) : "")
                     || finEdit.sale !== (cf["ราคาขายจริง"] != null ? String(cf["ราคาขายจริง"]) : "")
                     || finEdit.ship !== (cf["ค่าขนส่งจริง"] != null ? String(cf["ค่าขนส่งจริง"]) : "")
                     || finEdit.addon !== (cf["ทุนอุปกรณ์เสริม"] != null ? String(cf["ทุนอุปกรณ์เสริม"]) : "")
                     || finEdit.profit !== (cf["กำไร(ไฟล์)"] != null ? String(cf["กำไร(ไฟล์)"]) : "");
                   return (
                     <div className="border border-violet-200 bg-violet-50/50 rounded-xl p-3">
-                      <p className="text-xs font-bold text-violet-700 mb-2 flex items-center gap-1.5"><Pencil className="w-3.5 h-3.5" />แก้ไขข้อมูลการเงิน (วรลักษณ์) · แก้ได้ทุกสถานะ</p>
+                      <p className="text-xs font-bold text-violet-700 mb-2 flex items-center gap-1.5"><Pencil className="w-3.5 h-3.5" />แก้ไขข้อมูล (วรลักษณ์) · แก้ได้ทุกสถานะ</p>
                       <div className="grid grid-cols-2 gap-2">
+                        <label className="text-[11px] text-slate-500 col-span-2">เลขที่ PI (ใบสั่งซื้อ)
+                          <input type="text" value={finEdit.pi} onChange={e => { setFinEdit({ ...finEdit, pi: e.target.value }); setFinSaved(false); }} placeholder="เช่น PI034 / C6907-001" className={inp} /></label>
                         <label className="text-[11px] text-slate-500">ต้นทุน (บาท)
                           <input type="number" value={finEdit.cost} onChange={e => { setFinEdit({ ...finEdit, cost: e.target.value }); setFinSaved(false); }} className={inp} /></label>
                         <label className="text-[11px] text-slate-500">ราคาขายจริง (บาท)
@@ -1647,7 +1651,7 @@ export default function StockMain() {
                           setNum("ราคาขายจริง", finEdit.sale); setNum("ค่าขนส่งจริง", finEdit.ship);
                           setNum("ทุนอุปกรณ์เสริม", finEdit.addon); setNum("กำไร(ไฟล์)", finEdit.profit);
                           const cost = finEdit.cost.trim() === "" ? 0 : (Number(finEdit.cost) || 0);
-                          const u = { ...it, cost_price: cost, custom_fields: ncf }; updateForklift(u); setDetailItem(u); setFinSaved(true);
+                          const u = { ...it, pi_no: finEdit.pi.trim() || undefined, cost_price: cost, custom_fields: ncf }; updateForklift(u); setDetailItem(u); setFinSaved(true);
                         }}
                         disabled={!dirty}
                         className="mt-2 px-4 py-2 rounded-xl text-sm font-bold bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed">
