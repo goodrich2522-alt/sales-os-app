@@ -100,7 +100,7 @@ export default function StockMain() {
   const [orderDateEdit, setOrderDateEdit] = useState(""); // วันสั่งรถ (รถสั่งผลิต)
   const [orderSaved, setOrderSaved]       = useState(false);
   // แก้ไขข้อมูลการเงิน (เฉพาะวรลักษณ์) — ต้นทุน/ราคาขายจริง/ค่าขนส่ง/ทุนอุปกรณ์ · แก้ได้ทุกสถานะ
-  const [finEdit, setFinEdit]             = useState({ pi: "", cost: "", sale: "", ship: "", addon: "", profit: "" });
+  const [finEdit, setFinEdit]             = useState({ pi: "", cost: "", sale: "", ship: "", addon: "", freebie: "", profit: "" });
   const [finSaved, setFinSaved]           = useState(false);
   // ── ประวัติการขาย (เฟส 1): ดีลทุกเซลล์ ──
   const [showSaleHistory, setShowSaleHistory] = useState(false);
@@ -155,6 +155,7 @@ export default function StockMain() {
       sale: cf["ราคาขายจริง"] != null ? String(cf["ราคาขายจริง"]) : "",
       ship: cf["ค่าขนส่งจริง"] != null ? String(cf["ค่าขนส่งจริง"]) : "",
       addon: cf["ทุนอุปกรณ์เสริม"] != null ? String(cf["ทุนอุปกรณ์เสริม"]) : "",
+      freebie: cf["ของแถม"] != null ? String(cf["ของแถม"]) : "",
       profit: cf["กำไร(ไฟล์)"] != null ? String(cf["กำไร(ไฟล์)"]) : "",
     });
     setFinSaved(false);
@@ -1599,10 +1600,11 @@ export default function StockMain() {
                 {(() => {
                   const cf = (it.custom_fields || {}) as Record<string, unknown>;
                   const sale = Number(cf["ราคาขายจริง"]) || 0, ship = Number(cf["ค่าขนส่งจริง"]) || 0, addon = Number(cf["ทุนอุปกรณ์เสริม"]) || 0;
+                  const free = Number(cf["ของแถม"]) || 0;
                   const fp = cf["กำไร(ไฟล์)"];
-                  if (!(sale || ship || addon || fp)) return null;
+                  if (!(sale || ship || addon || free || fp)) return null;
                   const cost = Number(it.cost_price) || 0;
-                  const realProfit = sale ? sale - cost - ship - addon : null;
+                  const realProfit = sale ? sale - cost - ship - addon - free : null;
                   const b = (n: unknown) => Number(n).toLocaleString("th-TH");
                   return (
                     <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
@@ -1612,6 +1614,7 @@ export default function StockMain() {
                         <div><span className="text-slate-400">ต้นทุน</span> <b>฿{b(cost)}</b></div>
                         {ship > 0 && <div><span className="text-slate-400">ค่าขนส่ง</span> <b>฿{b(ship)}</b></div>}
                         {addon > 0 && <div><span className="text-slate-400">ทุนอุปกรณ์/งาเท</span> <b>฿{b(addon)}</b></div>}
+                        {free > 0 && <div><span className="text-slate-400">ของแถม</span> <b>฿{b(free)}</b></div>}
                         {realProfit != null && <div className="col-span-2 pt-1 mt-0.5 border-t border-emerald-100"><span className="text-emerald-600 font-semibold">กำไรจริง (คำนวณ)</span> <b className="text-emerald-700 text-sm">฿{b(realProfit)}</b></div>}
                         {fp != null && <div className="col-span-2 text-[11px] text-slate-400">กำไรที่บันทึกในไฟล์: ฿{b(fp)}</div>}
                       </div>
@@ -1627,6 +1630,7 @@ export default function StockMain() {
                     || finEdit.sale !== (cf["ราคาขายจริง"] != null ? String(cf["ราคาขายจริง"]) : "")
                     || finEdit.ship !== (cf["ค่าขนส่งจริง"] != null ? String(cf["ค่าขนส่งจริง"]) : "")
                     || finEdit.addon !== (cf["ทุนอุปกรณ์เสริม"] != null ? String(cf["ทุนอุปกรณ์เสริม"]) : "")
+                    || finEdit.freebie !== (cf["ของแถม"] != null ? String(cf["ของแถม"]) : "")
                     || finEdit.profit !== (cf["กำไร(ไฟล์)"] != null ? String(cf["กำไร(ไฟล์)"]) : "");
                   return (
                     <div className="border border-violet-200 bg-violet-50/50 rounded-xl p-3">
@@ -1642,6 +1646,12 @@ export default function StockMain() {
                           <input type="number" value={finEdit.ship} onChange={e => { setFinEdit({ ...finEdit, ship: e.target.value }); setFinSaved(false); }} className={inp} /></label>
                         <label className="text-[11px] text-slate-500">ทุนอุปกรณ์/งาเท (บาท)
                           <input type="number" value={finEdit.addon} onChange={e => { setFinEdit({ ...finEdit, addon: e.target.value }); setFinSaved(false); }} className={inp} /></label>
+                        <label className="text-[11px] text-slate-500 col-span-2">ของแถม (บาท) — หักออกจากกำไร
+                          <div className="flex gap-1.5 items-center mt-0.5">
+                            <input type="number" value={finEdit.freebie} onChange={e => { setFinEdit({ ...finEdit, freebie: e.target.value }); setFinSaved(false); }} placeholder="ปกติ 2,800" className={inp + " mt-0"} />
+                            <button type="button" onClick={() => { setFinEdit({ ...finEdit, freebie: "2800" }); setFinSaved(false); }}
+                              className="flex-shrink-0 text-[11px] font-bold text-violet-700 bg-violet-100 hover:bg-violet-200 border border-violet-200 rounded-lg px-2.5 py-1.5 whitespace-nowrap">ใส่ 2,800</button>
+                          </div></label>
                         <label className="text-[11px] text-slate-500 col-span-2">กำไรที่บันทึกในไฟล์ (บาท · ไม่บังคับ)
                           <input type="number" value={finEdit.profit} onChange={e => { setFinEdit({ ...finEdit, profit: e.target.value }); setFinSaved(false); }} className={inp} /></label>
                       </div>
@@ -1649,7 +1659,7 @@ export default function StockMain() {
                           const ncf = { ...(it.custom_fields || {}) } as Record<string, string>;
                           const setNum = (k: string, v: string) => { const t = v.trim(); if (t !== "" && !isNaN(Number(t))) ncf[k] = String(Number(t)); else delete ncf[k]; };
                           setNum("ราคาขายจริง", finEdit.sale); setNum("ค่าขนส่งจริง", finEdit.ship);
-                          setNum("ทุนอุปกรณ์เสริม", finEdit.addon); setNum("กำไร(ไฟล์)", finEdit.profit);
+                          setNum("ทุนอุปกรณ์เสริม", finEdit.addon); setNum("ของแถม", finEdit.freebie); setNum("กำไร(ไฟล์)", finEdit.profit);
                           const cost = finEdit.cost.trim() === "" ? 0 : (Number(finEdit.cost) || 0);
                           const u = { ...it, pi_no: finEdit.pi.trim() || undefined, cost_price: cost, custom_fields: ncf }; updateForklift(u); setDetailItem(u); setFinSaved(true);
                         }}
