@@ -159,8 +159,9 @@ export default function StockMain() {
     setFinSaved(false);
   }, [detailItem]);
 
-  // สิทธิ์แก้ไขข้อมูลการเงิน (ต้นทุน/ค่าขนส่ง ฯลฯ) — เฉพาะวรลักษณ์เท่านั้น (ชื่อ หรือ อีเมลแอดมิน)
-  const canEditFinance = /วรลักษณ์/.test(username) || ["goodrichforklift@gmail.com"].includes(stockEmail);
+  // สิทธิ์แก้ไขข้อมูลการเงิน (ต้นทุน/ค่าขนส่ง ฯลฯ) — เฉพาะวรลักษณ์เท่านั้น (ชื่อ หรือ อีเมลของวรลักษณ์)
+  // ไม่รวมแอดมินคนอื่น (goodrichforklift) — ผู้ใช้สั่ง "วรลักษณ์แค่คนเดียว"
+  const canEditFinance = /วรลักษณ์/.test(username) || stockEmail === "woralakpor789@gmail.com";
 
   // โหลดรายการที่ "รับทราบแล้ว" · ครั้งแรกที่เปิด (ยังไม่มี key) ถือว่าดีลเก่าทั้งหมดรับทราบแล้ว กันสแปมของเก่า
   useEffect(() => {
