@@ -10,7 +10,7 @@ import {
 import { useApp } from "@/lib/AppContext";
 import { getRegion } from "@/lib/mockData";
 import { buildStaffMonthly, buildStaffWeekly, buildAllMonthlyWeekly } from "@/components/charts/Charts";
-import { CONTACT_SOURCE_COLORS } from "@/lib/constants";
+import { CONTACT_SOURCE_COLORS, paymentBadgeClass } from "@/lib/constants";
 import { Sale, Forklift, isVoidSale } from "@/lib/types";
 import GoogleLoginButton, { type GoogleUser } from "@/components/GoogleLoginButton";
 import { checkAccess, hasActiveSession } from "@/lib/auth";
@@ -810,7 +810,7 @@ export default function Dashboard() {
                       <td className="px-4 py-3 text-xs text-slate-700 max-w-[140px] truncate">{s.customer_name}</td>
                       <td className="px-4 py-3 text-xs text-slate-600">{s.province}</td>
                       <td className="px-4 py-3">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.payment_type === "เงินสด" ? "bg-emerald-100 text-emerald-700" : s.payment_type ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${paymentBadgeClass(s.payment_type)}`}>
                           {s.payment_type || "ไม่ระบุ"}
                         </span>
                       </td>

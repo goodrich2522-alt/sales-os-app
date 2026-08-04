@@ -84,6 +84,17 @@ export const saleStatusGroup = (status: unknown): string => {
   return st;
 };
 
+// ── สีป้ายการชำระเงิน/ประเภทบิล (sale.payment_type) ──
+// เงินสด/บิลเงินสด(CH) = เขียว · บิลแวท(IV) = ฟ้า · ไฟแนนซ์ = ส้ม · ว่าง = เทา "ไม่ระบุ"
+export const PAYMENT_BADGE: Record<string, string> = {
+  "เงินสด": "bg-emerald-100 text-emerald-700",
+  "บิลเงินสด": "bg-emerald-100 text-emerald-700",
+  "บิลแวท": "bg-sky-100 text-sky-700",
+  "ไฟแนนซ์": "bg-amber-100 text-amber-700",
+};
+export const paymentBadgeClass = (p: unknown): string =>
+  PAYMENT_BADGE[String(p ?? "").trim()] ?? "bg-slate-100 text-slate-500";
+
 // รายการสถานะในตัวกรองประวัติการขาย (ชุดเดียว ไม่ซ้ำ)
 export const SALE_STATUS_FILTER_GROUPS = [
   "จอง/รอโอน", "จอง/โอนมัดจำแล้ว", "รอจัดส่ง", "รอไฟแนนซ์", "ขายแล้ว/ปิดการขาย",

@@ -15,7 +15,7 @@ import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, Con
 import { useApp } from "@/lib/AppContext";
 import { driveImg } from "@/lib/img";
 import { isPendingId } from "@/lib/productId";
-import { STATUS_BADGE, SALE_STATUS_BADGE, CONTACT_SOURCE_COLORS, VEHICLE_CATS } from "@/lib/constants";
+import { STATUS_BADGE, SALE_STATUS_BADGE, CONTACT_SOURCE_COLORS, VEHICLE_CATS, paymentBadgeClass } from "@/lib/constants";
 import { formatBaht } from "@/lib/format";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isStackerModel, isOtherGroup, priorPurchaseByCustomer } from "@/lib/commission";
@@ -1796,7 +1796,7 @@ export default function SalesMain() {
                         </div>
                         <p className="text-xs text-slate-500 mt-1 truncate">{sale.customer_name} · {sale.province}</p>
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${sale.payment_type === "เงินสด" ? "bg-emerald-100 text-emerald-700" : sale.payment_type ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}>{sale.payment_type || "ไม่ระบุ"}</span>
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${paymentBadgeClass(sale.payment_type)}`}>{sale.payment_type || "ไม่ระบุ"}</span>
                           {sale.contact_source && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${CONTACT_SOURCE_COLORS[sale.contact_source] ?? "bg-slate-100 text-slate-600"}`}>{sale.contact_source}</span>}
                           <span className="text-xs text-slate-500">{sale.created_at}</span>
                         </div>
