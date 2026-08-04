@@ -8,6 +8,7 @@ import { QuoteParseResult, QuoteVendor } from "./types";
 export * from "./types";
 export { readPdfText, looksScanned } from "./pdfText";
 export { readExcelRows, isExcelFile } from "./excelRead";
+export { isImageFile, readImageText } from "./imageOcr";
 
 /** เดาผู้ผลิตจากคำเฉพาะในเอกสาร */
 export function detectVendor(text: string): QuoteVendor {

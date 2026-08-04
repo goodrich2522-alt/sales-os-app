@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 import { useApp } from "@/lib/AppContext";
-import { readPdfText, looksScanned, parseQuoteText, detectVendor, parseQuoteExcel, readExcelRows, isExcelFile, normalizeStaxxModel, ParsedVehicle } from "@/lib/quoteImport";
+import { readPdfText, looksScanned, parseQuoteText, detectVendor, parseQuoteExcel, readExcelRows, isExcelFile, isImageFile, readImageText, normalizeStaxxModel, ParsedVehicle } from "@/lib/quoteImport";
 import { categorizeModel } from "@/lib/constants";
 import { today } from "@/lib/format";
 import { Forklift } from "@/lib/types";
@@ -15,6 +15,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
   const { addForkliftsBulk, forklifts, deleteForklift } = useApp();
   const [rows, setRows] = useState<ParsedVehicle[]>([]);
   const [busy, setBusy] = useState(false);
+  const [ocr, setOcr] = useState<{ name: string; pct: number } | null>(null); // สถานะ OCR รูป
   const [vendor, setVendor] = useState("");
   const [notice, setNotice] = useState("");
   const [saved, setSaved] = useState(0);
@@ -41,6 +42,20 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
           all.push(...res.vehicles);
           continue;
         }
+        // รูป (JPEG/PNG) → OCR ในเครื่อง แล้วส่งเข้า parser เดิม
+        if (isImageFile(f.name)) {
+          setOcr({ name: f.name, pct: 0 });
+          const text = await readImageText(f, (pct) => setOcr({ name: f.name, pct }));
+          setOcr(null);
+          const res = parseQuoteText(text);
+          vendors.add(res.vendor === "unknown" ? "รูป (OCR)" : `${res.vendor} (OCR)`);
+          if (res.vehicles.length === 0) {
+            setNotice(`ℹ️ "${f.name}" อ่าน (OCR) แล้วยังจับรายการรถอัตโนมัติไม่ได้ (ภาพเอียง/ไม่ชัด/ตารางซับซ้อน) — กด "เพิ่มรถเอง" แล้วกรอกจากรูปได้`);
+            continue;
+          }
+          all.push(...res.vehicles);
+          continue;
+        }
         // PDF
         const text = await readPdfText(f);
         if (looksScanned(text)) {
@@ -56,6 +71,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
         if (res.vehicles.length === 0) { setNotice(`⚠️ "${f.name}" (${res.vendor}) อ่านไม่พบรายการรถ — ตรวจไฟล์`); continue; }
         all.push(...res.vehicles);
       } catch (e) {
+        setOcr(null);
         setNotice(`อ่าน "${f.name}" ไม่ได้: ${e instanceof Error ? e.message : "ผิดพลาด"}`);
       }
     }
@@ -78,6 +94,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
     // ราคาทุนอิงตามเอกสารแต่ละชุดเท่านั้น (ไม่ดึงจากสต็อกเดิม เพราะต้นทุนขึ้นลงตามตลาด)
     setVendor([...vendors].join(", "));
     setRows([...others, ...staxxRows]);
+    setOcr(null);
     setBusy(false);
   };
 
@@ -169,11 +186,14 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
             <>
               {/* dropzone */}
               <label className="border-2 border-dashed border-slate-300 rounded-2xl p-8 text-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/40 transition-all">
-                <input type="file" accept="application/pdf,.xlsx,.xls" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+                <input type="file" accept="application/pdf,.xlsx,.xls,image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
                 {busy ? <Loader2 className="w-8 h-8 mx-auto text-emerald-600 animate-spin" />
                   : <Upload className="w-8 h-8 mx-auto text-slate-400" />}
-                <p className="text-sm font-semibold text-slate-600 mt-2">{busy ? "กำลังอ่าน..." : "ลากไฟล์มาวาง หรือกดเลือก"}</p>
-                <p className="text-xs text-slate-400 mt-0.5">PDF ใบเสนอราคา (HELI) · Excel Serial List (STAXX) · หลายไฟล์พร้อมกันได้</p>
+                <p className="text-sm font-semibold text-slate-600 mt-2">
+                  {ocr ? `🔍 กำลังอ่านรูป "${ocr.name}"... ${ocr.pct}%` : busy ? "กำลังอ่าน..." : "ลากไฟล์มาวาง หรือกดเลือก"}
+                </p>
+                <p className="text-xs text-slate-400 mt-0.5">PDF (HELI) · Excel Serial List (STAXX) · รูป JPEG/PNG (OCR ในเครื่อง) · หลายไฟล์พร้อมกันได้</p>
+                {ocr && <p className="text-[11px] text-slate-400 mt-1">อ่านในเครื่อง 100% · ครั้งแรกโหลดภาษาไทยอาจนานสักครู่</p>}
               </label>
 
               {notice && <div className="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-3 py-2 flex items-start gap-1.5"><AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />{notice}</div>}
