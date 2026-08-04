@@ -59,7 +59,7 @@ const DEFAULT_FIELD_CFG: FieldConfig = {
   customerTypes: DEFAULT_CUSTOMER_TYPES,
   financeCompanies: FINANCE_COMPANIES,
   saleTypes: [...SALE_TYPES],
-  paymentTypes: ["เงินสด", "ไฟแนนซ์"],
+  paymentTypes: ["บิลแวท", "บิลเงินสด", "ไฟแนนซ์", "เงินสด"],
   customFieldDefs: [],
   saleExtraFieldDefs: [],
   salesFilterRequests: [],
