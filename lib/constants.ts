@@ -49,6 +49,11 @@ export const STATUS_BADGE: Record<string, string> = {
   "ส่งมอบแล้ว":     "bg-slate-100 text-slate-600 border-slate-200",
   "ซ่อมบำรุง":      "bg-red-100 text-red-700 border-red-200",
   "รอตรวจสอบ":     "bg-blue-100 text-blue-700 border-blue-200",
+  // ── ชุดสถานะรวม (ใช้ทั้งหน้าขาย+สต็อก) 5 ส.ค. 2026 ──
+  "ติดจอง (รอโอนมัดจำ)": "bg-amber-100 text-amber-700 border-amber-200",
+  "มัดจำแล้ว/เงินสด":     "bg-orange-100 text-orange-700 border-orange-200",
+  "มัดจำแล้ว/ไฟแนนซ์":    "bg-red-100 text-red-700 border-red-200",
+  "รอตรวจสอบสต็อก":       "bg-blue-100 text-blue-700 border-blue-200",
 };
 
 /** สีป้ายสถานะ — ถ้าไม่รู้จักสถานะ คืนสีเทากลางๆ (กันจอพังเมื่อเจอค่าสะกดแปลก) */

@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import { Forklift, Sale, InspectionRecord, DeletedInspectionRecord, CustomFieldDef,
-  STOCK_APPROVAL_FIELD, STATUS_PENDING_APPROVAL, GATED_STATUSES } from "./types";
+  STOCK_APPROVAL_FIELD } from "./types";
 import {
   mockForklifts, mockSales, mockInspections,
   BRANDS, FUEL_TYPES,
@@ -333,42 +333,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return { ...s, payment_proof: url };
     } catch (e) { console.warn("upload payment_proof", e); return s; } // อัปไม่ได้ → เก็บ base64 ไปก่อน
   };
-  // สถานะรถตามดีล — ทั้ง 4 สถานะใหม่กันสต็อก (≠ "พร้อมขาย") · ค่าเก่า map ให้เข้ากัน
+  // สถานะรถตามดีล → ชุดสถานะรวมใหม่ (5 ส.ค. 2026): ติดจอง(รอโอนมัดจำ)/มัดจำแล้ว-เงินสด/มัดจำแล้ว-ไฟแนนซ์/ปิดการขายแล้ว
   const forkliftStatusForSale = (s: Sale): string => {
-    const st = s.sale_status;
-    if (st === "ขายแล้ว") return "ปิดการขายแล้ว";       // เก่า
-    if (st === "จอง" || st === "จอง/รอโอน" || st === "จอง/โอนมัดจำแล้ว" || st === "มัดจำแล้ว") return "จอง"; // จองทุกแบบ → กันสต็อกเป็น "จอง"
-    if (st === "รอผ่านไฟแนนซ์") return "รอผ่านไฟแนนซ์";  // เก่า
-    return st || "ปิดการขายแล้ว";                        // ใหม่ (รอจัดส่ง/รอไฟแนนซ์/ปิด-ส่งแล้ว)
+    const st = String(s.sale_status ?? "").trim();
+    const pay = String(s.payment_type ?? "");
+    const isFin = pay.includes("ไฟแนนซ์") || st.includes("ไฟแนนซ์");
+    if (!st || st === "ขายแล้ว" || st.includes("ปิดการขาย") || st.includes("จัดส่งแล้ว") || st.includes("ส่งมอบ")) return "ปิดการขายแล้ว";
+    if (st === "จอง" || st === "จอง/รอโอน" || st === "จองมัดจำ") return "ติดจอง (รอโอนมัดจำ)"; // จองไว้ ยังไม่โอนมัดจำ
+    // มัดจำแล้ว / รอไฟแนนซ์ / รอจัดส่ง → มัดจำแล้ว แยกตามการชำระ
+    if (st.includes("มัดจำ") || st.includes("ไฟแนนซ์") || st === "รอจัดส่ง") return isFin ? "มัดจำแล้ว/ไฟแนนซ์" : "มัดจำแล้ว/เงินสด";
+    return st; // ค่าใหม่ผ่านตรงๆ
   };
-  // ── เกตอนุมัติจอง: สถานะที่กันสต็อกและต้องให้ฝ่ายสต็อกอนุมัติก่อน (ยกเว้นปิดการขายจริง) ──
-  const GATED = new Set(GATED_STATUSES);
+  // ── ยกเลิกเกตอนุมัติจอง (5 ส.ค. 2026): เซลล์จอง → ตั้งสถานะรถทันที ไม่ต้องรอสต็อกอนุมัติ ──
   const approvalOf = (s: Sale) => String(s.custom_fields?.[STOCK_APPROVAL_FIELD] ?? "");
-  // สถานะรถที่ควรตั้งจากดีล — กันด้วยเกตอนุมัติ (เฉพาะดีลที่ติดมาร์ก "รออนุมัติ" · ดีลเก่าไม่มีมาร์ก = ผ่าน)
   const forkStatusGated = (s: Sale): string => {
-    const intended = forkliftStatusForSale(s);
-    const appr = approvalOf(s);
-    if (appr === "ปฏิเสธ") return "พร้อมขาย";                              // สต็อกปฏิเสธ → คืนรถ
-    if (appr === "รออนุมัติ") return GATED.has(intended) ? STATUS_PENDING_APPROVAL : intended; // รอสต็อกอนุมัติ
-    return intended;                                                       // อนุมัติแล้ว / เก่า / ปิดการขายจริง → สถานะจริง
+    if (approvalOf(s) === "ปฏิเสธ") return "พร้อมขาย";  // ดีลเก่าที่เคยถูกปฏิเสธ → คืนรถ
+    return forkliftStatusForSale(s);                    // ตั้งสถานะตามดีลตรงๆ
   };
-  // ตั้งมาร์กอนุมัติให้ดีล:
-  //  · จอง/กันสต็อก + กรอกครบ (มีสลิปการชำระ) → อนุมัติอัตโนมัติ (ไม่ต้องรอสต็อก)
-  //  · จอง/กันสต็อก + ยังไม่มีสลิป (จอง/รอโอน, รอไฟแนนซ์) → "รออนุมัติ" ให้สต็อกกดอนุมัติ
-  //  · ปิดการขายจริง (ไม่ gated) → ตัดจองออกอัตโนมัติ
-  const withApprovalMarker = (s: Sale): Sale => {
-    const appr = approvalOf(s);
-    if (appr === "อนุมัติแล้ว" || appr === "ปฏิเสธ") return s; // สต็อกตัดสินแล้ว คงไว้เป็นประวัติ
-    const intended = forkliftStatusForSale(s);
-    if (GATED.has(intended)) {
-      const complete = !!(s.payment_proof && String(s.payment_proof).trim()); // มีสลิป = ข้อมูลครบ
-      if (complete) return { ...s, custom_fields: { ...(s.custom_fields || {}), [STOCK_APPROVAL_FIELD]: "อนุมัติอัตโนมัติ" } };
-      return appr === "รออนุมัติ" ? s : { ...s, custom_fields: { ...(s.custom_fields || {}), [STOCK_APPROVAL_FIELD]: "รออนุมัติ" } };
-    }
-    // ปิดการขายจริง/พร้อมขาย = ไม่ต้องอนุมัติ → ถ้าเคยติด "รออนุมัติ" ให้ตัดออก (ปิดการขายอัตโนมัติ)
-    if (appr === "รออนุมัติ") { const cf = { ...(s.custom_fields || {}) }; delete cf[STOCK_APPROVAL_FIELD]; return { ...s, custom_fields: cf }; }
-    return s;
-  };
+  const withApprovalMarker = (s: Sale): Sale => s;      // ไม่มีเกตอนุมัติแล้ว
 
   const addSale = useCallback((s0: Sale) => {
     lastLocalEditRef.current = Date.now();

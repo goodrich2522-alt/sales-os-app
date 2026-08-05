@@ -31,16 +31,17 @@ function notSellableReason(status: unknown): string | null {
   const s = (status == null ? "" : String(status)).trim();
   if (s === "") return null; // ไม่มีสถานะ = ให้โชว์ไว้ก่อน (ดีกว่าซ่อนรถจริง)
   // ── สถานะที่ถูกจับจอง/ขายแล้ว → กันสต็อก ไม่ให้เปิดขายซ้ำ (รวม 4 สถานะใหม่) ──
+  if (s === "พร้อมขาย") return null; // ขายได้เฉพาะ "พร้อมขาย"
   if (s.includes("ขายแล้ว") || s.includes("ขายเงินสด") || s.includes("ปิดการขาย")) return "ปิดการขายแล้ว";
   if (s.includes("ส่งมอบ") || s.includes("จัดส่งแล้ว")) return "ส่งมอบแล้ว";
   if (s.includes("รอจัดส่ง")) return "รอจัดส่ง";
-  if (s.includes("มัดจำ") || s.includes("จอง")) return "จอง/มัดจำแล้ว";
-  if (s.includes("ไฟแนนซ์")) return "รอไฟแนนซ์";
+  if (s.includes("มัดจำ")) return s.includes("ไฟแนนซ์") ? "มัดจำแล้ว/ไฟแนนซ์" : "มัดจำแล้ว";
+  if (s.includes("จอง")) return "ติดจอง (รอโอนมัดจำ)";
+  if (s.includes("ไฟแนนซ์")) return "มัดจำแล้ว/ไฟแนนซ์";
   if (s.includes("เช่า")) return "เป็นรถเช่า";
-  if (s.includes("รอรับ") || s.includes("รอเข้าไปรับ")) return "ยังไม่รับรถเข้าคลัง (รอรับ)";
-  if (s.includes("รอยืนยัน")) return "รอฝ่ายสต็อกยืนยันนำเข้า";
-  if (s.includes("รออนุมัติ")) return "จองรออนุมัติจากสต็อก";
-  return null;
+  if (s.includes("รอตรวจสอบ") || s.includes("รอรับ") || s.includes("รอยืนยัน") || s.includes("รออนุมัติ")) return "รอตรวจสอบสต็อก";
+  if (s.includes("เคลม") || s.includes("รับกลับ")) return "เคลม/รับกลับ";
+  return null; // อื่นๆ (เช่น สั่งผลิต) → ขายล่วงหน้าได้ คงพฤติกรรมเดิม
 }
 const isSellable = (f: { status?: unknown }) => notSellableReason(f?.status) === null;
 
@@ -243,7 +244,8 @@ export default function SalesMain() {
   // ฐานรายการ: ปกติ = รถขายได้ · เลือกสถานะ = ทุกสถานะที่ตรง · "รับมาล่าสุด" = รถขายได้ (เรียงวันรับทีหลัง)
   const listBase   = (fStatus && fStatus !== "__recent__") ? forklifts.filter(f => String(f.status).trim() === fStatus) : available;
   const brands     = [...new Set(forklifts.map(f => f.brand).filter(Boolean))].sort(); // ทุกยี่ห้อในระบบ (CNC ฯลฯ)
-  const statuses   = [...new Set(forklifts.map(f => String(f.status).trim()).filter(Boolean))].sort();
+  // ตัวกรองสถานะ = ชุดเดียวกับหน้าสต็อก (จาก fieldConfig.stockStatuses + สถานะที่มีในข้อมูล)
+  const statuses   = [...new Set([...fieldConfig.stockStatuses, ...forklifts.map(f => String(f.status).trim()).filter(Boolean)])];
   const models     = [...new Set(listBase.filter(f => !fBrand || f.brand === fBrand).map(f => f.model).filter(Boolean))].sort();
   const fuels      = [...new Set(forklifts.map(f => f.fuel).filter(Boolean))].sort();
   const masts      = [...new Set(listBase.filter(f => (!fBrand || f.brand === fBrand) && (!fModel || f.model === fModel)).map(mastOf).filter(Boolean))].sort();
