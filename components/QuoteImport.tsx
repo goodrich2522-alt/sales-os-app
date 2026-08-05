@@ -156,7 +156,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[88vh] flex flex-col shadow-2xl">
+      <div className="bg-white rounded-3xl w-full max-w-6xl max-h-[88vh] flex flex-col shadow-2xl">
         {/* header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
           <div>
@@ -233,7 +233,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
                     <table className="w-full text-xs border-collapse">
                       <thead>
                         <tr className="text-slate-400 text-left">
-                          {["แบรนด์", "รุ่น", "SN", "PI", "พิกัด", "พลังงาน", "MAST", "Valve", "ราคาทุน", "ชนิด", ""].map((h) => <th key={h} className="px-2 py-1.5 font-semibold whitespace-nowrap">{h}</th>)}
+                          {["แบรนด์", "รุ่น", "SN", "PI", "พิกัด", "พลังงาน", "MAST", "Valve", "ราคาทุน", "ชนิด", ""].map((h) => <th key={h} className="px-2 py-2 text-[11px] font-bold text-slate-500 whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
                       <tbody>
@@ -241,15 +241,15 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
                           const dup = existingIds.has(toForklift(v, i).id);
                           return (
                             <tr key={i} className={`border-t border-slate-100 ${dup ? "bg-red-50/60" : ""}`}>
-                              <Cell val={v.brand ?? ""} onChange={(x) => edit(i, "brand", x)} w="w-20" />
-                              <Cell val={v.model} onChange={(x) => edit(i, "model", x)} w="w-32" />
-                              <Cell val={v.SN ?? ""} onChange={(x) => edit(i, "SN", x)} w="w-28" />
-                              <Cell val={v.pi_no ?? ""} onChange={(x) => edit(i, "pi_no", x)} w="w-20" />
-                              <Cell val={v.capacity ?? ""} onChange={(x) => edit(i, "capacity", x)} w="w-16" />
-                              <Cell val={v.fuel ?? ""} onChange={(x) => edit(i, "fuel", x)} w="w-16" />
-                              <Cell val={v.mast ?? ""} onChange={(x) => edit(i, "mast", x)} w="w-16" />
-                              <Cell val={v.valve ?? ""} onChange={(x) => edit(i, "valve", x)} w="w-12" />
-                              <Cell val={v.cost_price ? String(v.cost_price) : ""} onChange={(x) => edit(i, "cost_price", x)} w="w-20" />
+                              <Cell val={v.brand ?? ""} onChange={(x) => edit(i, "brand", x)} w="w-24" ph="แบรนด์" />
+                              <Cell val={v.model} onChange={(x) => edit(i, "model", x)} w="w-40" ph="รุ่น" />
+                              <Cell val={v.SN ?? ""} onChange={(x) => edit(i, "SN", x)} w="w-32" ph="SN" />
+                              <Cell val={v.pi_no ?? ""} onChange={(x) => edit(i, "pi_no", x)} w="w-24" ph="PI" />
+                              <Cell val={v.capacity ?? ""} onChange={(x) => edit(i, "capacity", x)} w="w-20" ph="พิกัด" />
+                              <Cell val={v.fuel ?? ""} onChange={(x) => edit(i, "fuel", x)} w="w-20" ph="พลังงาน" />
+                              <Cell val={v.mast ?? ""} onChange={(x) => edit(i, "mast", x)} w="w-20" ph="เสา" />
+                              <Cell val={v.valve ?? ""} onChange={(x) => edit(i, "valve", x)} w="w-16" ph="วาล์ว" />
+                              <Cell val={v.cost_price ? String(v.cost_price) : ""} onChange={(x) => edit(i, "cost_price", x)} w="w-24" ph="ราคาทุน" />
                               <td className="px-2 py-1 text-slate-500 whitespace-nowrap">{categorizeModel(v.model)}</td>
                               <td className="px-1"><button onClick={() => removeRow(i)} className="text-slate-300 hover:text-red-600 p-1"><Trash2 className="w-3.5 h-3.5" /></button></td>
                             </tr>
@@ -283,11 +283,11 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
   );
 }
 
-function Cell({ val, onChange, w }: { val: string; onChange: (v: string) => void; w: string }) {
+function Cell({ val, onChange, w, ph }: { val: string; onChange: (v: string) => void; w: string; ph?: string }) {
   return (
-    <td className="px-1 py-1">
-      <input value={val} onChange={(e) => onChange(e.target.value)}
-        className={`${w} border border-transparent hover:border-slate-200 focus:border-emerald-400 rounded px-1.5 py-1 text-xs bg-transparent focus:bg-white focus:outline-none`} />
+    <td className="px-1 py-1.5 align-top">
+      <input value={val} onChange={(e) => onChange(e.target.value)} placeholder={ph}
+        className={`${w} border border-slate-300 rounded-lg px-2.5 py-2 text-sm text-slate-800 bg-white placeholder:text-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 focus:outline-none`} />
     </td>
   );
 }
