@@ -39,7 +39,7 @@ function notSellableReason(status: unknown): string | null {
   if (s.includes("จอง")) return "ติดจอง (รอโอนมัดจำ)";
   if (s.includes("ไฟแนนซ์")) return "มัดจำแล้ว/ไฟแนนซ์";
   if (s.includes("เช่า")) return "เป็นรถเช่า";
-  if (s.includes("รอตรวจสอบ") || s.includes("รอรับ") || s.includes("รอยืนยัน") || s.includes("รออนุมัติ")) return "รอตรวจสอบสต็อก";
+  if (s.includes("รอรับ") || s.includes("รอตรวจสอบ") || s.includes("รอยืนยัน") || s.includes("รออนุมัติ")) return "รอรับ (รอตรวจรับเข้าคลัง)";
   if (s.includes("เคลม") || s.includes("รับกลับ")) return "เคลม/รับกลับ";
   return null; // อื่นๆ (เช่น สั่งผลิต) → ขายล่วงหน้าได้ คงพฤติกรรมเดิม
 }
