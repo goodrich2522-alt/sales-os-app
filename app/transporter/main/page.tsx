@@ -773,12 +773,19 @@ export default function TransporterMain() {
               )}
               {histFiltered.map(rec => {
                 const receiver = (rec.role ?? "ผู้รับรถ") === "ผู้รับรถ";
+                // หา PI ของรถคันนี้ (จับคู่ตาม SN/รหัสรถ) เพื่อบอกว่าอยู่ใน PI ไหน
+                const key = String(rec.unit_no ?? "").toUpperCase();
+                const fk = forklifts.find(f => String(f.SN ?? "").toUpperCase() === key || String(f.id ?? "").toUpperCase() === key);
+                const pi = fk?.pi_no?.trim();
                 return (
                   <div key={rec.id} className="border border-slate-100 rounded-2xl p-3.5 bg-slate-50/60">
                     <div className="flex items-center justify-between mb-1.5 gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex items-center gap-2 min-w-0 flex-wrap">
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${receiver ? "bg-amber-100 text-amber-700" : "bg-indigo-100 text-indigo-700"}`}>{rec.role ?? "ผู้รับรถ"}</span>
                         <span className="font-bold text-slate-800 text-sm truncate">{rec.unit_no}</span>
+                        {pi
+                          ? <span className="text-[10px] font-bold text-orange-700 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded-md flex-shrink-0">PI {pi}</span>
+                          : <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-md flex-shrink-0">ไม่มี PI</span>}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <span className="text-xs text-slate-400">{rec.date}</span>
