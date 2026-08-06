@@ -9,4 +9,4 @@
 :HL["/sales-os-app.github.io/fleet/_next/static/media/bcc136e7df79ae49-s.p.3vvwmya0_3z_s.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
 :HL["/sales-os-app.github.io/fleet/_next/static/media/e12efafcac952e69-s.p.3gt1gw19188hm.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
 :HL["/sales-os-app.github.io/fleet/_next/static/media/e9ed0bc71a38d6c1-s.p.2m2jj329378-j.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
-0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}},"staleTime":300,"buildId":"sav4S0JSk5hG42fqVvOf0"}
+0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}},"staleTime":300,"buildId":"GOBvEVAPkPbHc4rtcbOgl"}
