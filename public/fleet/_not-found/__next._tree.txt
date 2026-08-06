@@ -1,2 +1,2 @@
-:HL["/sales-os-app.github.io/fleet/_next/static/chunks/1zgboqq7fz0rp.css","style"]
-0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"/_not-found","param":null,"prefetchHints":0,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}}}},"staleTime":300,"buildId":"HilZ-_hSC1iPBMBQ08I4w"}
+:HL["/sales-os-app.github.io/fleet/_next/static/chunks/3-3t39tj-pet4.css","style"]
+0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"/_not-found","param":null,"prefetchHints":0,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}}}},"staleTime":300,"buildId":"JlpshI1HlqcG70vCJckEq"}
