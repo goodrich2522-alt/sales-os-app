@@ -44,7 +44,7 @@ export function WarrantyBlock({ forklift, actor, onSaved, canEdit = true }: {
       <div className="flex items-center gap-1.5 mb-2 flex-wrap">
         <p className="text-xs font-bold text-teal-700 flex items-center gap-1.5"><Wrench className="w-3.5 h-3.5" />บริการหลังการขาย / รับประกัน</p>
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${filled ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-red-100 text-red-700 border-red-200"}`}>
-          {filled ? "✓ ลงข้อมูลแล้ว" : "⚠️ ยังไม่ลง → ค่าคอม 0"}
+          {filled ? "✓ ลงข้อมูลแล้ว" : "⚠️ ยังไม่ลงข้อมูล (มีผลกับค่าคอม ส.ค. 69 เป็นต้นไป)"}
         </span>
         {isFork && <span className="ml-auto text-[10px] font-semibold text-teal-700 bg-teal-100 border border-teal-200 px-1.5 py-0.5 rounded-full">เช็คแล้ว {doneCount}/{svc.rounds.length} รอบ</span>}
       </div>

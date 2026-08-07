@@ -17,6 +17,7 @@ import { supabase } from "@/lib/supabaseClient";
 const fmt = (n: number) => Number(n || 0).toLocaleString("th-TH");
 const MONTHS_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 const monthLabel = (ym: string) => { const [y, m] = ym.split("-"); return `${MONTHS_TH[Number(m) - 1] ?? m} ${Number(y) + 543}`; };
+const WARRANTY_GATE_FROM = "2026-08"; // เริ่มบังคับลงรับประกันก่อนจ่ายค่าคอม ตั้งแต่ ส.ค. 2569 (ไม่ย้อนดีลเก่า)
 
 function CommissionPageInner() {
   const { sales, forklifts, updateSale, fieldConfig, setCommissionLock } = useApp();
@@ -46,8 +47,9 @@ function CommissionPageInner() {
       .map(s => {
         const f = fkById.get(s.forklift_id);
         const comm0 = calcCommission(s, f, historySales);
-        // กันจ่ายค่าคอม: ยังไม่ลงข้อมูลรับประกัน/บริการหลังการขาย → ค่าคอม 0
-        const wf = warrantyFilled(f);
+        // กันจ่ายค่าคอม: ยังไม่ลงรับประกัน → ค่าคอม 0 · แต่บังคับเฉพาะดีลที่ปิดตั้งแต่ ส.ค. 2569 (ไม่ย้อนดีลเก่า)
+        const gated = closeMonth(s) >= WARRANTY_GATE_FROM;
+        const wf = !gated || warrantyFilled(f); // ดีลเก่า = ผ่านเสมอ
         const comm = wf ? comm0 : { ...comm0, amount: 0, note: (comm0.note ? comm0.note + " · " : "") + "ยังไม่ลงข้อมูลรับประกัน" };
         return { sale: s, forklift: f, comm, warranty: wf };
       })
