@@ -42,6 +42,16 @@ const FIELD_LABELS: Record<Exclude<DropdownField, "stockStatuses">, string> = {
   heightOptions: "ยกสูง (เมตร)",
 };
 
+// ── บริการหลังการขาย / รับประกัน (โชว์เมื่อรถขายแล้ว) ──
+const DEFAULT_WARRANTY = "เครื่องยนต์+ชุดเกียร์ 3 ปี หรือ 2,000 ชม. · ระบบไฮดรอลิก/เบรก/กล่องคุมไฟฟ้า 6 เดือน หรือ 2,000 ชม. · ฟรีค่าตรวจเช็ค 4 รอบ · แนะนำเปลี่ยนถ่ายทุก 3 เดือน / 200 ชม.";
+const emptySvcRounds = () => Array.from({ length: 4 }, () => ({ date: "", done: false, note: "" }));
+const svcDueDate = (start: string, n: number): string => {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(start)) return "";
+  const d = new Date(start + "T00:00:00");
+  d.setMonth(d.getMonth() + n * 3);
+  return d.toISOString().slice(0, 10);
+};
+
 // หมวดรถ 3 ไลน์ — สเปกกรอกเหมือนกันทุกไลน์
 
 // แสดงน้ำหนักยก: ≥1000 กก. โชว์เป็นตัน อ่านง่ายกว่า
@@ -102,6 +112,9 @@ export default function StockMain() {
   // แก้ไขข้อมูลการเงิน (เฉพาะวรลักษณ์) — ต้นทุน/ราคาขายจริง/ค่าขนส่ง/ทุนอุปกรณ์ · แก้ได้ทุกสถานะ
   const [finEdit, setFinEdit]             = useState({ pi: "", cost: "", sale: "", ship: "", addon: "", freebie: "", profit: "" });
   const [finSaved, setFinSaved]           = useState(false);
+  // บริการหลังการขาย / รับประกัน (โชว์เมื่อรถขายแล้ว) — เก็บ custom_fields["บริการหลังการขาย"] เป็น JSON
+  const [svc, setSvc]                     = useState<{ start: string; terms: string; rounds: { date: string; done: boolean; note: string }[] }>({ start: "", terms: DEFAULT_WARRANTY, rounds: emptySvcRounds() });
+  const [svcSaved, setSvcSaved]           = useState(false);
   // ── ประวัติการขาย (เฟส 1): ดีลทุกเซลล์ ──
   const [showSaleHistory, setShowSaleHistory] = useState(false);
   const [showReorder, setShowReorder]     = useState(false); // กางรายการเตรียมสั่งสินค้า (คลิกจากการ์ด)
@@ -159,6 +172,16 @@ export default function StockMain() {
       profit: cf["กำไร(ไฟล์)"] != null ? String(cf["กำไร(ไฟล์)"]) : "",
     });
     setFinSaved(false);
+    // บริการหลังการขาย — parse จาก custom_fields หรือใช้ค่าเริ่มต้น (วันเริ่ม = วันส่งมอบ/วันรับรถ)
+    let svcParsed: { start?: string; terms?: string; rounds?: { date: string; done: boolean; note: string }[] } | null = null;
+    try { const raw = cf["บริการหลังการขาย"]; svcParsed = raw ? JSON.parse(String(raw)) : null; } catch { svcParsed = null; }
+    const defStart = detailItem?.received_date || "";
+    setSvc({
+      start: svcParsed?.start || defStart,
+      terms: svcParsed?.terms || DEFAULT_WARRANTY,
+      rounds: (svcParsed?.rounds && svcParsed.rounds.length) ? svcParsed.rounds : emptySvcRounds(),
+    });
+    setSvcSaved(false);
   }, [detailItem]);
 
   // สิทธิ์แก้ไขข้อมูลการเงิน (ต้นทุน/ค่าขนส่ง ฯลฯ) — เฉพาะวรลักษณ์เท่านั้น (ชื่อ หรือ อีเมลของวรลักษณ์)
@@ -1668,6 +1691,55 @@ export default function StockMain() {
                         {finSaved ? "บันทึกแล้ว ✓" : "บันทึกข้อมูลการเงิน"}
                       </button>
                       <p className="text-[10px] text-slate-400 mt-1.5">* มีผลกับ &ldquo;กำไรจริง (คำนวณ)&rdquo; + หน้าค่าคอม/วางแผนสั่งสต็อก · บันทึกทุกครั้งจะเข้า audit log</p>
+                    </div>
+                  );
+                })()}
+                {/* บริการหลังการขาย / รับประกัน — โชว์เมื่อรถขายแล้ว (ฝ่ายสต็อก/ช่างอัปเดตรอบเช็ค) */}
+                {(saleForItem || String(it.status).includes("ปิดการขาย")) && (() => {
+                  const inp = "w-full mt-0.5 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-400";
+                  const setRound = (i: number, patch: Partial<{ date: string; done: boolean; note: string }>) => {
+                    setSvc({ ...svc, rounds: svc.rounds.map((r, j) => j === i ? { ...r, ...patch } : r) }); setSvcSaved(false);
+                  };
+                  const doneCount = svc.rounds.filter(r => r.done).length;
+                  return (
+                    <div className="border border-teal-200 bg-teal-50/40 rounded-xl p-3">
+                      <p className="text-xs font-bold text-teal-700 mb-2 flex items-center gap-1.5">🔧 บริการหลังการขาย / รับประกัน <span className="ml-auto text-[10px] font-semibold text-teal-700 bg-teal-100 border border-teal-200 px-1.5 py-0.5 rounded-full">เช็คแล้ว {doneCount}/{svc.rounds.length} รอบ</span></p>
+                      <div className="flex flex-col gap-2">
+                        <label className="text-[11px] text-slate-500">วันเริ่มรับประกัน (วันส่งมอบ)
+                          <input type="date" value={svc.start} onChange={e => { setSvc({ ...svc, start: e.target.value }); setSvcSaved(false); }} className={inp} /></label>
+                        <label className="text-[11px] text-slate-500">เงื่อนไขรับประกัน
+                          <textarea rows={3} value={svc.terms} onChange={e => { setSvc({ ...svc, terms: e.target.value }); setSvcSaved(false); }} className={inp + " resize-none"} /></label>
+                        <div>
+                          <p className="text-[11px] font-semibold text-slate-500 mb-1">รอบเข้าเช็ค/บำรุงรักษา (ฟรี · ทุก 3 เดือน / 200 ชม.)</p>
+                          <div className="flex flex-col gap-1.5">
+                            {svc.rounds.map((r, i) => {
+                              const due = svcDueDate(svc.start, i + 1);
+                              return (
+                                <div key={i} className={`rounded-lg border p-2 ${r.done ? "bg-emerald-50 border-emerald-200" : "bg-white border-slate-200"}`}>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
+                                      <input type="checkbox" checked={r.done} onChange={e => setRound(i, { done: e.target.checked })} className="w-4 h-4 accent-teal-600" />รอบที่ {i + 1}
+                                    </label>
+                                    <span className="text-[10px] text-slate-400">กำหนด ~{due || "—"} ({(i + 1) * 3} เดือน)</span>
+                                    <input type="date" value={r.date} onChange={e => setRound(i, { date: e.target.value })} title="วันเข้าเช็คจริง"
+                                      className="ml-auto border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-700" />
+                                  </div>
+                                  <input value={r.note} onChange={e => setRound(i, { note: e.target.value })} placeholder="หมายเหตุ (ช่าง/รายการที่เปลี่ยน)"
+                                    className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-700" />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <button onClick={() => {
+                            const cf = { ...(it.custom_fields || {}) } as Record<string, string>;
+                            cf["บริการหลังการขาย"] = JSON.stringify(svc);
+                            const u = { ...it, custom_fields: cf }; updateForklift(u); setDetailItem(u); setSvcSaved(true);
+                          }}
+                          className="mt-1 px-4 py-2 rounded-xl text-sm font-bold bg-teal-600 text-white hover:bg-teal-700">
+                          {svcSaved ? "บันทึกแล้ว ✓" : "บันทึกบริการหลังการขาย"}
+                        </button>
+                      </div>
                     </div>
                   );
                 })()}
