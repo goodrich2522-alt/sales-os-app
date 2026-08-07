@@ -9,7 +9,7 @@ import {
 import { useApp } from "@/lib/AppContext";
 import {
   calcCommission, isClosedSale, isImportedSale, closeMonth, closeDate,
-  COMMISSION_FIELD, COMMISSION_CATEGORIES, CommissionLock,
+  COMMISSION_FIELD, COMMISSION_CATEGORIES, CommissionLock, warrantyFilled,
 } from "@/lib/commission";
 import { DashboardGuard } from "@/components/DashboardGuard";
 import { supabase } from "@/lib/supabaseClient";
@@ -45,25 +45,30 @@ function CommissionPageInner() {
       .filter(s => closeMonth(s) === activeMonth)
       .map(s => {
         const f = fkById.get(s.forklift_id);
-        return { sale: s, forklift: f, comm: calcCommission(s, f, historySales) };
+        const comm0 = calcCommission(s, f, historySales);
+        // กันจ่ายค่าคอม: ยังไม่ลงข้อมูลรับประกัน/บริการหลังการขาย → ค่าคอม 0
+        const wf = warrantyFilled(f);
+        const comm = wf ? comm0 : { ...comm0, amount: 0, note: (comm0.note ? comm0.note + " · " : "") + "ยังไม่ลงข้อมูลรับประกัน" };
+        return { sale: s, forklift: f, comm, warranty: wf };
       })
       .sort((a, b) => String(a.sale.sales_staff || "").localeCompare(String(b.sale.sales_staff || "")) || closeDate(a.sale).localeCompare(closeDate(b.sale)));
   }, [closedSales, activeMonth, fkById]);
 
   // จัดกลุ่มรายบุคคล
   const byStaff = useMemo(() => {
-    const m = new Map<string, { staff: string; deals: typeof rows; total: number; missing: number; noneCount: number; noneSaleTotal: number; noneComm: number }>();
+    const m = new Map<string, { staff: string; deals: typeof rows; total: number; missing: number; warrantyMissing: number; noneCount: number; noneSaleTotal: number; noneComm: number }>();
     rows.forEach(r => {
       const staff = r.sale.sales_staff || "(ไม่ระบุเซลล์)";
-      const g = m.get(staff) ?? { staff, deals: [] as typeof rows, total: 0, missing: 0, noneCount: 0, noneSaleTotal: 0, noneComm: 0 };
+      const g = m.get(staff) ?? { staff, deals: [] as typeof rows, total: 0, missing: 0, warrantyMissing: 0, noneCount: 0, noneSaleTotal: 0, noneComm: 0 };
       g.deals.push(r);
       if (r.comm.group !== "none") g.total += r.comm.amount; // รถกลุ่มอื่นคิดรวมทั้งเดือนทีหลัง (ไม่คิดทีละใบ)
-      if (r.comm.group === "FORKLIFT" && r.comm.note) g.missing += 1;
+      if (r.comm.group === "FORKLIFT" && r.comm.note && r.warranty) g.missing += 1; // ยังไม่เลือกหมวด (แยกจากขาดรับประกัน)
+      if (!r.warranty) g.warrantyMissing += 1;
       m.set(staff, g);
     });
-    // รถกลุ่มอื่น (แฮนด์ลิฟท์/CBD/CNS) — รวมยอดขายทั้งเดือนก่อน แล้วคิด 1% ครั้งเดียว (ทุก 100,000 = 1,000)
+    // รถกลุ่มอื่น (แฮนด์ลิฟท์/CBD/CNS) — รวมยอดขายทั้งเดือนก่อน คิด 1% ครั้งเดียว · เฉพาะดีลที่ลงรับประกันแล้ว
     m.forEach(g => {
-      const none = g.deals.filter(r => r.comm.group === "none");
+      const none = g.deals.filter(r => r.comm.group === "none" && r.warranty);
       g.noneCount = none.length;
       g.noneSaleTotal = none.reduce((s, r) => s + (Number(r.sale.actual_sale) || 0), 0);
       g.noneComm = Math.round(g.noneSaleTotal * 0.01);
@@ -75,7 +80,8 @@ function CommissionPageInner() {
   const grandTotal = byStaff.reduce((s, g) => s + g.total, 0);
   const totalDeals = rows.length;
   // นับเฉพาะดีลโฟล์คลิฟท์ที่ยังไม่เลือกหมวด (ไม่รวมดีลที่ไม่เข้าเงื่อนไขค่าคอม เช่น STAXX/แฮนด์ลิฟท์)
-  const totalMissing = rows.filter(r => r.comm.group === "FORKLIFT" && r.comm.note).length;
+  const totalMissing = rows.filter(r => r.comm.group === "FORKLIFT" && r.comm.note && r.warranty).length;
+  const totalWarrantyMissing = rows.filter(r => !r.warranty).length; // ดีลที่ยังไม่ลงรับประกัน → ค่าคอม 0
 
   // ── ล็อก snapshot รายเดือน ── ถ้าเดือนนี้ถูกล็อก → แสดงตัวเลขจาก snapshot (คงที่)
   const lock = fieldConfig.commissionLocks?.[activeMonth] || null;
@@ -90,7 +96,7 @@ function CommissionPageInner() {
         deals: lock.deals.filter(d => d.staff === s.staff).map(d => ({
           key: d.saleId, saleId: d.saleId, brand: d.brand, model: d.model, customer: d.customer,
           group: d.group, basis: d.basis, basisValue: d.basisValue, category: d.category,
-          returning: d.returning, amount: d.amount, closeDate: d.closeDate, note: "",
+          returning: d.returning, amount: d.amount, closeDate: d.closeDate, note: "", warranty: true,
         })),
       }));
     }
@@ -100,7 +106,7 @@ function CommissionPageInner() {
       deals: g.deals.map(r => ({
         key: r.sale.id, saleId: r.sale.id, brand: r.sale.forklift_brand || "", model: r.sale.forklift_model || "",
         customer: r.sale.customer_name || "", group: r.comm.group, basis: r.comm.basis, basisValue: r.comm.basisValue,
-        category: r.comm.category, returning: !!r.comm.returning, amount: r.comm.amount, closeDate: closeDate(r.sale), note: r.comm.note || "",
+        category: r.comm.category, returning: !!r.comm.returning, amount: r.comm.amount, closeDate: closeDate(r.sale), note: r.comm.note || "", warranty: r.warranty,
       })),
     }));
   }, [lock, byStaff]);
@@ -254,6 +260,12 @@ function CommissionPageInner() {
             มีดีลโฟล์คลิฟท์ <b>{dMissing}</b> รายการยังไม่ได้เลือก &ldquo;หมวดลูกค้า&rdquo; — กางดูรายดีลแล้วเลือกหมวดให้ครบ ค่าคอมถึงจะคำนวณถูก
           </div>
         )}
+        {totalWarrantyMissing > 0 && !locked && (
+          <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2.5 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            มี <b>{totalWarrantyMissing}</b> ดีล<b>ยังไม่ลงข้อมูลรับประกัน/บริการหลังการขาย → ค่าคอม 0</b> · ฝ่ายขายต้องลงข้อมูลรับประกันในหน้าขาย (กล่องรายละเอียดการขาย) ให้ครบก่อน
+          </div>
+        )}
 
         {/* ── รายบุคคล ── */}
         <div className="flex flex-col gap-3">
@@ -282,6 +294,7 @@ function CommissionPageInner() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold text-slate-800">{d.brand} {d.model}</span>
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${d.group === "STACKER" ? "bg-teal-100 text-teal-700" : d.group === "FORKLIFT" ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-500"}`}>{d.group === "none" ? "อื่นๆ" : d.group}</span>
+                          {d.warranty === false && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-200">⚠️ ยังไม่ลงรับประกัน · คอม 0</span>}
                         </div>
                         <p className="text-[11px] text-slate-500 mt-0.5">
                           {d.customer || "—"} · {d.basis} ฿{fmt(Math.round(d.basisValue))} · ปิด {d.closeDate}

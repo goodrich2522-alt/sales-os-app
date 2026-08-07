@@ -30,6 +30,13 @@ export const isOtherGroupModel = (model?: string) => {
 export const isOtherGroup = (brand?: string, model?: string) =>
   OTHER_GROUP_BRANDS.includes(String(brand ?? "").trim()) || isOtherGroupModel(model);
 
+// เป็น "โฟล์คลิฟท์แท้" (ถ่วงน้ำหนัก) ไหม — โฟล์คลิฟท์ = ฟอร์มรับประกันมีรอบเช็ค · อื่น = พิมพ์เอง
+export const isForkliftVehicle = (brand?: string, model?: string) =>
+  !isOtherGroup(brand, model) && !isStackerModel(model);
+
+// re-export ให้ component อื่นใช้ตรวจว่าลงข้อมูลรับประกันครบไหม (กันจ่ายค่าคอม)
+export { warrantyFilled } from "./warranty";
+
 // ดีลปิดจริง (ปิด/จัดส่งแล้ว) — ค่าเก่า "ขายแล้ว"/"ปิดการขายแล้ว"/"ส่งมอบแล้ว" นับด้วย
 export const isClosedSale = (s: Sale) => {
   const st = String(s.sale_status ?? "").trim();

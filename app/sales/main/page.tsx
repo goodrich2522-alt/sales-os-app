@@ -16,6 +16,7 @@ import { useApp } from "@/lib/AppContext";
 import { driveImg } from "@/lib/img";
 import { isPendingId } from "@/lib/productId";
 import { STATUS_BADGE, SALE_STATUS_BADGE, CONTACT_SOURCE_COLORS, VEHICLE_CATS, paymentBadgeClass } from "@/lib/constants";
+import { WarrantyBlock } from "@/components/WarrantyBlock";
 import { formatBaht } from "@/lib/format";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isStackerModel, isOtherGroup, priorPurchaseByCustomer } from "@/lib/commission";
@@ -1587,6 +1588,12 @@ export default function SalesMain() {
                   <span className="text-xs bg-violet-100 text-violet-700 px-2.5 py-1 rounded-full font-semibold">{detailSale.sale_type}</span>
                 )}
               </div>
+
+              {/* บริการหลังการขาย / รับประกัน — ฝ่ายขายลงข้อมูลให้ครบ (กันจ่ายค่าคอม) */}
+              {(() => {
+                const fk = forklifts.find(f => String(f.id) === String(detailSale.forklift_id) || (detailSale.forklift_unit_no && String(f.SN ?? "").toUpperCase() === String(detailSale.forklift_unit_no).toUpperCase()));
+                return fk ? <WarrantyBlock forklift={fk} actor={salesUser?.name || "ฝ่ายขาย"} /> : null;
+              })()}
 
               {/* ── ยกเลิกการจอง — เฉพาะดีลที่ยังไม่ปิดขาด (ไม่ผ่านไฟแนนซ์/ลูกค้ายกเลิก) ── */}
               {!["ปิดการขาย/จัดส่งแล้ว", "ขายแล้ว"].includes(detailSale.sale_status ?? "") && (

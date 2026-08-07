@@ -1,7 +1,8 @@
 // lib/warranty.ts — บริการหลังการขาย / รับประกัน (คิดรอบเช็คเป็น "เดือน" · ไม่ใช้ชั่วโมง เพราะแต่ละคันใช้งานต่างกัน)
 
 export interface SvcRound { date: string; done: boolean; note: string; }
-export interface SvcData { start: string; terms: string; rounds: SvcRound[]; }
+export interface SvcEdit { by: string; at: string; }
+export interface SvcData { start: string; terms: string; rounds: SvcRound[]; history?: SvcEdit[]; }
 
 export const DEFAULT_WARRANTY = "เครื่องยนต์ + ชุดเกียร์ 3 ปี · ระบบไฮดรอลิก/เบรก/กล่องคุมไฟฟ้า 6 เดือน · ฟรีค่าตรวจเช็ค 4 รอบ · แนะนำเข้าเช็ค/เปลี่ยนถ่ายทุก 3 เดือน";
 export const SVC_ROUNDS = 4;               // จำนวนรอบเช็คฟรี
@@ -29,8 +30,19 @@ export const parseSvc = (f?: { custom_fields?: Record<string, string> | null; re
       start: p.start || f?.received_date || "",
       terms: p.terms || DEFAULT_WARRANTY,
       rounds: Array.isArray(p.rounds) && p.rounds.length ? p.rounds : emptySvcRounds(),
+      history: Array.isArray(p.history) ? p.history : [],
     };
   } catch { return null; }
+};
+
+// รถประเภทนี้ลงข้อมูลบริการหลังการขาย "ครบ" หรือยัง (มีวันเริ่ม + เงื่อนไขรับประกัน) — ใช้กันจ่ายค่าคอม
+export const warrantyFilled = (f?: { custom_fields?: Record<string, string> | null }): boolean => {
+  const raw = f?.custom_fields?.["บริการหลังการขาย"];
+  if (!raw) return false; // ยังไม่เคยบันทึก
+  try {
+    const p = JSON.parse(String(raw));
+    return !!(String(p.start ?? "").trim() && String(p.terms ?? "").trim());
+  } catch { return false; }
 };
 
 // วันกำหนดของรอบ i (chained): รอบแรก = วันเริ่ม + 3 เดือน · รอบถัดไป = (วันเข้าจริงรอบก่อน ถ้ามี ไม่งั้นกำหนดรอบก่อน) + 3 เดือน
