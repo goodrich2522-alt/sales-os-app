@@ -11,6 +11,7 @@ import { useApp } from "@/lib/AppContext";
 import { getRegion } from "@/lib/mockData";
 import { buildStaffMonthly, buildStaffWeekly, buildAllMonthlyWeekly } from "@/components/charts/Charts";
 import { CONTACT_SOURCE_COLORS, paymentBadgeClass } from "@/lib/constants";
+import { parseSvc, nextDue, daysUntil, SVC_SOON_DAYS } from "@/lib/warranty";
 import { Sale, Forklift, isVoidSale } from "@/lib/types";
 import GoogleLoginButton, { type GoogleUser } from "@/components/GoogleLoginButton";
 import { checkAccess, hasActiveSession } from "@/lib/auth";
@@ -188,6 +189,14 @@ export default function Dashboard() {
       pctOver90: ready.length ? Math.round((over90.length / ready.length) * 100) : 0, stuckCost,
       lists: { ready: byAge, over90: over90.sort((a, b) => (b.days ?? 0) - (a.days ?? 0)) } };
   }, [forklifts]);
+  // แจ้งเตือนรอบเช็ครับประกัน — นับรถที่เกิน/ใกล้ถึงกำหนด (โชว์ badge บนปุ่มลิงก์)
+  const warrantyDueCount = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    let n = 0;
+    forklifts.forEach(f => { const svc = parseSvc(f); if (!svc) return; const nd = nextDue(svc); if (!nd) return; const d = daysUntil(nd.due, today); if (d != null && d <= SVC_SOON_DAYS) n++; });
+    return n;
+  }, [forklifts]);
+
   // Modal ดูรายการรถของการ์ด FIFO (คลิกการ์ด → เปิดรายการนั้น)
   const [agingModal, setAgingModal] = useState<null | { title: string; rows: { f: Forklift; cost: number; days: number | null }[]; showCost?: boolean }>(null);
 
@@ -349,6 +358,10 @@ export default function Dashboard() {
           <div className="flex items-center gap-2">
             <Link href="/dashboard/restock" className="flex items-center gap-1.5 text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg px-3 py-1.5 transition-all">
               <Boxes className="w-4 h-4" /><span className="hidden sm:inline">วางแผนสั่งสต็อก</span>
+            </Link>
+            <Link href="/dashboard/warranty" className="relative flex items-center gap-1.5 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg px-3 py-1.5 transition-all">
+              <ShieldCheck className="w-4 h-4" /><span className="hidden sm:inline">รับประกัน/รอบเช็ค</span>
+              {warrantyDueCount > 0 && <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{warrantyDueCount}</span>}
             </Link>
             <Link href="/dashboard/commission" className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg px-3 py-1.5 transition-all">
               <DollarSign className="w-4 h-4" /><span className="hidden sm:inline">ค่าคอมรายเดือน</span>

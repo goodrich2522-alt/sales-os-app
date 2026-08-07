@@ -22,6 +22,7 @@ import { parseForkliftCsv, assignIdsAndStamp, buildCsvTemplate } from "@/lib/for
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { apiEnabled } from "@/lib/api";
 import { driveImg } from "@/lib/img";
+import { DEFAULT_WARRANTY, emptySvcRounds, roundDue } from "@/lib/warranty";
 
 
 // ฟิลด์ dropdown ฝั่งสต็อก — ไม่รวมประเภทการขาย/การชำระ (จัดการในหน้าฝ่ายขาย)
@@ -42,15 +43,6 @@ const FIELD_LABELS: Record<Exclude<DropdownField, "stockStatuses">, string> = {
   heightOptions: "ยกสูง (เมตร)",
 };
 
-// ── บริการหลังการขาย / รับประกัน (โชว์เมื่อรถขายแล้ว) ──
-const DEFAULT_WARRANTY = "เครื่องยนต์+ชุดเกียร์ 3 ปี หรือ 2,000 ชม. · ระบบไฮดรอลิก/เบรก/กล่องคุมไฟฟ้า 6 เดือน หรือ 2,000 ชม. · ฟรีค่าตรวจเช็ค 4 รอบ · แนะนำเปลี่ยนถ่ายทุก 3 เดือน / 200 ชม.";
-const emptySvcRounds = () => Array.from({ length: 4 }, () => ({ date: "", done: false, note: "" }));
-const svcDueDate = (start: string, n: number): string => {
-  if (!/^\d{4}-\d{2}-\d{2}/.test(start)) return "";
-  const d = new Date(start + "T00:00:00");
-  d.setMonth(d.getMonth() + n * 3);
-  return d.toISOString().slice(0, 10);
-};
 
 // หมวดรถ 3 ไลน์ — สเปกกรอกเหมือนกันทุกไลน์
 
@@ -1710,17 +1702,17 @@ export default function StockMain() {
                         <label className="text-[11px] text-slate-500">เงื่อนไขรับประกัน
                           <textarea rows={3} value={svc.terms} onChange={e => { setSvc({ ...svc, terms: e.target.value }); setSvcSaved(false); }} className={inp + " resize-none"} /></label>
                         <div>
-                          <p className="text-[11px] font-semibold text-slate-500 mb-1">รอบเข้าเช็ค/บำรุงรักษา (ฟรี · ทุก 3 เดือน / 200 ชม.)</p>
+                          <p className="text-[11px] font-semibold text-slate-500 mb-1">รอบเข้าเช็ค/บำรุงรักษา (ฟรี · ทุก 3 เดือน — รอบถัดไปนับจากวันเข้าครั้งก่อน)</p>
                           <div className="flex flex-col gap-1.5">
                             {svc.rounds.map((r, i) => {
-                              const due = svcDueDate(svc.start, i + 1);
+                              const due = roundDue(svc, i);
                               return (
                                 <div key={i} className={`rounded-lg border p-2 ${r.done ? "bg-emerald-50 border-emerald-200" : "bg-white border-slate-200"}`}>
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
                                       <input type="checkbox" checked={r.done} onChange={e => setRound(i, { done: e.target.checked })} className="w-4 h-4 accent-teal-600" />รอบที่ {i + 1}
                                     </label>
-                                    <span className="text-[10px] text-slate-400">กำหนด ~{due || "—"} ({(i + 1) * 3} เดือน)</span>
+                                    <span className="text-[10px] text-slate-400">{i === 0 ? "กำหนด ~" : "ครบ +3 เดือน ~"}{due || "—"}</span>
                                     <input type="date" value={r.date} onChange={e => setRound(i, { date: e.target.value })} title="วันเข้าเช็คจริง"
                                       className="ml-auto border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-700" />
                                   </div>

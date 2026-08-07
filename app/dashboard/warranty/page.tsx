@@ -1,0 +1,163 @@
+"use client";
+
+import Link from "next/link";
+import { useState, useMemo } from "react";
+import {
+  ArrowLeft, ShieldCheck, Download, AlertTriangle, Clock, CheckCircle, Wrench,
+} from "lucide-react";
+import { useApp } from "@/lib/AppContext";
+import { parseSvc, nextDue, daysUntil, SVC_SOON_DAYS, SVC_ROUNDS } from "@/lib/warranty";
+import { DashboardGuard } from "@/components/DashboardGuard";
+
+function WarrantyPageInner() {
+  const { forklifts, sales } = useApp();
+  const today = new Date().toISOString().slice(0, 10);
+  const [filter, setFilter] = useState<"due" | "overdue" | "soon" | "all">("due");
+
+  // ลูกค้าล่าสุดต่อรถ (จากดีล)
+  const custByFk = useMemo(() => {
+    const m = new Map<string, string>();
+    [...sales].sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")))
+      .forEach(s => { if (s.forklift_id && s.customer_name) m.set(s.forklift_id, s.customer_name); });
+    return m;
+  }, [sales]);
+
+  // รถที่มีข้อมูลบริการหลังการขาย → คำนวณรอบถัดไป + จำนวนวันถึงกำหนด
+  const rows = useMemo(() => {
+    return forklifts.flatMap(f => {
+      const svc = parseSvc(f);
+      if (!svc) return [];
+      const nd = nextDue(svc);
+      const doneCount = svc.rounds.filter(r => r.done).length;
+      const days = nd ? daysUntil(nd.due, today) : null;
+      return [{
+        fk: f, svc, customer: custByFk.get(f.id) || "",
+        nextIndex: nd?.index ?? null, due: nd?.due ?? "", days,
+        doneCount, complete: !nd,
+      }];
+    }).sort((a, b) => {
+      if (a.complete !== b.complete) return a.complete ? 1 : -1; // ยังไม่ครบก่อน
+      return (a.days ?? 9999) - (b.days ?? 9999);                // ใกล้/เกินกำหนดก่อน
+    });
+  }, [forklifts, custByFk, today]);
+
+  const overdue = rows.filter(r => !r.complete && r.days != null && r.days < 0);
+  const soon = rows.filter(r => !r.complete && r.days != null && r.days >= 0 && r.days <= SVC_SOON_DAYS);
+  const active = rows.filter(r => !r.complete);
+  const shown = filter === "overdue" ? overdue : filter === "soon" ? soon : filter === "all" ? rows : [...overdue, ...soon];
+
+  const badgeOf = (r: typeof rows[number]) => {
+    if (r.complete) return { t: "✅ ครบทุกรอบ", c: "bg-slate-100 text-slate-500 border-slate-200" };
+    if (r.days == null) return { t: "ยังไม่ระบุวันเริ่ม", c: "bg-slate-100 text-slate-500 border-slate-200" };
+    if (r.days < 0) return { t: `🔴 เกินกำหนด ${Math.abs(r.days)} วัน`, c: "bg-red-100 text-red-700 border-red-200" };
+    if (r.days <= SVC_SOON_DAYS) return { t: `🟡 อีก ${r.days} วัน`, c: "bg-amber-100 text-amber-700 border-amber-200" };
+    return { t: `🟢 อีก ${r.days} วัน`, c: "bg-emerald-100 text-emerald-700 border-emerald-200" };
+  };
+
+  const exportExcel = async () => {
+    if (rows.length === 0) return;
+    const XLSX = await import("xlsx");
+    const data = rows.map(r => ({
+      "SN": r.fk.SN || r.fk.id, "ยี่ห้อ/รุ่น": `${r.fk.brand ?? ""} ${r.fk.model ?? ""}`.trim(),
+      "ลูกค้า": r.customer, "วันเริ่มรับประกัน": r.svc.start,
+      "เช็คแล้ว (รอบ)": r.doneCount, "รอบถัดไป": r.complete ? "ครบแล้ว" : `รอบที่ ${(r.nextIndex ?? 0) + 1}`,
+      "กำหนดรอบถัดไป": r.due, "สถานะ": r.complete ? "ครบทุกรอบ" : r.days == null ? "-" : r.days < 0 ? `เกิน ${Math.abs(r.days)} วัน` : `อีก ${r.days} วัน`,
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws["!cols"] = [16, 22, 22, 14, 12, 12, 14, 14].map(w => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "รอบเช็ครับประกัน");
+    XLSX.writeFile(wb, `รับประกัน_รอบเช็ค_${today}.xlsx`);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard" className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all"><ArrowLeft className="w-5 h-5" /></Link>
+            <div className="flex items-center gap-2.5">
+              <div className="bg-gradient-to-br from-teal-500 to-emerald-600 rounded-xl p-2"><ShieldCheck className="w-5 h-5 text-white" /></div>
+              <div>
+                <h1 className="text-base font-bold text-slate-800 leading-tight">รับประกัน / รอบเช็ค</h1>
+                <p className="text-slate-500 text-xs">รถในประกัน + รอบเข้าเช็คใกล้ถึงกำหนด (คิดเป็นเดือน)</p>
+              </div>
+            </div>
+          </div>
+          <button onClick={exportExcel} disabled={rows.length === 0}
+            className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg px-3 py-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+            <Download className="w-4 h-4" /><span className="hidden sm:inline">Export Excel</span>
+          </button>
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-5">
+        {/* สรุป */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className={`rounded-2xl border shadow-sm p-4 ${overdue.length > 0 ? "bg-red-50 border-red-200" : "bg-white border-slate-100"}`}>
+            <p className="text-xs text-slate-500 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5 text-red-500" />เกินกำหนด</p>
+            <p className={`text-2xl font-bold mt-1 ${overdue.length > 0 ? "text-red-600" : "text-slate-800"}`}>{overdue.length} <span className="text-sm font-medium text-slate-400">คัน</span></p>
+          </div>
+          <div className={`rounded-2xl border shadow-sm p-4 ${soon.length > 0 ? "bg-amber-50 border-amber-200" : "bg-white border-slate-100"}`}>
+            <p className="text-xs text-slate-500 flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-amber-500" />ใกล้ถึง (≤{SVC_SOON_DAYS} วัน)</p>
+            <p className={`text-2xl font-bold mt-1 ${soon.length > 0 ? "text-amber-600" : "text-slate-800"}`}>{soon.length} <span className="text-sm font-medium text-slate-400">คัน</span></p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+            <p className="text-xs text-slate-500 flex items-center gap-1"><Wrench className="w-3.5 h-3.5 text-teal-500" />รถในประกัน (ยังไม่ครบรอบ)</p>
+            <p className="text-2xl font-bold text-slate-800 mt-1">{active.length} <span className="text-sm font-medium text-slate-400">/ {rows.length} คัน</span></p>
+          </div>
+        </div>
+
+        {/* ตัวกรอง */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3 flex flex-wrap items-center gap-2">
+          {([["due", `ต้องตาม (${overdue.length + soon.length})`], ["overdue", `เกินกำหนด (${overdue.length})`], ["soon", `ใกล้ถึง (${soon.length})`], ["all", `ทั้งหมด (${rows.length})`]] as const).map(([k, label]) => (
+            <button key={k} onClick={() => setFilter(k)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-bold border transition-all ${filter === k ? "bg-teal-600 text-white border-teal-600" : "bg-white text-slate-600 border-slate-200 hover:border-teal-300"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* รายการ */}
+        <div className="flex flex-col gap-2.5">
+          {shown.length === 0 && (
+            <div className="text-center py-14 text-slate-400"><CheckCircle className="w-10 h-10 text-slate-300 mx-auto mb-2" /><p className="text-sm">ไม่มีรถที่ต้องตามรอบเช็คในหมวดนี้</p></div>
+          )}
+          {shown.map(r => {
+            const b = badgeOf(r);
+            return (
+              <div key={r.fk.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center gap-3 flex-wrap">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md text-slate-500 bg-slate-100 border border-slate-200">#{r.fk.SN || r.fk.id}</span>
+                    <span className="font-bold text-slate-800 text-sm">{r.fk.brand} {r.fk.model}</span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {r.customer || "—"} · เริ่มรับประกัน {r.svc.start || "—"} · เช็คแล้ว {r.doneCount}/{SVC_ROUNDS} รอบ
+                  </p>
+                  {!r.complete && (
+                    <p className="text-[11px] text-teal-700 mt-0.5 font-semibold">รอบถัดไป: รอบที่ {(r.nextIndex ?? 0) + 1} · กำหนด {r.due || "— (ยังไม่ระบุวันเริ่ม)"}</p>
+                  )}
+                </div>
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-full border flex-shrink-0 ${b.c}`}>{b.t}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        <details className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 text-sm text-slate-600">
+          <summary className="font-bold text-slate-700 cursor-pointer">วิธีคิดรอบเช็ค</summary>
+          <div className="mt-3 flex flex-col gap-2 text-xs leading-relaxed">
+            <div>คิดเป็น <b>เดือน</b> ไม่ผูกกับชั่วโมงใช้งาน (แต่ละคันใช้งานต่างกัน) · ฟรี {SVC_ROUNDS} รอบ</div>
+            <div><b>รอบแรก</b> = วันเริ่มรับประกัน (วันส่งมอบ) + 3 เดือน · <b>รอบถัดไป</b> = วันเข้าเช็คจริงครั้งก่อน + 3 เดือน</div>
+            <div className="text-slate-400">🔴 เกินกำหนด · 🟡 ใกล้ถึง (≤{SVC_SOON_DAYS} วัน) · 🟢 ยังไม่ถึง · อัปเดตรอบเช็คได้ที่กล่องรายละเอียดรถ (หน้าสต็อก) เมื่อรถเข้ามาเช็ค</div>
+          </div>
+        </details>
+      </main>
+    </div>
+  );
+}
+
+export default function WarrantyPage() {
+  return <DashboardGuard><WarrantyPageInner /></DashboardGuard>;
+}
