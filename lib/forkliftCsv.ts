@@ -23,13 +23,19 @@ export const CSV_COLUMNS = [
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, "").replace(/[.,]/g, "");
 
-// ── สถานะเริ่มต้นตอนนำเข้ารถใหม่ (ถ้าไฟล์ไม่ระบุสถานะ) ──
-// ยี่ห้อล็อตตู้ (STAXX/CNC/เจนบรรเจิด) เข้ามาเป็นล็อต ข้ามขั้นรับรถ → "พร้อมขาย" เลย
-// โฟล์คลิฟท์ยี่ห้ออื่น (HELI/HANGCHA) ต้องผ่านหน้ารับรถก่อน → "รอรับ" (เด้งเข้าหน้าผู้ขนส่งอัตโนมัติ)
-export function defaultImportStatus(brand: string): string {
+// ── ยี่ห้อล็อตตู้ (STAXX/CNC/เจนบรรเจิด) — เข้ามาเป็นล็อต ข้ามขั้นรับรถ ──
+export function isContainerLotBrand(brand: string): boolean {
   const b = (brand || "").trim();
-  const isContainerLot = b.toUpperCase() === "STAXX" || b.toUpperCase() === "CNC" || b === "เจนบรรเจิด";
-  return isContainerLot ? "พร้อมขาย" : "รอรับ";
+  return b.toUpperCase() === "STAXX" || b.toUpperCase() === "CNC" || b === "เจนบรรเจิด";
+}
+
+// ── สถานะตอนนำเข้ารถใหม่ ──
+// กติกา: โฟล์คลิฟท์ (HELI/HANGCHA ฯลฯ) ที่เพิ่มเข้าใหม่ = "รอรับ" เสมอ → เด้งเข้าหน้าผู้ขนส่งอัตโนมัติทุกคัน
+//         (ไม่สนค่าสถานะในไฟล์ — รถโฟล์คลิฟท์ต้องผ่านหน้ารับรถก่อนเสมอ)
+// ล็อตตู้ (STAXX/CNC/เจนบรรเจิด) = ใช้สถานะจากไฟล์ ถ้าไม่ระบุ → "พร้อมขาย" (ข้ามรับรถ)
+export function importStatus(brand: string, fileStatus: string): string {
+  if (isContainerLotBrand(brand)) return fileStatus || "พร้อมขาย";
+  return "รอรับ"; // โฟล์คลิฟท์ → รอรับเสมอ
 }
 
 // ── แยกบรรทัด CSV (รองรับค่าในเครื่องหมายคำพูด + คอมมาในค่า) ──
@@ -104,7 +110,7 @@ export function parseForkliftCsv(text: string): CsvParseResult {
       cost_price: cost,
       stock_price: 0,
       received_date: get("received_date") || undefined,
-      status: get("status") || defaultImportStatus(get("brand") || "HELI"),
+      status: importStatus(get("brand") || "HELI", get("status")),
       created_at: "", // ตัวเรียกจะเติมเวลาจริงตอนบันทึก
     });
   }

@@ -28,7 +28,8 @@ export default function TransporterMain() {
   const slotInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── ฟอร์มผู้รับรถ (flow ใหม่: เลือก PI → เลือกคัน → กรอก SN/รูป) ──
+  // ── ฟอร์มผู้รับรถ (flow ใหม่: เลือกผู้ผลิต → PI → เลือกคัน → กรอก SN/รูป) ──
+  const [brandFilter, setBrandFilter] = useState("ทั้งหมด"); // กรองการ์ด PI ตามผู้ผลิต (HELI/HANGCHA/EP/ทั้งหมด)
   const [openPI, setOpenPI] = useState<string | null>(null);   // PI ที่กางดูรายการรถ
   const [recvCarId, setRecvCarId] = useState<string | null>(null); // รถที่เลือกรับ (เปิดฟอร์ม)
   const [receivedDate, setReceivedDate] = useState("");
@@ -60,12 +61,22 @@ export default function TransporterMain() {
 
   const isReceiver = role === "ผู้รับรถ";
 
-  // ===== ผู้รับรถ: เลือกจาก PI → คัน =====
+  // ===== ผู้รับรถ: เลือกผู้ผลิต → PI → คัน =====
   const waitingList = forklifts.filter(f => String(f.status || "") === "รอรับ");
-  // จัดกลุ่มรถรอรับตามเลข PI (เรียงตามเลข PI) — โชว์เป็นการ์ด PI ให้กดเข้าไปดูรถแต่ละคัน
+  // ตัวกรองตามผู้ผลิต (โฟล์คลิฟท์ที่ต้องรับเข้า) — โชว์ HELI/HANGCHA/EP เสมอ + ยี่ห้ออื่นที่มีรถรอรับ
+  const FORKLIFT_BRANDS = ["HELI", "HANGCHA", "EP"];
+  const brandOf = (f: Forklift) => String(f.brand || "").trim().toUpperCase();
+  const brandCount = (b: string) => waitingList.filter(f => brandOf(f) === b.toUpperCase()).length;
+  const brandTabs = (() => {
+    const present = [...new Set(waitingList.map(brandOf).filter(Boolean))];
+    const extra = present.filter(b => !FORKLIFT_BRANDS.some(x => x.toUpperCase() === b)); // ยี่ห้ออื่นนอกเหนือ 3 ตัวหลัก
+    return [...FORKLIFT_BRANDS, ...extra];
+  })();
+  // จัดกลุ่มรถรอรับตามเลข PI (กรองตามแบรนด์ก่อน) — โชว์เป็นการ์ด PI ให้กดเข้าไปดูรถแต่ละคัน
   const piGroups = (() => {
+    const list = brandFilter === "ทั้งหมด" ? waitingList : waitingList.filter(f => brandOf(f) === brandFilter.toUpperCase());
     const m = new Map<string, Forklift[]>();
-    waitingList.forEach(f => { const pi = String(f.pi_no || "").trim() || "(ไม่มี PI)"; const a = m.get(pi) ?? []; a.push(f); m.set(pi, a); });
+    list.forEach(f => { const pi = String(f.pi_no || "").trim() || "(ไม่มี PI)"; const a = m.get(pi) ?? []; a.push(f); m.set(pi, a); });
     const num = (pi: string) => { const mm = pi.match(/\d+/); return mm ? Number(mm[0]) : Number.MAX_SAFE_INTEGER; };
     return [...m.entries()].map(([pi, cars]) => ({ pi, cars })).sort((a, b) => num(a.pi) - num(b.pi) || a.pi.localeCompare(b.pi));
   })();
@@ -410,11 +421,20 @@ export default function TransporterMain() {
               {!openPI ? (
                 /* ── ระดับ 1: การ์ดเลข PI ── */
                 <>
-                  <h2 className="text-base font-bold text-slate-800 mb-1 flex items-center gap-2"><FileText className="w-4 h-4 text-amber-500" />เลือกเลข PI ที่จะรับเข้า</h2>
-                  <p className="text-xs text-slate-500 mb-4">แตะการ์ด PI เพื่อดูรถทุกคันใน PI นั้น แล้วเลือกคันที่จะรับ</p>
+                  <h2 className="text-base font-bold text-slate-800 mb-1 flex items-center gap-2"><FileText className="w-4 h-4 text-amber-500" />เลือกผู้ผลิต แล้วเลือกเลข PI ที่จะรับเข้า</h2>
+                  <p className="text-xs text-slate-500 mb-3">เลือกยี่ห้อรถก่อน → แตะการ์ด PI เพื่อดูรถทุกคันใน PI นั้น แล้วเลือกคันที่จะรับ</p>
+                  {/* แถบผู้ผลิต — HELI/HANGCHA/EP + ทั้งหมด (โชว์จำนวนรถรอรับต่อยี่ห้อ) */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {[{ b: "ทั้งหมด", n: waitingList.length }, ...brandTabs.map(b => ({ b, n: brandCount(b) }))].map(({ b, n }) => (
+                      <button key={b} onClick={() => { setBrandFilter(b); setOpenPI(null); }}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${brandFilter === b ? "bg-amber-500 text-white border-amber-500" : "bg-white text-slate-600 border-slate-200 hover:border-amber-300"}`}>
+                        {b} <span className={`ml-1 ${brandFilter === b ? "text-amber-100" : "text-slate-400"}`}>{n}</span>
+                      </button>
+                    ))}
+                  </div>
                   {piGroups.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                      <Truck className="w-10 h-10 text-slate-300 mb-2" /><p className="text-sm">ยังไม่มีรถรอรับเข้า</p>
+                      <Truck className="w-10 h-10 text-slate-300 mb-2" /><p className="text-sm">{brandFilter === "ทั้งหมด" ? "ยังไม่มีรถรอรับเข้า" : `ยังไม่มีรถ ${brandFilter} รอรับเข้า`}</p>
                       <p className="text-xs text-slate-400 mt-1">รถต้องอยู่ในระบบสถานะ &quot;รอรับ&quot; ก่อน (ฝ่ายสต็อก/นำเข้า PI)</p>
                     </div>
                   ) : (
@@ -435,10 +455,24 @@ export default function TransporterMain() {
                 <>
                   <button onClick={() => setOpenPI(null)} className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-amber-700 mb-3"><ChevronRight className="w-3.5 h-3.5 rotate-180" />เลือก PI อื่น</button>
                   <h2 className="text-base font-bold text-slate-800 mb-1 flex items-center gap-2"><Hash className="w-4 h-4 text-amber-500" />PI {openPI} — {openPICars.length} คัน</h2>
-                  <p className="text-xs text-slate-500 mb-4">แตะรถที่จะรับเข้า แล้วกรอก SN (ถ้ายังไม่มี) + แนบรูป 6 ด้าน</p>
+                  <p className="text-xs text-slate-500 mb-3">แตะรถที่จะรับเข้า แล้วกรอก SN (ถ้ายังไม่มี) + แนบรูป 6 ด้าน</p>
+                  {/* เลขเอกสารตามคำสั่งซื้อของ PI นี้ (รหัสอ้างอิงนำเข้า / โน้ต PI) */}
+                  {(() => {
+                    const refs = [...new Set(openPICars.map(c => String(c.custom_fields?.["รหัสอ้างอิงนำเข้า"] || "").trim()).filter(Boolean))];
+                    const notes = [...new Set(openPICars.map(c => String(c.custom_fields?.["โน้ต PI"] || "").trim()).filter(Boolean))];
+                    if (!refs.length && !notes.length) return null;
+                    return (
+                      <div className="bg-sky-50 border border-sky-200 rounded-xl p-3 mb-3 text-xs">
+                        <p className="font-bold text-sky-800 flex items-center gap-1.5 mb-1"><FileText className="w-3.5 h-3.5" />เลขเอกสารคำสั่งซื้อ</p>
+                        {refs.length > 0 && <p className="text-slate-600">รหัสอ้างอิงนำเข้า: {refs.map((r, i) => <span key={i} className="font-semibold text-sky-700">{r}{i < refs.length - 1 ? ", " : ""}</span>)}</p>}
+                        {notes.length > 0 && <p className="text-slate-600 mt-0.5">โน้ต PI: <span className="font-medium text-slate-700">{notes.join(" · ")}</span></p>}
+                      </div>
+                    );
+                  })()}
                   <div className="flex flex-col gap-2">
                     {openPICars.map(c => {
                       const noSN = !(c.SN && String(c.SN).trim());
+                      const docRef = String(c.custom_fields?.["รหัสอ้างอิงนำเข้า"] || "").trim();
                       return (
                         <button key={c.id} onClick={() => { setRecvCarId(c.id); setUnitNo(String(c.SN || "")); }}
                           className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-amber-50 hover:border-amber-300 p-3.5 transition-all text-left active:scale-[0.99]">
@@ -448,6 +482,7 @@ export default function TransporterMain() {
                             <p className="text-[11px] text-slate-500 mt-0.5">{noSN
                               ? <span className="text-amber-600 font-semibold">รหัส {c.id} · รถสั่งผลิต (ยังไม่มี SN — กรอกตอนรับ)</span>
                               : <>SN: <span className="font-semibold text-slate-700">{c.SN}</span></>}</p>
+                            {docRef && <p className="text-[11px] text-sky-600 mt-0.5">เลขเอกสาร: <span className="font-semibold">{docRef}</span></p>}
                           </div>
                           <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" />
                         </button>
