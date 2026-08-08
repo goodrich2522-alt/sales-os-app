@@ -269,13 +269,21 @@ export default function StockMain() {
     setDataBusy(false);
   };
 
-  // อัปโหลดรถหลายคันจากไฟล์ CSV
+  // อัปโหลดรถหลายคันจากไฟล์ Excel (.xlsx/.xls) หรือ CSV
   const handleCsvFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; e.target.value = "";
     if (!file) return;
     setDataBusy(true); setCsvMsg(null);
     try {
-      const parsed = parseForkliftCsv(await file.text());
+      let text: string;
+      if (/\.(xlsx|xls|xlsm)$/i.test(file.name)) {
+        const XLSX = await import("xlsx"); // อ่าน Excel → แปลงชีตแรกเป็น CSV แล้วใช้ parser เดิม
+        const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array" });
+        text = XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]);
+      } else {
+        text = await file.text();
+      }
+      const parsed = parseForkliftCsv(text);
       if (parsed.rowCount === 0) {
         setCsvMsg({ ok: false, text: parsed.errors[0] || "ไม่พบข้อมูลรถในไฟล์" });
       } else {
@@ -285,7 +293,7 @@ export default function StockMain() {
         setCsvMsg({ ok: true, text: `เพิ่มรถ ${rows.length} คันเข้าสต็อกแล้ว${warn}` });
       }
     } catch {
-      setCsvMsg({ ok: false, text: "อ่านไฟล์ไม่สำเร็จ — ต้องเป็นไฟล์ .csv" });
+      setCsvMsg({ ok: false, text: "อ่านไฟล์ไม่สำเร็จ — รองรับ .xlsx / .xls / .csv" });
     }
     setDataBusy(false);
   };
@@ -939,12 +947,12 @@ export default function StockMain() {
               <div className="min-w-0"><p className="text-sm font-bold text-slate-700">นำเข้าข้อมูล</p><p className="text-[11px] text-slate-500">กู้จากไฟล์สำรอง</p></div>
             </button>
           </div>
-          <input ref={csvInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleCsvFile} />
+          <input ref={csvInputRef} type="file" accept=".csv,text/csv,.xlsx,.xls,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" className="hidden" onChange={handleCsvFile} />
           <input ref={importInputRef} type="file" accept=".json,application/json" className="hidden" onChange={handleImportFile} />
           <div className="mt-2 flex items-center justify-between flex-wrap gap-2">
             <button onClick={() => downloadFile("แม่แบบอัปโหลดรถ.csv", buildCsvTemplate(), "text/csv")}
               className="text-xs text-emerald-700 hover:text-emerald-900 font-semibold flex items-center gap-1">
-              <Download className="w-3.5 h-3.5" />ดาวน์โหลดแม่แบบ CSV (กรอกใน Excel แล้ว Save As CSV)
+              <Download className="w-3.5 h-3.5" />ดาวน์โหลดแม่แบบ (กรอกใน Excel แล้วอัปโหลด .xlsx ได้เลย)
             </button>
             {dataBusy && <span className="text-xs text-slate-400">กำลังทำงาน…</span>}
           </div>
