@@ -22,6 +22,7 @@ import { parseForkliftCsv, assignIdsAndStamp, buildCsvTemplate } from "@/lib/for
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { apiEnabled } from "@/lib/api";
 import { driveImg, resizeImageFile } from "@/lib/img";
+import { parseSvc } from "@/lib/warranty";
 import { WarrantyBlock } from "@/components/WarrantyBlock";
 
 
@@ -1605,6 +1606,17 @@ export default function StockMain() {
         const saleForItem = [...sales]
           .filter(s => String(s.forklift_id) === String(it.id) || (it.SN && String(s.forklift_unit_no).toUpperCase() === String(it.SN).toUpperCase()))
           .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))[0];
+        // ── ไทม์ไลน์รถคันนี้ — รวมเหตุการณ์ตลอดชีวิตรถ (นำเข้า→รับ→ขาย→บริการ) ──
+        const carSales = [...sales].filter(s => String(s.forklift_id) === String(it.id) || (it.SN && String(s.forklift_unit_no ?? "").toUpperCase() === String(it.SN).toUpperCase()));
+        const dstr = (x: unknown) => String(x ?? "").slice(0, 10);
+        const timeline: { d: string; emoji: string; t: string; sub?: string; color: string }[] = [];
+        if (it.created_at) timeline.push({ d: dstr(it.created_at), emoji: "🆕", t: "เพิ่มเข้าสต็อก", color: "text-slate-500" });
+        { const od = (it.custom_fields?.["วันสั่งรถ"] as string) ?? ""; if (od) timeline.push({ d: dstr(od), emoji: "🏭", t: "วันสั่งรถ (สั่งผลิต)", color: "text-violet-600" }); }
+        recs.forEach(r => { const recv = (r.role ?? "ผู้รับรถ") === "ผู้รับรถ"; timeline.push({ d: dstr(r.date), emoji: recv ? "📷" : "🚚", t: recv ? "ตรวจรับรถเข้าคลัง" : "ส่งมอบรถ", sub: `โดย ${r.transporter_name || "—"}${r.delivery_company ? " · " + r.delivery_company : ""}`, color: recv ? "text-sky-600" : "text-indigo-600" }); });
+        if (it.received_date && !recs.some(r => (r.role ?? "ผู้รับรถ") === "ผู้รับรถ")) timeline.push({ d: dstr(it.received_date), emoji: "📦", t: "รับรถเข้าคลัง", color: "text-sky-600" });
+        carSales.forEach(s => timeline.push({ d: dstr(s.delivery_date || s.created_at), emoji: "🛒", t: String(s.sale_status || "ขายแล้ว"), sub: `${s.customer_name || "—"} · ฿${Number(s.actual_sale || 0).toLocaleString("th-TH")} · เซลล์ ${s.sales_staff || "—"}`, color: "text-emerald-600" }));
+        { const svc = parseSvc(it); if (svc) svc.rounds.forEach((r, i) => { if (r.done && r.date) timeline.push({ d: dstr(r.date), emoji: "🔧", t: `เข้าเช็ค/บำรุงรอบที่ ${i + 1}`, sub: r.note || undefined, color: "text-teal-600" }); }); }
+        timeline.sort((a, b) => a.d.localeCompare(b.d)); // เก่า → ใหม่ (ไล่ตามลำดับชีวิตรถ)
         const saleRows: [string, string][] = saleForItem ? [
           ["เซลล์ผู้ขาย", saleForItem.sales_staff ?? ""],
           ["ลูกค้า", saleForItem.customer_name ?? ""],
@@ -1657,6 +1669,26 @@ export default function StockMain() {
               <div className="overflow-y-auto flex-1 min-h-0 p-5 flex flex-col gap-5">
                 <Section title="สเปกรถ" rows={spec} />
                 <Section title="ข้อมูลสต็อก / จัดซื้อ" rows={info} />
+                {/* ไทม์ไลน์รถคันนี้ — รวมเหตุการณ์ตลอดชีวิตรถ (พับเก็บได้) */}
+                {timeline.length > 0 && (
+                  <details className="bg-white border border-slate-100 rounded-xl p-3">
+                    <summary className="text-xs font-bold text-slate-400 uppercase tracking-wide cursor-pointer flex items-center gap-1.5"><History className="w-3.5 h-3.5" />ไทม์ไลน์รถคันนี้ ({timeline.length} เหตุการณ์)</summary>
+                    <div className="mt-3 flex flex-col">
+                      {timeline.map((e, i) => (
+                        <div key={i} className="flex gap-2.5 pb-3 last:pb-0">
+                          <div className="flex flex-col items-center flex-shrink-0">
+                            <span className="text-sm leading-none w-5 text-center">{e.emoji}</span>
+                            {i < timeline.length - 1 && <span className="w-px flex-1 bg-slate-200 mt-1" />}
+                          </div>
+                          <div className="min-w-0 -mt-0.5">
+                            <p className={`text-xs font-semibold ${e.color}`}>{e.t} <span className="text-[10px] text-slate-400 font-normal">· {e.d || "—"}</span></p>
+                            {e.sub && <p className="text-[11px] text-slate-500 break-words">{e.sub}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
                 {/* เติม/แก้ SN (ตัวถัง) — รถสั่งผลิต หรือ ลงข้อมูลเก่า */}
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><Hash className="w-3.5 h-3.5" />เลข SN (ตัวถัง){!it.SN?.trim() && <span className="text-amber-600 font-semibold normal-case">— ยังไม่มี SN</span>}</p>
