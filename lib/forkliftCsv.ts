@@ -23,6 +23,15 @@ export const CSV_COLUMNS = [
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, "").replace(/[.,]/g, "");
 
+// ── สถานะเริ่มต้นตอนนำเข้ารถใหม่ (ถ้าไฟล์ไม่ระบุสถานะ) ──
+// ยี่ห้อล็อตตู้ (STAXX/CNC/เจนบรรเจิด) เข้ามาเป็นล็อต ข้ามขั้นรับรถ → "พร้อมขาย" เลย
+// โฟล์คลิฟท์ยี่ห้ออื่น (HELI/HANGCHA) ต้องผ่านหน้ารับรถก่อน → "รอรับ" (เด้งเข้าหน้าผู้ขนส่งอัตโนมัติ)
+export function defaultImportStatus(brand: string): string {
+  const b = (brand || "").trim();
+  const isContainerLot = b.toUpperCase() === "STAXX" || b.toUpperCase() === "CNC" || b === "เจนบรรเจิด";
+  return isContainerLot ? "พร้อมขาย" : "รอรับ";
+}
+
 // ── แยกบรรทัด CSV (รองรับค่าในเครื่องหมายคำพูด + คอมมาในค่า) ──
 function splitCsvLine(line: string): string[] {
   const out: string[] = [];
@@ -95,7 +104,7 @@ export function parseForkliftCsv(text: string): CsvParseResult {
       cost_price: cost,
       stock_price: 0,
       received_date: get("received_date") || undefined,
-      status: get("status") || "พร้อมขาย",
+      status: get("status") || defaultImportStatus(get("brand") || "HELI"),
       created_at: "", // ตัวเรียกจะเติมเวลาจริงตอนบันทึก
     });
   }
@@ -116,6 +125,7 @@ export function assignIdsAndStamp(rows: Omit<Forklift, "id">[], existing: Pick<F
 // สร้างเนื้อไฟล์ CSV แม่แบบ (พร้อม BOM ให้ Excel อ่านภาษาไทยถูก) + ตัวอย่าง 1 แถว
 export function buildCsvTemplate(): string {
   const header = CSV_COLUMNS.map(c => c.label).join(",");
-  const example = ["SN12345", "HELI", "CPCD30", "3000", "3", "1070", "ดีเซล", "Forklift", "", "PI001", "250000", "2026-07-01", "พร้อมขาย"].join(",");
+  // เว้นสถานะว่าง = ใช้ค่าเริ่มต้นอัตโนมัติ (โฟล์คลิฟท์→รอรับ ส่งเข้าหน้ารับรถ · STAXX/CNC→พร้อมขาย)
+  const example = ["SN12345", "HELI", "CPCD30", "3000", "3", "1070", "ดีเซล", "Forklift", "", "PI001", "250000", "2026-07-01", ""].join(",");
   return "﻿" + header + "\n" + example + "\n";
 }

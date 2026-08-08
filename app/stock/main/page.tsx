@@ -113,6 +113,9 @@ export default function StockMain() {
   const [photoBusy, setPhotoBusy]         = useState(false); // กำลังอัปโหลดรูปจากฝ่ายสต็อก
   const [docBusy, setDocBusy]             = useState(false); // กำลังอัปโหลดเอกสาร PDF
   const [docMsg, setDocMsg]               = useState("");    // ข้อความแจ้ง (ไฟล์ใหญ่/อัปไม่ได้)
+  const [toast, setToast]                 = useState("");    // แจ้งเตือนสำเร็จ (ลอยล่างจอ)
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = (m: string) => { setToast(m); if (toastTimer.current) clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(""), 2600); };
   const [qrData, setQrData]               = useState<string | null>(null); // QR ของรถคันที่เปิดอยู่
   const carParamHandled = useRef(false);  // เปิดรถจาก ?car= ครั้งเดียว (สแกน QR)
   // ── ประวัติการขาย (เฟส 1): ดีลทุกเซลล์ ──
@@ -352,7 +355,9 @@ export default function StockMain() {
         const rows = assignIdsAndStamp(parsed.forklifts, forklifts);
         addForkliftsBulk(rows);
         const warn = parsed.errors.length ? ` (ข้าม ${parsed.errors.length} แถวที่ไม่สมบูรณ์)` : "";
-        setCsvMsg({ ok: true, text: `เพิ่มรถ ${rows.length} คันเข้าสต็อกแล้ว${warn}` });
+        const toRecv = rows.filter(r => String(r.status) === "รอรับ").length; // เด้งเข้าหน้ารับรถ
+        const recvNote = toRecv ? ` · ส่งเข้าหน้ารับรถ ${toRecv} คัน` : "";
+        setCsvMsg({ ok: true, text: `เพิ่มรถ ${rows.length} คันเข้าสต็อกแล้ว${recvNote}${warn}` });
       }
     } catch {
       setCsvMsg({ ok: false, text: "อ่านไฟล์ไม่สำเร็จ — รองรับ .xlsx / .xls / .csv" });
@@ -686,6 +691,7 @@ export default function StockMain() {
       if (fk) updateForklift({ ...fk, SN: histEdit.sn.trim() });
     }
     setHistEdit({ ...histEdit, sn: snChanged ? histEdit.sn.trim() : histEdit.sn });
+    showToast(changes.length ? "บันทึกการแก้ไขแล้ว ✓" : "บันทึกแล้ว (ไม่มีการเปลี่ยนแปลง)");
   };
 
   // ── helper รถสั่งผลิต (เฟส 2) ──
@@ -1132,7 +1138,7 @@ export default function StockMain() {
                 </div>
               </div>
             </div>
-            <div className="overflow-auto max-h-[72vh] p-4 flex flex-col gap-2">
+            <div id="stock-list-panel" className="overflow-auto max-h-[72vh] p-4 flex flex-col gap-2">
               {listFiltered.length === 0 && (
                 <div className="text-center py-12 text-slate-400 text-sm">ไม่พบรถตามเงื่อนไข</div>
               )}
@@ -1314,7 +1320,13 @@ export default function StockMain() {
             <div className="overflow-y-auto p-3 flex flex-col gap-2.5">
               {/* หมวดแจ้งเตือนรวม — คลิกไปยังจุดที่เกี่ยวข้อง */}
               {waiting > 0 && (
-                <button onClick={() => { setShowAlerts(false); setListStatus("รอรับ"); setListView("list"); }}
+                <button onClick={() => {
+                    setShowAlerts(false);
+                    // เคลียร์ตัวกรองอื่นก่อน แล้วกรองเฉพาะ "รอรับ" มุมมองรายคัน + เลื่อนไปที่รายการ
+                    setListSearch(""); setListCat("all"); setListBrand("all"); setListModel("all"); setListMast("all"); setListFuel("all");
+                    setListStatus("รอรับ"); setListView("list");
+                    setTimeout(() => document.getElementById("stock-list-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+                  }}
                   className="text-left flex items-center gap-2.5 bg-sky-50 border border-sky-200 rounded-xl p-2.5 hover:border-sky-300">
                   <span className="text-lg flex-shrink-0">📦</span>
                   <div className="flex-1 min-w-0"><p className="text-xs font-bold text-sky-800">รถรอรับเข้าคลัง</p><p className="text-[11px] text-sky-600">{waiting} คัน รอผู้ขนส่งรับ</p></div>
@@ -2166,6 +2178,13 @@ export default function StockMain() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast แจ้งเตือนสำเร็จ (ลอยกลางล่างจอ) */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[80] bg-emerald-600 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2">
+          <CheckCircle className="w-4 h-4 flex-shrink-0" />{toast}
         </div>
       )}
     </div>
