@@ -12,7 +12,7 @@ import { Forklift, Sale, STOCK_APPROVAL_FIELD, isVoidSale } from "@/lib/types";
 import { COMMISSION_FIELD, COMMISSION_CATEGORIES } from "@/lib/commission";
 import { useApp, FieldConfig } from "@/lib/AppContext";
 import { isPendingId } from "@/lib/productId";
-import { thaiMonthShort } from "@/lib/format";
+import { thaiMonthShort, today } from "@/lib/format";
 import { Lightbox } from "@/components/ui/Lightbox";
 import { Chip } from "@/components/ui/Chip";
 import { StatusBadge } from "@/components/ui/Badge";
@@ -21,7 +21,7 @@ import { QuoteImport } from "@/components/QuoteImport";
 import { parseForkliftCsv, assignIdsAndStamp, buildCsvTemplate } from "@/lib/forkliftCsv";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { apiEnabled } from "@/lib/api";
-import { driveImg } from "@/lib/img";
+import { driveImg, resizeImageFile } from "@/lib/img";
 import { WarrantyBlock } from "@/components/WarrantyBlock";
 
 
@@ -71,7 +71,7 @@ function fmtAdded(iso?: string) {
 export default function StockMain() {
   const router = useRouter();
   const {
-    forklifts, addForkliftsBulk, updateForklift, deleteForklift, inspections, sales, updateSale,
+    forklifts, addForkliftsBulk, updateForklift, deleteForklift, inspections, addInspection, sales, updateSale,
     approveStockSale, rejectStockSale, setActor,
     exportData, importData,
     fieldConfig, updateFieldOptions,
@@ -104,6 +104,9 @@ export default function StockMain() {
   // แก้ไขข้อมูลการเงิน (เฉพาะวรลักษณ์) — ต้นทุน/ราคาขายจริง/ค่าขนส่ง/ทุนอุปกรณ์ · แก้ได้ทุกสถานะ
   const [finEdit, setFinEdit]             = useState({ pi: "", cost: "", sale: "", ship: "", addon: "", freebie: "", profit: "" });
   const [finSaved, setFinSaved]           = useState(false);
+  const [snEdit, setSnEdit]               = useState(""); // เติม/แก้ SN (รถสั่งผลิต/ลงข้อมูลเก่า)
+  const [snSaved, setSnSaved]             = useState(false);
+  const [photoBusy, setPhotoBusy]         = useState(false); // กำลังอัปโหลดรูปจากฝ่ายสต็อก
   // ── ประวัติการขาย (เฟส 1): ดีลทุกเซลล์ ──
   const [showSaleHistory, setShowSaleHistory] = useState(false);
   const [showReorder, setShowReorder]     = useState(false); // กางรายการเตรียมสั่งสินค้า (คลิกจากการ์ด)
@@ -161,11 +164,23 @@ export default function StockMain() {
       profit: cf["กำไร(ไฟล์)"] != null ? String(cf["กำไร(ไฟล์)"]) : "",
     });
     setFinSaved(false);
+    setSnEdit(detailItem?.SN ?? ""); setSnSaved(false);
   }, [detailItem]);
 
   // สิทธิ์แก้ไขข้อมูลการเงิน (ต้นทุน/ค่าขนส่ง ฯลฯ) — เฉพาะวรลักษณ์เท่านั้น (ชื่อ หรือ อีเมลของวรลักษณ์)
   // ไม่รวมแอดมินคนอื่น (goodrichforklift) — ผู้ใช้สั่ง "วรลักษณ์แค่คนเดียว"
   const canEditFinance = /วรลักษณ์/.test(username) || stockEmail === "woralakpor789@gmail.com";
+
+  // ฝ่ายสต็อกเพิ่มรูปรถเอง (ลงข้อมูลเก่า) — ย่อรูป → สร้าง inspection ผูกกับรถ (unit_no = SN หรือ id)
+  const addStockPhotos = async (files: FileList | null, target: Forklift) => {
+    if (!files || files.length === 0) return;
+    setPhotoBusy(true);
+    try {
+      const imgs: string[] = [];
+      for (const f of Array.from(files)) { try { imgs.push(await resizeImageFile(f)); } catch { /* ข้ามรูปที่อ่านไม่ได้ */ } }
+      if (imgs.length) addInspection({ id: `ins_stock_${Date.now()}`, unit_no: target.SN || target.id, transporter_name: `${username} (สต็อก)`, date: today(), images: imgs, role: "ผู้รับรถ" });
+    } finally { setPhotoBusy(false); }
+  };
 
   // โหลดรายการที่ "รับทราบแล้ว" · ครั้งแรกที่เปิด (ยังไม่มี key) ถือว่าดีลเก่าทั้งหมดรับทราบแล้ว กันสแปมของเก่า
   useEffect(() => {
@@ -1470,7 +1485,7 @@ export default function StockMain() {
       {/* ── Detail Modal — กดดูรายละเอียดรถทีละคัน ── */}
       {detailItem && (() => {
         const it = detailItem;
-        const recs = inspections.filter(r => r.unit_no && it.SN && String(r.unit_no).toUpperCase() === String(it.SN).toUpperCase());
+        const recs = inspections.filter(r => { const u = String(r.unit_no ?? "").toUpperCase(); return !!u && (u === String(it.SN ?? "").toUpperCase() || u === String(it.id ?? "").toUpperCase()); });
         const photos = recs.flatMap(r => r.images || []);
         const cf = it.custom_fields ?? {};
         const spec: [string, string][] = [
@@ -1553,6 +1568,22 @@ export default function StockMain() {
               <div className="overflow-y-auto flex-1 min-h-0 p-5 flex flex-col gap-5">
                 <Section title="สเปกรถ" rows={spec} />
                 <Section title="ข้อมูลสต็อก / จัดซื้อ" rows={info} />
+                {/* เติม/แก้ SN (ตัวถัง) — รถสั่งผลิต หรือ ลงข้อมูลเก่า */}
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><Hash className="w-3.5 h-3.5" />เลข SN (ตัวถัง){!it.SN?.trim() && <span className="text-amber-600 font-semibold normal-case">— ยังไม่มี SN</span>}</p>
+                  <div className="flex gap-2">
+                    <input value={snEdit} onChange={e => { setSnEdit(e.target.value); setSnSaved(false); }} placeholder="กรอกเลข SN ตัวถัง"
+                      className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                    <button onClick={() => { const u = { ...it, SN: snEdit.trim() }; updateForklift(u); setDetailItem(u); setSnSaved(true); }}
+                      disabled={snEdit.trim() === (it.SN ?? "").trim()}
+                      className="px-4 py-2 rounded-xl text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
+                      {snSaved ? "บันทึกแล้ว ✓" : "บันทึก SN"}
+                    </button>
+                  </div>
+                  {snEdit.trim() && forklifts.some(f => f.id !== it.id && String(f.SN ?? "").toUpperCase() === snEdit.trim().toUpperCase()) &&
+                    <p className="text-[11px] text-red-500 mt-1">⚠️ SN นี้ซ้ำกับรถคันอื่นในระบบ — ตรวจสอบก่อนบันทึก</p>}
+                  <p className="text-[10px] text-slate-400 mt-1">* รถสั่งผลิต (รหัส PIxxx) เติม SN จริงได้ที่นี่ · รหัส #{it.id} ยังคงเดิม</p>
+                </div>
                 {saleForItem && (
                   <div>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><ShoppingCart className="w-3.5 h-3.5 text-indigo-500" />ข้อมูลการขาย</p>
@@ -1695,9 +1726,16 @@ export default function StockMain() {
                   </div>
                 </div>
                 {customs.length > 0 && <Section title="ข้อมูลเพิ่มเติม" rows={customs as [string, string][]} />}
-                {/* รูปตรวจรับ-ส่งรถ */}
+                {/* รูปตรวจรับ-ส่งรถ + เพิ่มรูปเองจากฝ่ายสต็อก (ลงข้อมูลเก่า) */}
                 <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><Camera className="w-3.5 h-3.5" />รูปรถ ({photos.length})</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1.5"><Camera className="w-3.5 h-3.5" />รูปรถ ({photos.length})</p>
+                    <label className={`text-xs font-bold rounded-lg px-2.5 py-1.5 border flex items-center gap-1.5 cursor-pointer transition-all ${photoBusy ? "text-slate-400 bg-slate-100 border-slate-200" : "text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200"}`}>
+                      <input type="file" accept="image/*" multiple className="hidden" disabled={photoBusy}
+                        onChange={e => { addStockPhotos(e.target.files, it); e.target.value = ""; }} />
+                      <Camera className="w-3.5 h-3.5" />{photoBusy ? "กำลังอัปโหลด..." : "เพิ่มรูป"}
+                    </label>
+                  </div>
                   {photos.length > 0 ? (
                     <div className="grid grid-cols-3 gap-2">
                       {photos.map((img, i) => (

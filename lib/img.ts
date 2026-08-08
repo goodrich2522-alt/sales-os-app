@@ -9,3 +9,25 @@ export function driveImg(url: string): string {
   }
   return url;
 }
+
+// ย่อรูป → dataURL (jpeg) สำหรับอัปโหลด (ใช้ร่วมหลายหน้า) — max ด้านยาว 800px
+export const resizeImageFile = (file: File, max = 800, quality = 0.72): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      if (!ev.target?.result) { reject(new Error("read fail")); return; }
+      const img = new Image();
+      img.onload = () => {
+        const ratio = Math.min(max / img.width, max / img.height, 1);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * ratio);
+        canvas.height = Math.round(img.height * ratio);
+        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => reject(new Error("image load fail"));
+      img.src = ev.target.result as string;
+    };
+    reader.onerror = () => reject(new Error("read fail"));
+    reader.readAsDataURL(file);
+  });
