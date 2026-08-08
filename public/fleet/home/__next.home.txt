@@ -2,4 +2,4 @@
 2:I[49810,["/sales-os-app.github.io/fleet/_next/static/chunks/31of5ihyucy1-.js","/sales-os-app.github.io/fleet/_next/static/chunks/0j2ta9occ_ckn.js"],"default"]
 3:I[23334,["/sales-os-app.github.io/fleet/_next/static/chunks/31of5ihyucy1-.js","/sales-os-app.github.io/fleet/_next/static/chunks/0j2ta9occ_ckn.js"],"default"]
 4:[]
-0:{"rsc":["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","template":["$","$L3",null,{}]}]]}],"isPartial":false,"staleTime":300,"varyParams":"$W4","buildId":"4Qyv_w6svFEllnx5qD6qW"}
+0:{"rsc":["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","template":["$","$L3",null,{}]}]]}],"isPartial":false,"staleTime":300,"varyParams":"$W4","buildId":"i6Qj4Ur6Tit8HtYdVulUa"}
