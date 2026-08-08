@@ -68,6 +68,8 @@ export default function AdminUsersPage() {
     mutate((u, a) => { if (u[email]) u[email] = { ...u[email], status }; return { users: u, adminEmails: a }; });
   const setRole = (email: string, role: string) =>
     mutate((u, a) => { if (u[email]) u[email] = { ...u[email], role }; return { users: u, adminEmails: a }; });
+  const setName = (email: string, name: string) =>
+    mutate((u, a) => { const n = name.trim(); if (u[email] && n) u[email] = { ...u[email], name: n }; return { users: u, adminEmails: a }; });
   const removeUser = (email: string) =>
     mutate((u, a) => { delete u[email]; return { users: u, adminEmails: a }; });
   // เพิ่มผู้ใช้เอง + กำหนดบทบาท → อนุมัติทันที (ล็อกอิน Google ด้วยอีเมลนี้เข้าใช้งานได้เลย)
@@ -223,7 +225,10 @@ export default function AdminUsersPage() {
                   <div key={email} className="px-5 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-slate-800 text-sm">{u.name || "—"}</p>
+                        {/* ตั้ง/แก้ชื่อแอค — พิมพ์แล้วออกจากช่อง (blur) เพื่อบันทึก */}
+                        <input key={u.name} defaultValue={u.name || ""} placeholder="ตั้งชื่อแอค…" disabled={busy}
+                          onBlur={e => { const v = e.target.value.trim(); if (v && v !== (u.name || "")) setName(email, v); }}
+                          className="font-semibold text-slate-800 text-sm bg-transparent border-b border-dashed border-slate-300 hover:border-slate-400 focus:border-indigo-500 focus:border-solid focus:outline-none px-0.5 py-0.5 min-w-0 max-w-[160px]" />
                         <span className={`flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border ${meta.cls}`}>
                           <StatusIcon className="w-3 h-3" />{meta.label}
                         </span>

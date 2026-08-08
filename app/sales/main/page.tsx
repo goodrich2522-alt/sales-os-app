@@ -134,6 +134,8 @@ export default function SalesMain() {
   const [newAddon, setNewAddon]           = useState({ name: "", price: "" });
   const [freebie, setFreebie]             = useState(false);   // ของแถมเซ็ท 2,800 (เฟส 5)
   const [shippingCost, setShippingCost]   = useState("");      // ค่าขนส่งจากซัพพลายเออร์
+  const [shipSupplier, setShipSupplier]   = useState("");      // ผู้ให้บริการขนส่ง (เลือกจาก dropdown)
+  const [shipSupplierOther, setShipSupplierOther] = useState(""); // กรณีเลือก "อื่นๆ (ระบุเอง)"
   const [showNotif, setShowNotif]         = useState(true);
   const [detailLightboxIdx, setDetailLightboxIdx] = useState<number | null>(null);
 
@@ -500,6 +502,9 @@ export default function SalesMain() {
       const cat = custReturning > 0 ? "ลูกค้าเก่า/รับช่วงต่อ" : commCategory;
       if (cat) customFields[COMMISSION_FIELD] = cat;
     }
+    // ผู้ให้บริการขนส่ง (รถสไลด์) — เลือกจาก dropdown หรือระบุเอง
+    const supplier = shipSupplier === "อื่นๆ (ระบุเอง)" ? shipSupplierOther.trim() : shipSupplier.trim();
+    if (supplier) customFields["ผู้ให้บริการขนส่ง"] = supplier;
     // ข้อมูลรถจากสต็อก — เติมให้อัตโนมัติ ไม่ต้องให้เซลล์กรอกเอง
     if (selected) {
       const auto: Record<string, string> = {
@@ -583,6 +588,11 @@ export default function SalesMain() {
     setAddOns(sale.add_ons ?? []);
     setFreebie(sale.freebie ?? false);
     setShippingCost(sale.shipping_cost ? String(sale.shipping_cost) : "");
+    { // ผู้ให้บริการขนส่ง — เติมกลับตอนแก้ไข (ถ้าไม่อยู่ใน list = อื่นๆ)
+      const sup = (sale.custom_fields?.["ผู้ให้บริการขนส่ง"] as string) ?? "";
+      if (sup && !fieldConfig.shippingSuppliers.includes(sup)) { setShipSupplier("อื่นๆ (ระบุเอง)"); setShipSupplierOther(sup); }
+      else { setShipSupplier(sup); setShipSupplierOther(""); }
+    }
     setErrors({}); setSubmitted(false); setLightboxIdx(null);
     setDetailSale(null); // ปิดหน้ารายละเอียดถ้าเปิดอยู่
   };
@@ -593,6 +603,7 @@ export default function SalesMain() {
     setNewNotifLabel(""); setNewNotifDate(""); setPaymentProof("");
     setAddOns([]); setNewAddon({ name: "", price: "" }); setCancelBox(false); setCancelReason("");
     setFreebie(false); setShippingCost(""); setCommCategory("");
+    setShipSupplier(""); setShipSupplierOther("");
   };
 
   // เปิดฟอร์มปิดการขายของรถคันหนึ่ง (ใช้ร่วมทั้งมุมมองการ์ดและตาราง)
@@ -1456,10 +1467,25 @@ export default function SalesMain() {
                               <span>มีของแถม (กรองเครื่อง/เกียร์/อากาศ + น้ำมันเครื่อง/เกียร์) — หักต้นทุน ฿2,800</span>
                             </label>
                           )}
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-slate-600 flex-shrink-0">ค่าขนส่ง (จากซัพพลายเออร์)</span>
-                            <input type="number" value={shippingCost} onChange={e => setShippingCost(e.target.value)} placeholder="0"
-                              className="w-24 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm text-slate-600 flex-shrink-0">ผู้ให้บริการขนส่ง</span>
+                              <select value={shipSupplier} onChange={e => setShipSupplier(e.target.value)}
+                                className="flex-1 min-w-[140px] border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300">
+                                <option value="">— เลือกผู้ให้บริการ —</option>
+                                {fieldConfig.shippingSuppliers.map(s => <option key={s} value={s}>{s}</option>)}
+                                <option value="อื่นๆ (ระบุเอง)">อื่นๆ (ระบุเอง)</option>
+                              </select>
+                            </div>
+                            {shipSupplier === "อื่นๆ (ระบุเอง)" && (
+                              <input value={shipSupplierOther} onChange={e => setShipSupplierOther(e.target.value)} placeholder="พิมพ์ชื่อผู้ให้บริการขนส่ง"
+                                className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
+                            )}
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-slate-600 flex-shrink-0">ค่าขนส่ง (บาท)</span>
+                              <input type="number" value={shippingCost} onChange={e => setShippingCost(e.target.value)} placeholder="0"
+                                className="w-24 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
+                            </div>
                           </div>
                           <div className="border-t border-emerald-100 pt-2 text-sm flex flex-col gap-0.5">
                             <div className="flex justify-between text-slate-500"><span>ราคาขาย</span><span>฿{sale.toLocaleString()}</span></div>

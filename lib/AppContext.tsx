@@ -33,6 +33,7 @@ export interface FieldConfig {
   financeCompanies: string[];
   saleTypes: string[];      // ประเภทการขาย
   paymentTypes: string[];   // ประเภทการชำระ
+  shippingSuppliers: string[]; // ผู้ให้บริการขนส่ง (รถสไลด์)
   // Custom field definitions
   customFieldDefs: CustomFieldDef[];      // stock form custom fields
   saleExtraFieldDefs: CustomFieldDef[];   // checkout form custom fields
@@ -60,6 +61,7 @@ const DEFAULT_FIELD_CFG: FieldConfig = {
   financeCompanies: FINANCE_COMPANIES,
   saleTypes: [...SALE_TYPES],
   paymentTypes: ["บิลแวท", "บิลเงินสด", "ไฟแนนซ์", "เงินสด"],
+  shippingSuppliers: ["วิชิตรถสไลด์", "แก่นนครรถสไลด์", "พนมดีทัวร์", "นิวสไลด์ออน", "24 ชั่วโมงรถสไลด์"],
   customFieldDefs: [],
   saleExtraFieldDefs: [],
   salesFilterRequests: [],

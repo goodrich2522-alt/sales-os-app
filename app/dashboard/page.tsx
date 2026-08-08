@@ -68,7 +68,10 @@ export default function Dashboard() {
   const [dashChecking, setDashChecking] = useState(false);
   const [dashNotice, setDashNotice] = useState(""); // แจ้งเหตุที่เข้าไม่ได้ (รออนุมัติ/ถูกระงับ/ยังไม่ลงทะเบียน)
 
-  const { sales: rawSales, forklifts } = useApp();
+  const { sales: rawSales, forklifts, fieldConfig } = useApp();
+  const [dashEmail, setDashEmail] = useState("");
+  useEffect(() => { const du = typeof window !== "undefined" ? localStorage.getItem("dash_user") : null; if (du) try { setDashEmail(String(JSON.parse(du).email || "").toLowerCase()); } catch {} }, [dashAuth]);
+  const isDashAdmin = (fieldConfig.adminEmails ?? []).some(e => e.toLowerCase() === dashEmail);
   // ตัดดีลที่ถูกปฏิเสธจากสต็อก (ไม่ใช่ดีลจริง) ออกจากยอด/รายงานทั้งแดชบอร์ด
   const allSales = useMemo(() => rawSales.filter((s) => !isVoidSale(s)), [rawSales]);
   const staffNames = Array.from(new Set(allSales.map((s) => s.sales_staff).filter(Boolean)));
@@ -369,6 +372,11 @@ export default function Dashboard() {
             <Link href="/dashboard/audit" className="flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg px-3 py-1.5 transition-all">
               <ShieldCheck className="w-4 h-4" /><span className="hidden sm:inline">ประวัติแก้ไข</span>
             </Link>
+            {isDashAdmin && (
+              <Link href="/admin/users" className="flex items-center gap-1.5 text-xs font-bold text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 rounded-lg px-3 py-1.5 transition-all">
+                <Users className="w-4 h-4" /><span className="hidden sm:inline">จัดการผู้ใช้</span>
+              </Link>
+            )}
             {dashYear && <span className="text-xs font-medium bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full hidden sm:block">ปี {Number(dashYear) + 543}</span>}
           </div>
         </div>
