@@ -91,6 +91,9 @@ export default function StockMain() {
   const [listFuel, setListFuel]     = useState("all");                                       // กรองพลังงาน
   const [listSort, setListSort]     = useState<"recent" | "model" | "remain" | "sn" | "pi">("recent"); // การเรียง
   const [listView, setListView]     = useState<"list" | "table" | "byModel" | "aging">("list");  // มุมมอง: รายคัน / ตาราง / รวมตามรุ่น / ค้างนาน
+  const [bulkMode, setBulkMode]     = useState(false);              // โหมดเลือกหลายคัน
+  const [selIds, setSelIds]         = useState<Set<string>>(new Set()); // รถที่เลือกไว้
+  const [bulkDelConfirm, setBulkDelConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showSettings, setShowSettings]   = useState(false);
   const [detailItem, setDetailItem]       = useState<Forklift | null>(null); // รถที่กดดูรายละเอียด
@@ -181,6 +184,14 @@ export default function StockMain() {
       if (imgs.length) addInspection({ id: `ins_stock_${Date.now()}`, unit_no: target.SN || target.id, transporter_name: `${username} (สต็อก)`, date: today(), images: imgs, role: "ผู้รับรถ" });
     } finally { setPhotoBusy(false); }
   };
+
+  // ── เลือกหลายคัน (bulk) — เปลี่ยนสถานะ/โลเคชั่น/ลบ พร้อมกัน ──
+  const toggleSel = (id: string) => setSelIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const clearSel = () => { setSelIds(new Set()); setBulkDelConfirm(false); };
+  const selForklifts = () => forklifts.filter(f => selIds.has(f.id));
+  const bulkSetStatus = (status: string) => { if (!status) return; selForklifts().forEach(f => updateForklift({ ...f, status })); clearSel(); };
+  const bulkSetLocation = (loc: string) => { if (!loc) return; selForklifts().forEach(f => updateForklift({ ...f, location: loc })); clearSel(); };
+  const bulkDelete = () => { selForklifts().forEach(f => deleteForklift(f.id)); clearSel(); };
 
   // โหลดรายการที่ "รับทราบแล้ว" · ครั้งแรกที่เปิด (ยังไม่มี key) ถือว่าดีลเก่าทั้งหมดรับทราบแล้ว กันสแปมของเก่า
   useEffect(() => {
@@ -1027,6 +1038,19 @@ export default function StockMain() {
                   <option value="pi">เรียง: ตาม PI</option>
                   {listView === "byModel" && <option value="remain">เรียง: เหลือเยอะสุด</option>}
                 </select>
+                {/* โหมดเลือกหลายคัน (bulk) — เฉพาะมุมมองรายคัน/ตาราง */}
+                {(listView === "list" || listView === "table") && (
+                  <button onClick={() => { setBulkMode(v => !v); clearSel(); }}
+                    className={`text-xs font-bold rounded-lg px-2.5 py-1.5 border transition ${bulkMode ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>
+                    {bulkMode ? "✓ กำลังเลือก" : "☑ เลือกหลายคัน"}
+                  </button>
+                )}
+                {bulkMode && (listView === "list" || listView === "table") && (
+                  <button onClick={() => (selIds.size === listFiltered.length && listFiltered.length > 0) ? clearSel() : setSelIds(new Set(listFiltered.map(f => f.id)))}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 underline">
+                    {selIds.size === listFiltered.length && listFiltered.length > 0 ? "ล้างทั้งหมด" : "เลือกทั้งหมด"}
+                  </button>
+                )}
                 {/* สลับมุมมอง รายคัน ↔ รวมตามรุ่น */}
                 <div className="ml-auto flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold">
                   <button onClick={() => setListView("list")}
@@ -1095,6 +1119,7 @@ export default function StockMain() {
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="text-left text-slate-400 border-b border-slate-100">
+                        {bulkMode && <th className="px-2 py-2"></th>}
                         {["รหัส", "ยี่ห้อ/รุ่น", "SN", "PI", "พิกัด", "พลังงาน", "ความสูง", "สถานะ", "ราคาต้นทุน", "โลเคชั่น", "เซลล์ดูแล", "เติมเมื่อ"].map((h, i) => (
                           <th key={i} className="px-2.5 py-2 font-semibold whitespace-nowrap">{h}</th>
                         ))}
@@ -1102,8 +1127,9 @@ export default function StockMain() {
                     </thead>
                     <tbody>
                       {listFiltered.map((item) => (
-                        <tr key={item.id} onClick={() => setDetailItem(item)}
-                          className="border-b border-slate-50 hover:bg-emerald-50/40 cursor-pointer transition-colors">
+                        <tr key={item.id} onClick={() => bulkMode ? toggleSel(item.id) : setDetailItem(item)}
+                          className={`border-b border-slate-50 cursor-pointer transition-colors ${bulkMode && selIds.has(item.id) ? "bg-indigo-50" : "hover:bg-emerald-50/40"}`}>
+                          {bulkMode && <td className="px-2 py-2"><input type="checkbox" checked={selIds.has(item.id)} onChange={() => toggleSel(item.id)} onClick={e => e.stopPropagation()} className="w-4 h-4 accent-indigo-600" /></td>}
                           <td className="px-2.5 py-2 whitespace-nowrap"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-500 bg-slate-100 border border-slate-200"}`}>#{item.id}</span></td>
                           <td className="px-2.5 py-2"><span className="font-semibold text-slate-800">{item.brand}</span> <span className="text-slate-500">{item.model}</span></td>
                           <td className="px-2.5 py-2 text-slate-500 whitespace-nowrap">{item.SN || "—"}</td>
@@ -1150,8 +1176,9 @@ export default function StockMain() {
 
               {/* ── มุมมองรายคัน ── */}
               {listView === "list" && listFiltered.map((item, idx) => (
-                <div key={item.id} onClick={() => setDetailItem(item)}
-                  className={`flex items-center gap-3 border rounded-xl p-3.5 transition-colors group cursor-pointer ${idx === 0 ? "bg-emerald-50/70 border-emerald-200 hover:bg-emerald-50" : "bg-slate-50 hover:bg-slate-100 border-slate-100"}`}>
+                <div key={item.id} onClick={() => bulkMode ? toggleSel(item.id) : setDetailItem(item)}
+                  className={`flex items-center gap-3 border rounded-xl p-3.5 transition-colors group cursor-pointer ${bulkMode && selIds.has(item.id) ? "bg-indigo-50 border-indigo-300 ring-1 ring-indigo-200" : idx === 0 ? "bg-emerald-50/70 border-emerald-200 hover:bg-emerald-50" : "bg-slate-50 hover:bg-slate-100 border-slate-100"}`}>
+                  {bulkMode && <input type="checkbox" checked={selIds.has(item.id)} onChange={() => toggleSel(item.id)} onClick={e => e.stopPropagation()} className="w-4 h-4 accent-indigo-600 flex-shrink-0" />}
                   <div className="bg-white border border-slate-200 rounded-xl p-2 flex-shrink-0 shadow-sm">
                     <Package className="w-4 h-4 text-emerald-600" />
                   </div>
@@ -1479,6 +1506,33 @@ export default function StockMain() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── แถบจัดการหลายคัน (bulk) — ลอยล่างจอเมื่อเลือกรถ ── */}
+      {bulkMode && selIds.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-white rounded-2xl shadow-2xl border border-indigo-200 px-4 py-3 flex items-center gap-2.5 flex-wrap max-w-[95vw]">
+          <span className="text-sm font-bold text-indigo-700 whitespace-nowrap">เลือก {selIds.size} คัน</span>
+          <select onChange={e => { const v = e.target.value; e.target.value = ""; bulkSetStatus(v); }} defaultValue=""
+            className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer">
+            <option value="" disabled>เปลี่ยนสถานะ…</option>
+            {fieldConfig.stockStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select onChange={e => { const v = e.target.value; e.target.value = ""; bulkSetLocation(v); }} defaultValue=""
+            className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer">
+            <option value="" disabled>เปลี่ยนโลเคชั่น…</option>
+            {fieldConfig.locations.map(l => <option key={l} value={l}>{l}</option>)}
+          </select>
+          {bulkDelConfirm ? (
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-red-600">ลบ {selIds.size} คัน?</span>
+              <button onClick={bulkDelete} className="text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg px-2.5 py-1.5">ยืนยันลบ</button>
+              <button onClick={() => setBulkDelConfirm(false)} className="text-xs text-slate-400 hover:text-slate-600">ยกเลิก</button>
+            </div>
+          ) : (
+            <button onClick={() => setBulkDelConfirm(true)} className="flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg px-2.5 py-1.5"><Trash2 className="w-3.5 h-3.5" />ลบ</button>
+          )}
+          <button onClick={clearSel} className="text-sm text-slate-500 hover:text-slate-700 font-medium">ล้าง</button>
         </div>
       )}
 
