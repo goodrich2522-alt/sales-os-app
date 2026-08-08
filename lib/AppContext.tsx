@@ -254,10 +254,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .on("postgres_changes", { event: "*", schema: "public", table: "inspections" }, onChange)
       .subscribe();
 
-    // สำรอง: กลับมาที่แท็บ = ดึงสด + poll เบาๆ 60 วิ กัน realtime หลุด
+    // สำรอง: กลับมาที่แท็บ = ดึงสด + poll กัน realtime หลุด
+    // หน้าผู้ขนส่ง (anon) ไม่ได้ realtime (RLS) → poll ถี่ขึ้น 20 วิ ให้ข้อมูลข้ามฝ่ายอัพเดตพร้อมกัน · หน้าอื่นมี realtime อยู่แล้ว = 60 วิพอ
+    const isAnonTransporter = typeof window !== "undefined" && window.location.pathname.includes("/transporter");
     const onVisible = () => { if (document.visibilityState === "visible") pull(); };
     document.addEventListener("visibilitychange", onVisible);
-    const id = setInterval(() => { if (document.visibilityState === "visible") pull(); }, 60_000);
+    const id = setInterval(() => { if (document.visibilityState === "visible") pull(); }, isAnonTransporter ? 20_000 : 60_000);
 
     return () => {
       if (channel) supabase?.removeChannel(channel);

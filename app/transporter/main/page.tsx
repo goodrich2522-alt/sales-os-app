@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRight, Package, History, ImageOff, Hash, Calendar, User, FileText, PackageCheck, Clock, Search, RotateCcw, Building2, Briefcase, Trash2, MapPin, Link2, Download } from "lucide-react";
+import { Upload, X, CheckCircle, Truck, Camera, AlertCircle, LogOut, ChevronRight, Package, History, ImageOff, Hash, Calendar, User, FileText, PackageCheck, Clock, Search, RotateCcw, Building2, Briefcase, Trash2, MapPin, Link2, Download, RefreshCw } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
 import { Forklift, Sale, InspectionRecord, INSPECTION_SLOTS, INSPECTION_EXTRA_SLOTS, InspectionSlotKey, SLOT_LABELS } from "@/lib/types";
 import { driveImg } from "@/lib/img";
@@ -13,7 +13,9 @@ type TransporterRole = "ผู้รับรถ" | "ผู้ส่งมอบ
 
 export default function TransporterMain() {
   const router = useRouter();
-  const { addInspection, deleteInspection, updateForklift, forklifts, sales, inspections, setActor } = useApp();
+  const { addInspection, deleteInspection, updateForklift, forklifts, sales, inspections, setActor, refresh } = useApp();
+  const [refreshing, setRefreshing] = useState(false);
+  const doRefresh = async () => { setRefreshing(true); await refresh(); setTimeout(() => setRefreshing(false), 400); };
   const [username, setUsername] = useState("");
   const [userphone, setUserphone] = useState("");
   const [role, setRole] = useState<TransporterRole>("ผู้รับรถ");
@@ -343,6 +345,10 @@ export default function TransporterMain() {
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <button onClick={doRefresh} title="รีเฟรชข้อมูลล่าสุด"
+              className="flex items-center gap-1.5 text-slate-600 hover:text-emerald-700 text-sm font-medium transition-colors duration-200 hover:bg-emerald-50 px-3 py-1.5 rounded-lg">
+              <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin text-emerald-600" : ""}`} /><span className="hidden sm:inline">รีเฟรช</span>
+            </button>
             <button onClick={() => setShowHistory(true)}
               className="flex items-center gap-1.5 text-slate-600 hover:text-amber-700 text-sm font-medium transition-colors duration-200 hover:bg-amber-50 px-3 py-1.5 rounded-lg">
               <History className="w-4 h-4" /><span className="hidden sm:inline">ประวัติ</span> ({inspections.length})
