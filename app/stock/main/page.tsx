@@ -20,7 +20,7 @@ import { VEHICLE_CATS, CatFilter, SALE_STATUS_BADGE, saleStatusGroup, SALE_STATU
 import { QuoteImport } from "@/components/QuoteImport";
 import { parseForkliftCsv, assignIdsAndStamp, buildCsvTemplate } from "@/lib/forkliftCsv";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
-import { apiEnabled } from "@/lib/api";
+import { apiEnabled, uploadImageApi } from "@/lib/api";
 import { driveImg, resizeImageFile } from "@/lib/img";
 import { parseSvc, nextDue, SVC_SOON_DAYS } from "@/lib/warranty";
 import { WarrantyBlock } from "@/components/WarrantyBlock";
@@ -111,6 +111,8 @@ export default function StockMain() {
   const [snEdit, setSnEdit]               = useState(""); // เติม/แก้ SN (รถสั่งผลิต/ลงข้อมูลเก่า)
   const [snSaved, setSnSaved]             = useState(false);
   const [photoBusy, setPhotoBusy]         = useState(false); // กำลังอัปโหลดรูปจากฝ่ายสต็อก
+  const [docBusy, setDocBusy]             = useState(false); // กำลังอัปโหลดเอกสาร PDF
+  const [docMsg, setDocMsg]               = useState("");    // ข้อความแจ้ง (ไฟล์ใหญ่/อัปไม่ได้)
   const [qrData, setQrData]               = useState<string | null>(null); // QR ของรถคันที่เปิดอยู่
   const carParamHandled = useRef(false);  // เปิดรถจาก ?car= ครั้งเดียว (สแกน QR)
   // ── ประวัติการขาย (เฟส 1): ดีลทุกเซลล์ ──
@@ -171,7 +173,7 @@ export default function StockMain() {
     });
     setFinSaved(false);
     setSnEdit(detailItem?.SN ?? ""); setSnSaved(false);
-    setQrData(null);
+    setQrData(null); setDocMsg("");
   }, [detailItem]);
 
   // สิทธิ์แก้ไขข้อมูลการเงิน (ต้นทุน/ค่าขนส่ง ฯลฯ) — เฉพาะวรลักษณ์เท่านั้น (ชื่อ หรือ อีเมลของวรลักษณ์)
@@ -187,6 +189,38 @@ export default function StockMain() {
       for (const f of Array.from(files)) { try { imgs.push(await resizeImageFile(f)); } catch { /* ข้ามรูปที่อ่านไม่ได้ */ } }
       if (imgs.length) addInspection({ id: `ins_stock_${Date.now()}`, unit_no: target.SN || target.id, transporter_name: `${username} (สต็อก)`, date: today(), images: imgs, role: "ผู้รับรถ" });
     } finally { setPhotoBusy(false); }
+  };
+
+  // ── แนบเอกสาร PDF ต่อคัน (ใบกำกับ/PI/ใบรับประกัน) → อัปโหลด GAS→Drive เก็บ URL ใน custom_fields["เอกสารแนบ"] ──
+  const parseDocs = (f?: Forklift): { name: string; url: string }[] => {
+    try { return JSON.parse(String(f?.custom_fields?.["เอกสารแนบ"] || "[]")); } catch { return []; }
+  };
+  const fileToBase64 = (f: File): Promise<string> =>
+    new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error("read")); r.readAsDataURL(f); });
+  const addCarPdf = async (files: FileList | null, target: Forklift) => {
+    if (!files || files.length === 0) return;
+    setDocBusy(true); setDocMsg("");
+    try {
+      const added: { name: string; url: string }[] = [];
+      for (const f of Array.from(files)) {
+        if (f.size > 12 * 1024 * 1024) { setDocMsg(`"${f.name}" ใหญ่เกิน 12MB — ข้าม`); continue; }
+        try {
+          const b64 = await fileToBase64(f);
+          const { url } = await uploadImageApi(b64, f.type || "application/pdf", `doc_${target.id}_${f.name}`);
+          added.push({ name: f.name, url });
+        } catch { setDocMsg(`อัปโหลด "${f.name}" ไม่สำเร็จ (ตรวจการเชื่อมต่อ)`); }
+      }
+      if (added.length) {
+        const arr = [...parseDocs(target), ...added];
+        const u = { ...target, custom_fields: { ...(target.custom_fields || {}), "เอกสารแนบ": JSON.stringify(arr) } as Record<string, string> };
+        updateForklift(u); setDetailItem(u);
+      }
+    } finally { setDocBusy(false); }
+  };
+  const removeCarPdf = (target: Forklift, idx: number) => {
+    const arr = parseDocs(target); arr.splice(idx, 1);
+    const u = { ...target, custom_fields: { ...(target.custom_fields || {}), "เอกสารแนบ": JSON.stringify(arr) } as Record<string, string> };
+    updateForklift(u); setDetailItem(u);
   };
 
   // ── เลือกหลายคัน (bulk) — เปลี่ยนสถานะ/โลเคชั่น/ลบ พร้อมกัน ──
@@ -1919,6 +1953,34 @@ export default function StockMain() {
                     </div>
                   )}
                 </div>
+                {/* เอกสารแนบ (PDF) — ใบกำกับ/PI/ใบรับประกัน ฯลฯ */}
+                {(() => {
+                  const docs = parseDocs(it);
+                  return (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" />เอกสารแนบ ({docs.length})</p>
+                        <label className={`text-xs font-bold rounded-lg px-2.5 py-1.5 border flex items-center gap-1.5 cursor-pointer transition-all ${docBusy ? "text-slate-400 bg-slate-100 border-slate-200" : "text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border-indigo-200"}`}>
+                          <input type="file" accept="application/pdf,.pdf" multiple className="hidden" disabled={docBusy}
+                            onChange={e => { addCarPdf(e.target.files, it); e.target.value = ""; }} />
+                          <Upload className="w-3.5 h-3.5" />{docBusy ? "กำลังอัปโหลด..." : "แนบ PDF"}
+                        </label>
+                      </div>
+                      {docMsg && <p className="text-[11px] text-red-500 mb-1.5">{docMsg}</p>}
+                      {docs.length > 0 ? (
+                        <div className="flex flex-col gap-1.5">
+                          {docs.map((d, i) => (
+                            <div key={i} className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-2">
+                              <FileText className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                              <a href={d.url} target="_blank" rel="noreferrer" className="flex-1 min-w-0 text-xs font-semibold text-slate-700 hover:text-indigo-700 truncate">{d.name}</a>
+                              <button onClick={() => removeCarPdf(it, i)} className="text-slate-300 hover:text-red-500 flex-shrink-0" title="ลบเอกสาร"><Trash2 className="w-3.5 h-3.5" /></button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <p className="text-[11px] text-slate-400">ยังไม่มีเอกสารแนบ (ใบกำกับภาษี/PI/ใบรับประกัน ฯลฯ)</p>}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
