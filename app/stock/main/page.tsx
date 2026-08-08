@@ -1669,6 +1669,23 @@ export default function StockMain() {
               <div className="overflow-y-auto flex-1 min-h-0 p-5 flex flex-col gap-5">
                 <Section title="สเปกรถ" rows={spec} />
                 <Section title="ข้อมูลสต็อก / จัดซื้อ" rows={info} />
+                {/* ข้อมูลการขาย (ลูกค้า/ราคา/สถานะ) — สำคัญสุดสำหรับรถที่ขายแล้ว จึงอยู่บนสุด */}
+                {saleForItem && (
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><ShoppingCart className="w-3.5 h-3.5 text-indigo-500" />ข้อมูลการขาย</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {saleRows.filter(([, v]) => String(v ?? "").trim()).map(([k, v]) => (
+                        <div key={k} className="bg-indigo-50/50 border border-indigo-100 rounded-xl px-3 py-2">
+                          <p className="text-[11px] text-indigo-400">{k}</p>
+                          <p className="text-sm font-semibold text-slate-700 break-words">{v}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {!String(saleForItem.sales_staff ?? "").trim() && (
+                      <p className="text-[11px] text-slate-400 mt-1.5">* ดีลนี้ไม่มีข้อมูลเซลล์ผู้ขาย (นำเข้าจากบิลภาษี)</p>
+                    )}
+                  </div>
+                )}
                 {/* ไทม์ไลน์รถคันนี้ — รวมเหตุการณ์ตลอดชีวิตรถ (พับเก็บได้) */}
                 {timeline.length > 0 && (
                   <details className="bg-white border border-slate-100 rounded-xl p-3">
@@ -1726,22 +1743,6 @@ export default function StockMain() {
                     </button>
                   )}
                 </div>
-                {saleForItem && (
-                  <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><ShoppingCart className="w-3.5 h-3.5 text-indigo-500" />ข้อมูลการขาย</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {saleRows.filter(([, v]) => String(v ?? "").trim()).map(([k, v]) => (
-                        <div key={k} className="bg-indigo-50/50 border border-indigo-100 rounded-xl px-3 py-2">
-                          <p className="text-[11px] text-indigo-400">{k}</p>
-                          <p className="text-sm font-semibold text-slate-700 break-words">{v}</p>
-                        </div>
-                      ))}
-                    </div>
-                    {!String(saleForItem.sales_staff ?? "").trim() && (
-                      <p className="text-[11px] text-slate-400 mt-1.5">* ดีลนี้ไม่มีข้อมูลเซลล์ผู้ขาย (นำเข้าจากบิลภาษี)</p>
-                    )}
-                  </div>
-                )}
                 {/* สถานที่ที่รถอยู่ — แก้ไขได้ (ทั้งสต็อก/เซลล์ใช้ดูตำแหน่งเพื่อส่งมอบ) */}
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />สถานที่ที่รถอยู่</p>
