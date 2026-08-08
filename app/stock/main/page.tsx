@@ -1376,10 +1376,16 @@ export default function StockMain() {
                       <p className="font-bold text-slate-800 text-sm truncate">{al.title}</p>
                       <p className="text-xs text-slate-500 truncate">{al.sub}</p>
                       <p className="text-[11px] text-slate-400 mt-1">โดย {al.staff}</p>
-                      <button onClick={() => confirmAlert(al.id)}
-                        className="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5">
-                        <CheckCircle className="w-3.5 h-3.5" />ยืนยันตัดออกจากสต็อก
-                      </button>
+                      <div className="mt-2 flex gap-1.5">
+                        <button onClick={() => { const sale = sales.find(s => s.id === al.id); if (sale) { setShowAlerts(false); openHistDetail(sale); setShowSaleHistory(true); } }}
+                          className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                          <Eye className="w-3.5 h-3.5" />ดูรายละเอียด
+                        </button>
+                        <button onClick={() => confirmAlert(al.id)}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                          <CheckCircle className="w-3.5 h-3.5" />ยืนยัน
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
