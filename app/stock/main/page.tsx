@@ -6,7 +6,7 @@ import {
   Package, Plus, LogOut, CheckCircle, AlertCircle, List, X,
   TrendingUp, Boxes, Trash2, Settings, Pencil, Check, ChevronDown, ChevronRight,
   Clock, Hash, Camera, ImageOff, Eye, Bell, MapPin, History,
-  Download, Upload, FileText, ShoppingCart, User
+  Download, Upload, FileText, ShoppingCart, User, QrCode
 } from "lucide-react";
 import { Forklift, Sale, STOCK_APPROVAL_FIELD, isVoidSale } from "@/lib/types";
 import { COMMISSION_FIELD, COMMISSION_CATEGORIES } from "@/lib/commission";
@@ -110,6 +110,8 @@ export default function StockMain() {
   const [snEdit, setSnEdit]               = useState(""); // เติม/แก้ SN (รถสั่งผลิต/ลงข้อมูลเก่า)
   const [snSaved, setSnSaved]             = useState(false);
   const [photoBusy, setPhotoBusy]         = useState(false); // กำลังอัปโหลดรูปจากฝ่ายสต็อก
+  const [qrData, setQrData]               = useState<string | null>(null); // QR ของรถคันที่เปิดอยู่
+  const carParamHandled = useRef(false);  // เปิดรถจาก ?car= ครั้งเดียว (สแกน QR)
   // ── ประวัติการขาย (เฟส 1): ดีลทุกเซลล์ ──
   const [showSaleHistory, setShowSaleHistory] = useState(false);
   const [showReorder, setShowReorder]     = useState(false); // กางรายการเตรียมสั่งสินค้า (คลิกจากการ์ด)
@@ -168,6 +170,7 @@ export default function StockMain() {
     });
     setFinSaved(false);
     setSnEdit(detailItem?.SN ?? ""); setSnSaved(false);
+    setQrData(null);
   }, [detailItem]);
 
   // สิทธิ์แก้ไขข้อมูลการเงิน (ต้นทุน/ค่าขนส่ง ฯลฯ) — เฉพาะวรลักษณ์เท่านั้น (ชื่อ หรือ อีเมลของวรลักษณ์)
@@ -192,6 +195,30 @@ export default function StockMain() {
   const bulkSetStatus = (status: string) => { if (!status) return; selForklifts().forEach(f => updateForklift({ ...f, status })); clearSel(); };
   const bulkSetLocation = (loc: string) => { if (!loc) return; selForklifts().forEach(f => updateForklift({ ...f, location: loc })); clearSel(); };
   const bulkDelete = () => { selForklifts().forEach(f => deleteForklift(f.id)); clearSel(); };
+
+  // ── QR ต่อคัน — เข้ารหัสลิงก์เปิดข้อมูลรถ (สแกนแล้วเปิดหน้านี้ + เลือกรถให้) ──
+  const carUrl = (target: Forklift) => `${window.location.origin}${window.location.pathname}?car=${encodeURIComponent(target.SN || target.id)}`;
+  const genQr = async (target: Forklift) => {
+    try {
+      const QR = (await import("qrcode")).default;
+      setQrData(await QR.toDataURL(carUrl(target), { width: 360, margin: 1 }));
+    } catch (e) { console.warn("qr", e); }
+  };
+  const printQr = (target: Forklift, data: string) => {
+    const w = window.open("", "_blank", "width=420,height=560");
+    if (!w) return;
+    w.document.write(`<html><head><title>QR ${target.SN || target.id}</title></head><body style="text-align:center;font-family:sans-serif;padding:24px;margin:0"><img src="${data}" style="width:300px;height:300px"/><div style="font-size:22px;font-weight:700;margin-top:10px">${target.SN || target.id}</div><div style="font-size:15px;color:#555;margin-top:2px">${target.brand || ""} ${target.model || ""}</div><scr`+`ipt>window.onload=function(){window.print()}</scr`+`ipt></body></html>`);
+    w.document.close();
+  };
+  // สแกน QR → เปิดหน้านี้พร้อม ?car= → เลือกรถให้อัตโนมัติ (ครั้งเดียวหลังโหลดข้อมูล)
+  useEffect(() => {
+    if (carParamHandled.current || typeof window === "undefined" || forklifts.length === 0) return;
+    const car = new URLSearchParams(window.location.search).get("car");
+    if (!car) { carParamHandled.current = true; return; }
+    const key = car.toUpperCase();
+    const fk = forklifts.find(f => String(f.SN ?? "").toUpperCase() === key || String(f.id ?? "").toUpperCase() === key);
+    if (fk) { setDetailItem(fk); carParamHandled.current = true; }
+  }, [forklifts]);
 
   // โหลดรายการที่ "รับทราบแล้ว" · ครั้งแรกที่เปิด (ยังไม่มี key) ถือว่าดีลเก่าทั้งหมดรับทราบแล้ว กันสแปมของเก่า
   useEffect(() => {
@@ -1645,6 +1672,27 @@ export default function StockMain() {
                   {snEdit.trim() && forklifts.some(f => f.id !== it.id && String(f.SN ?? "").toUpperCase() === snEdit.trim().toUpperCase()) &&
                     <p className="text-[11px] text-red-500 mt-1">⚠️ SN นี้ซ้ำกับรถคันอื่นในระบบ — ตรวจสอบก่อนบันทึก</p>}
                   <p className="text-[10px] text-slate-400 mt-1">* รถสั่งผลิต (รหัส PIxxx) เติม SN จริงได้ที่นี่ · รหัส #{it.id} ยังคงเดิม</p>
+                </div>
+                {/* QR ต่อคัน — พิมพ์ติดรถ สแกนเปิดข้อมูลรถทันที */}
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><QrCode className="w-3.5 h-3.5" />QR รถคันนี้</p>
+                  {qrData ? (
+                    <div className="flex items-center gap-3 flex-wrap bg-slate-50 border border-slate-100 rounded-xl p-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={qrData} alt="QR" className="w-28 h-28 bg-white rounded-lg border border-slate-200" />
+                      <div className="flex flex-col gap-1.5">
+                        <p className="text-[11px] text-slate-500">สแกนเพื่อเปิดข้อมูลรถคันนี้ · พิมพ์ติดที่รถได้</p>
+                        <div className="flex gap-1.5">
+                          <button onClick={() => printQr(it, qrData)} className="text-xs font-bold text-white bg-slate-700 hover:bg-slate-800 rounded-lg px-3 py-1.5">🖨️ พิมพ์ป้าย</button>
+                          <a href={qrData} download={`QR_${it.SN || it.id}.png`} className="text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg px-3 py-1.5">ดาวน์โหลด</a>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => genQr(it)} className="text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+                      <QrCode className="w-4 h-4" />สร้าง QR
+                    </button>
+                  )}
                 </div>
                 {saleForItem && (
                   <div>
