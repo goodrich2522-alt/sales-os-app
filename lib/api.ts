@@ -98,7 +98,7 @@ export const deleteForkliftApi = async (id: string)  => { const { error } = awai
 export const addSaleApi = async (s: Sale) => {
   const { error } = await sb().from("sales").upsert(s);
   if (error) {
-    const { payment_proof: _pp, ...core } = s;
+    const { payment_proof: _pp, payment_proofs: _pps, ...core } = s;
     const { error: e2 } = await sb().from("sales").upsert(core);
     if (e2) throw error;
   }
@@ -109,7 +109,7 @@ export const updateSaleApi = async (s: Sale) => {
   const { id, ...rest } = s;
   const { error } = await sb().from("sales").update(rest).eq("id", id);
   if (error) {
-    const { payment_proof: _pp, ...core } = rest;
+    const { payment_proof: _pp, payment_proofs: _pps, ...core } = rest;
     const { error: e2 } = await sb().from("sales").update(core).eq("id", id);
     if (e2) throw error;
   }

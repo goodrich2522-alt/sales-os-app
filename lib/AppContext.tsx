@@ -328,12 +328,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── Sale CRUD ─────────────────────────────────────────────────────────────
   // อัปโหลดรูปหลักฐานการชำระ (base64 → Drive URL) ถ้ายังไม่ได้อัปโหลด
   const uploadPaymentProof = async (s: Sale): Promise<Sale> => {
-    if (!s.payment_proof || !s.payment_proof.startsWith("data:")) return s;
+    // อัปโหลด base64 ที่ยังค้าง → Drive URL (ปกติหน้าขายอัปตอนแนบแล้ว นี่คือ fallback)
+    const up = async (b64: string, i: number) => {
+      const mime = /^data:(.*?);base64,/.exec(b64)?.[1] || "image/jpeg";
+      return (await api.uploadImageApi(b64, mime, `payment_${s.id}_${i}`)).url;
+    };
+    let out = s;
     try {
-      const mime = /^data:(.*?);base64,/.exec(s.payment_proof)?.[1] || "image/jpeg";
-      const url = (await api.uploadImageApi(s.payment_proof, mime, `payment_${s.id}`)).url;
-      return { ...s, payment_proof: url };
-    } catch (e) { console.warn("upload payment_proof", e); return s; } // อัปไม่ได้ → เก็บ base64 ไปก่อน
+      // หลายรูป (payment_proofs)
+      if (Array.isArray(s.payment_proofs) && s.payment_proofs.some(p => p.startsWith("data:"))) {
+        const urls = await Promise.all(s.payment_proofs.map((p, i) => p.startsWith("data:") ? up(p, i) : Promise.resolve(p)));
+        out = { ...out, payment_proofs: urls, payment_proof: urls[0] ?? out.payment_proof };
+      }
+      // รูปเดี่ยว (backward compat)
+      if (out.payment_proof && out.payment_proof.startsWith("data:")) {
+        out = { ...out, payment_proof: await up(out.payment_proof, 0) };
+      }
+      return out;
+    } catch (e) { console.warn("upload payment_proof", e); return out; } // อัปไม่ได้ → เก็บ base64 ไปก่อน
   };
   // สถานะรถตามดีล → ชุดสถานะรวมใหม่ (5 ส.ค. 2026): ติดจอง(รอโอนมัดจำ)/มัดจำแล้ว-เงินสด/มัดจำแล้ว-ไฟแนนซ์/ปิดการขายแล้ว
   const forkliftStatusForSale = (s: Sale): string => {

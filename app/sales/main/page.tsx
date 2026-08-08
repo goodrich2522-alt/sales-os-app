@@ -8,7 +8,7 @@ import {
   Package, Trash2, History, RotateCcw, Pencil, Check, Camera,
   SlidersHorizontal, ImageOff, ZoomIn, ChevronLeft, Plus, ClipboardList,
   Settings, ChevronDown, Type, ListOrdered, ArrowLeft, Bell, Eye, ChevronUp, RefreshCw,
-  LayoutGrid, Table as TableIcon, Users, Download, MapPin,
+  LayoutGrid, Table as TableIcon, Users, Download, MapPin, Loader2,
 } from "lucide-react";
 import { PROVINCES, CONTACT_SOURCES } from "@/lib/mockData";
 import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, ContactSource, SaleType, InspectionRecord, SLOT_LABELS, STOCK_APPROVAL_FIELD } from "@/lib/types";
@@ -20,7 +20,7 @@ import { WarrantyBlock } from "@/components/WarrantyBlock";
 import { formatBaht } from "@/lib/format";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isStackerModel, isOtherGroup, priorPurchaseByCustomer } from "@/lib/commission";
-import { apiEnabled } from "@/lib/api";
+import { apiEnabled, uploadImageApi } from "@/lib/api";
 import AiAssistant from "@/components/AiAssistant";
 
 // ── ตรรกะว่ารถคันไหน "ยังขายได้" (โชว์ให้เซลล์) ──────────────────────────────
@@ -181,17 +181,24 @@ export default function SalesMain() {
   // Checkout custom fields
   const [saleCustomVals, setSaleCustomVals]   = useState<Record<string, string>>({});
   const [lightboxIdx, setLightboxIdx]         = useState<number | null>(null);
-  const [paymentProof, setPaymentProof]       = useState(""); // รูปหลักฐานการชำระเงิน (บังคับ)
+  const [paymentProofs, setPaymentProofs]     = useState<string[]>([]); // หลักฐานการชำระ (หลายรูป · URL หลังอัป)
+  const [paymentBusy, setPaymentBusy]         = useState(false);        // กำลังย่อ/อัปโหลดรูป
   const paymentInputRef = useRef<HTMLInputElement>(null);
 
-  // ย่อรูปเป็น dataURL (ยาวสุด 1000px, jpeg 78%) — ใช้กับหลักฐานการชำระเงิน
-  const fileToResizedDataUrl = (file: File): Promise<string> =>
+  // อ่านไฟล์เป็น dataURL
+  const readAsDataUrl = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = ev => {
-        if (!ev.target?.result) { reject(new Error("read fail")); return; }
-        const img = new Image();
-        img.onload = () => {
+      reader.onload = ev => ev.target?.result ? resolve(ev.target.result as string) : reject(new Error("read fail"));
+      reader.onerror = () => reject(new Error("read fail"));
+      reader.readAsDataURL(file);
+    });
+  // ย่อรูป (ยาวสุด 1000px, jpeg 78%) — ถ้าถอดรหัสรูปไม่ได้ (เช่น HEIC จาก iPhone) ใช้ไฟล์ต้นฉบับแทน (ไม่บล็อกการปิดการขาย)
+  const resizeDataUrl = (dataUrl: string): Promise<string> =>
+    new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        try {
           const MAX = 1000;
           const ratio = Math.min(MAX / img.width, MAX / img.height, 1);
           const canvas = document.createElement("canvas");
@@ -199,15 +206,31 @@ export default function SalesMain() {
           canvas.height = Math.round(img.height * ratio);
           canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
           resolve(canvas.toDataURL("image/jpeg", 0.78));
-        };
-        img.src = ev.target.result as string;
+        } catch { resolve(dataUrl); }
       };
-      reader.readAsDataURL(file);
+      img.onerror = () => resolve(dataUrl); // ถอดรหัสไม่ได้ → ส่งต้นฉบับไปเลย
+      img.src = dataUrl;
     });
+  // แนบหลายรูป: ย่อ → อัปขึ้น Drive ทันที (เก็บ URL ให้ row เบา ปิดการขายชัวร์) · อัปไม่ได้เก็บ base64 ไว้ก่อน
   const handlePaymentProof = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; e.target.value = "";
-    if (!file) return;
-    setPaymentProof(await fileToResizedDataUrl(file));
+    const files = Array.from(e.target.files ?? []); e.target.value = "";
+    if (!files.length) return;
+    setPaymentBusy(true);
+    try {
+      for (const file of files) {
+        let val = "";
+        try {
+          const resized = await resizeDataUrl(await readAsDataUrl(file));
+          if (apiEnabled) {
+            try {
+              const mime = /^data:(.*?);base64,/.exec(resized)?.[1] || "image/jpeg";
+              val = (await uploadImageApi(resized, mime, `payment_${Date.now()}_${file.name}`)).url;
+            } catch { val = resized; } // อัปไม่ได้ → เก็บ base64 (AppContext จะอัปให้ตอนบันทึก)
+          } else { val = resized; }
+        } catch { continue; } // อ่านไฟล์ไม่ได้ → ข้ามรูปนี้
+        if (val) setPaymentProofs(prev => [...prev, val]);
+      }
+    } finally { setPaymentBusy(false); }
   };
 
   // ── Settings modal state ───────────────────────────────────────────────────
@@ -480,7 +503,7 @@ export default function SalesMain() {
     const needDelivery = status === "ปิดการขาย/จัดส่งแล้ว" || status === "รอจัดส่ง";
     const needProof    = status === "ปิดการขาย/จัดส่งแล้ว" || status === "รอจัดส่ง" || status === "จอง/โอนมัดจำแล้ว" || status === "มัดจำแล้ว";
     if (needDelivery && !form.delivery_date) e.delivery_date = "กรุณาระบุวันส่งมอบ";
-    if (needProof && !paymentProof) e.payment_proof = "กรุณาแนบรูปหลักฐานการชำระเงิน (บังคับ)";
+    if (needProof && paymentProofs.length === 0) e.payment_proof = "กรุณาแนบรูปหลักฐานการชำระเงิน (บังคับ)";
     return e;
   };
 
@@ -535,7 +558,8 @@ export default function SalesMain() {
       custom_notifications: customNotifItems.length > 0 ? customNotifItems : undefined,
       contact_source: (form.contact_source as ContactSource) || undefined,
       sale_type: (form.sale_type as SaleType) || undefined,
-      payment_proof: paymentProof || undefined,
+      payment_proof: paymentProofs[0] || undefined,
+      payment_proofs: paymentProofs.length ? paymentProofs : undefined,
       add_ons: addOns.length ? addOns : undefined,
       freebie: freebie || undefined,
       shipping_cost: shippingCost ? Number(shippingCost) : undefined,
@@ -584,7 +608,7 @@ export default function SalesMain() {
     setCommCategory(String(sale.custom_fields?.[COMMISSION_FIELD] ?? ""));
     setCustomNotifItems(sale.custom_notifications ?? []);
     setShowCustomNotifs((sale.custom_notifications ?? []).length > 0);
-    setPaymentProof(sale.payment_proof ?? "");
+    setPaymentProofs(sale.payment_proofs ?? (sale.payment_proof ? [sale.payment_proof] : []));
     setAddOns(sale.add_ons ?? []);
     setFreebie(sale.freebie ?? false);
     setShippingCost(sale.shipping_cost ? String(sale.shipping_cost) : "");
@@ -600,7 +624,7 @@ export default function SalesMain() {
   const resetCheckout = () => {
     setSelected(null); setEditingSale(null); setForm(emptyCheckout); setErrors({}); setSaleCustomVals({});
     setSubmitted(false); setCustomNotifItems([]); setShowCustomNotifs(false);
-    setNewNotifLabel(""); setNewNotifDate(""); setPaymentProof("");
+    setNewNotifLabel(""); setNewNotifDate(""); setPaymentProofs([]);
     setAddOns([]); setNewAddon({ name: "", price: "" }); setCancelBox(false); setCancelReason("");
     setFreebie(false); setShippingCost(""); setCommCategory("");
     setShipSupplier(""); setShipSupplierOther("");
@@ -1405,24 +1429,30 @@ export default function SalesMain() {
                         className="w-full border border-slate-200 hover:border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-800 placeholder:text-slate-400 resize-none transition-all" />
                     </SField>
 
-                    {/* หลักฐานการชำระเงิน — บังคับแนบรูป */}
-                    <SField label="หลักฐานการชำระเงิน *" error={errors.payment_proof}>
-                      <input ref={paymentInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePaymentProof} />
-                      {paymentProof ? (
-                        <div className="relative rounded-xl overflow-hidden border-2 border-emerald-300 bg-slate-100">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={driveImg(paymentProof)} alt="หลักฐานการชำระเงิน" className="w-full max-h-56 object-contain bg-slate-50" />
-                          <div className="absolute top-2 right-2 flex gap-1.5">
-                            <button type="button" onClick={() => paymentInputRef.current?.click()} className="bg-slate-900/70 hover:bg-slate-900 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1"><Camera className="w-3.5 h-3.5" />เปลี่ยน</button>
-                            <button type="button" onClick={() => setPaymentProof("")} className="bg-slate-900/70 hover:bg-red-500 text-white rounded-lg p-1.5"><X className="w-3.5 h-3.5" /></button>
-                          </div>
-                          <span className="absolute bottom-0 inset-x-0 bg-emerald-600/90 text-white text-[11px] font-bold px-2 py-1 text-center">✓ แนบหลักฐานแล้ว</span>
+                    {/* หลักฐานการชำระเงิน — บังคับแนบรูป (แนบได้หลายรูป) */}
+                    <SField label={`หลักฐานการชำระเงิน * ${paymentProofs.length ? `(${paymentProofs.length} รูป)` : ""}`} error={errors.payment_proof}>
+                      <input ref={paymentInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handlePaymentProof} />
+                      {paymentProofs.length > 0 ? (
+                        <div className="grid grid-cols-3 gap-2">
+                          {paymentProofs.map((img, i) => (
+                            <div key={i} className="relative aspect-square rounded-xl overflow-hidden border-2 border-emerald-300 bg-slate-100 group">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={driveImg(img)} alt={`หลักฐาน ${i + 1}`} className="w-full h-full object-cover" />
+                              <button type="button" onClick={() => setPaymentProofs(prev => prev.filter((_, j) => j !== i))}
+                                className="absolute top-1 right-1 bg-slate-900/70 hover:bg-red-500 text-white rounded-lg p-1"><X className="w-3.5 h-3.5" /></button>
+                            </div>
+                          ))}
+                          {/* ปุ่มเพิ่มรูปเพิ่ม */}
+                          <button type="button" onClick={() => paymentInputRef.current?.click()} disabled={paymentBusy}
+                            className="aspect-square rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/40 hover:bg-emerald-50 flex flex-col items-center justify-center gap-1 text-emerald-600 disabled:opacity-50">
+                            {paymentBusy ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Plus className="w-5 h-5" /><span className="text-[11px] font-semibold">เพิ่มรูป</span></>}
+                          </button>
                         </div>
                       ) : (
-                        <button type="button" onClick={() => paymentInputRef.current?.click()}
+                        <button type="button" onClick={() => paymentInputRef.current?.click()} disabled={paymentBusy}
                           className={`w-full border-2 border-dashed rounded-xl p-5 flex flex-col items-center justify-center gap-1.5 transition-all ${errors.payment_proof ? "border-red-300 bg-red-50/40 hover:bg-red-50" : "border-emerald-300 bg-emerald-50/40 hover:bg-emerald-50"}`}>
-                          <Camera className={`w-6 h-6 ${errors.payment_proof ? "text-red-400" : "text-emerald-500"}`} />
-                          <span className={`text-sm font-semibold ${errors.payment_proof ? "text-red-600" : "text-emerald-700"}`}>แตะเพื่อถ่าย/แนบสลิปการชำระเงิน</span>
+                          {paymentBusy ? <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" /> : <Camera className={`w-6 h-6 ${errors.payment_proof ? "text-red-400" : "text-emerald-500"}`} />}
+                          <span className={`text-sm font-semibold ${errors.payment_proof ? "text-red-600" : "text-emerald-700"}`}>{paymentBusy ? "กำลังอัปโหลด..." : "แตะเพื่อถ่าย/แนบสลิป (เลือกได้หลายรูป)"}</span>
                           <span className="text-[11px] text-slate-400">จำเป็นต้องแนบ — ห้ามข้าม</span>
                         </button>
                       )}
@@ -1680,13 +1710,21 @@ export default function SalesMain() {
                 </div>
               )}
               {detailSale.remark && <DetailRow label="หมายเหตุ" value={detailSale.remark} />}
-              {detailSale.payment_proof && (
-                <div className="border-t border-slate-100 pt-3 mt-1">
-                  <p className="text-xs font-semibold text-emerald-700 mb-2 flex items-center gap-1.5"><Camera className="w-3.5 h-3.5" />หลักฐานการชำระเงิน</p>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={driveImg(detailSale.payment_proof)} alt="หลักฐานการชำระเงิน" className="w-full max-h-72 object-contain rounded-xl border border-slate-200 bg-slate-50" />
-                </div>
-              )}
+              {(() => {
+                const proofs = detailSale.payment_proofs?.length ? detailSale.payment_proofs : (detailSale.payment_proof ? [detailSale.payment_proof] : []);
+                if (!proofs.length) return null;
+                return (
+                  <div className="border-t border-slate-100 pt-3 mt-1">
+                    <p className="text-xs font-semibold text-emerald-700 mb-2 flex items-center gap-1.5"><Camera className="w-3.5 h-3.5" />หลักฐานการชำระเงิน ({proofs.length} รูป)</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {proofs.map((img, i) => (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img key={i} src={driveImg(img)} alt={`หลักฐาน ${i + 1}`} className="w-full max-h-72 object-contain rounded-xl border border-slate-200 bg-slate-50" />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
               {detailSale.custom_fields && Object.keys(detailSale.custom_fields).length > 0 && (
                 <div className="border-t border-slate-100 pt-3 mt-1">
                   <p className="text-xs font-semibold text-violet-700 mb-2">รายการเพิ่มเติม</p>

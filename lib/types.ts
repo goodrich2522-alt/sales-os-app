@@ -87,7 +87,8 @@ export interface Sale {
   custom_notifications?: { label: string; date: string }[];
   contact_source?: ContactSource;
   sale_type?: SaleType;
-  payment_proof?: string; // รูปหลักฐานการชำระเงิน (บังคับ) — เก็บ URL หลังอัปโหลด
+  payment_proof?: string;    // รูปหลักฐานการชำระเงิน (รูปแรก — backward compat) เก็บ URL หลังอัปโหลด
+  payment_proofs?: string[]; // หลักฐานการชำระหลายรูป (URL หลังอัปโหลด) — ใช้แทน payment_proof เมื่อมีหลายรูป
   add_ons?: { name: string; price: number }[]; // อุปกรณ์เสริมติดตั้ง (เฟส 4)
   freebie?: boolean;      // ของแถมเซ็ท 2,800 (เฉพาะรถน้ำมัน Q22K2 · เฟส 5)
   shipping_cost?: number; // ค่าขนส่งจากซัพพลายเออร์ (เฟส 5)
