@@ -1955,6 +1955,19 @@ export default function StockMain() {
                       <Camera className="w-3.5 h-3.5" />{photoBusy ? "กำลังอัปโหลด..." : "เพิ่มรูป"}
                     </label>
                   </div>
+                  {/* ผู้รับ/ผู้ส่งมอบรถ — โชว์ให้ชัดว่าใครตรวจรับ (ไม่ต้องเปิดดู timeline) */}
+                  {recs.some(r => r.transporter_name) && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {recs.filter(r => r.transporter_name).map((r, i) => {
+                        const recv = (r.role ?? "ผู้รับรถ") === "ผู้รับรถ";
+                        return (
+                          <span key={i} className={`inline-flex items-center gap-1 text-[11px] font-medium rounded-full px-2 py-0.5 border ${recv ? "bg-sky-50 text-sky-700 border-sky-200" : "bg-indigo-50 text-indigo-700 border-indigo-200"}`}>
+                            {recv ? "📷 รับโดย" : "🚚 ส่งโดย"} {r.transporter_name}{r.date ? ` · ${r.date}` : ""}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
                   {photos.length > 0 ? (
                     <div className="grid grid-cols-3 gap-2">
                       {photos.map((img, i) => (
