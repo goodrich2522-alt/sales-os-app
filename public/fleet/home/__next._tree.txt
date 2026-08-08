@@ -1,4 +1,4 @@
-:HL["/sales-os-app.github.io/fleet/_next/static/chunks/382xsa9z3dgpg.css","style"]
+:HL["/sales-os-app.github.io/fleet/_next/static/chunks/0ouppgt2px5ln.css","style"]
 :HL["/sales-os-app.github.io/fleet/_next/static/media/0bbfe7d70ca362ab-s.p.18qb6f14hcpif.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
 :HL["/sales-os-app.github.io/fleet/_next/static/media/22d7e241aeb09639-s.p.33ndw2snxq3le.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
 :HL["/sales-os-app.github.io/fleet/_next/static/media/3836391c10060ce4-s.p.2ub5ob4yff_mt.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
@@ -9,4 +9,4 @@
 :HL["/sales-os-app.github.io/fleet/_next/static/media/bcc136e7df79ae49-s.p.3vvwmya0_3z_s.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
 :HL["/sales-os-app.github.io/fleet/_next/static/media/e12efafcac952e69-s.p.3gt1gw19188hm.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
 :HL["/sales-os-app.github.io/fleet/_next/static/media/e9ed0bc71a38d6c1-s.p.2m2jj329378-j.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
-0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"home","param":null,"prefetchHints":0,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}}}},"staleTime":300,"buildId":"YNbjHZPI17fszQEPkxNlg"}
+0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"home","param":null,"prefetchHints":0,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}}}},"staleTime":300,"buildId":"oW6tlKn86eeULCE0Qt3ke"}
