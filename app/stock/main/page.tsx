@@ -22,7 +22,7 @@ import { parseForkliftCsv, assignIdsAndStamp, buildCsvTemplate } from "@/lib/for
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { apiEnabled } from "@/lib/api";
 import { driveImg, resizeImageFile } from "@/lib/img";
-import { parseSvc } from "@/lib/warranty";
+import { parseSvc, nextDue, SVC_SOON_DAYS } from "@/lib/warranty";
 import { WarrantyBlock } from "@/components/WarrantyBlock";
 
 
@@ -680,7 +680,14 @@ export default function StockMain() {
       .filter(x => x.left != null && x.left <= 14)
       .sort((a, b) => (a.left ?? 0) - (b.left ?? 0)); // เกินมากสุดก่อน
   }, [sales]);
+  // ── ศูนย์แจ้งเตือนรวม — นับรอบเช็ครับประกันที่เกิน/ใกล้ถึง + ยอดรวมทุกหมวด ──
+  const warrantyDueCount = useMemo(() => {
+    let n = 0;
+    forklifts.forEach(f => { const svc = parseSvc(f); if (!svc) return; const nd = nextDue(svc); if (!nd) return; const d = daysUntil(nd.due); if (d != null && d <= SVC_SOON_DAYS) n++; });
+    return n;
+  }, [forklifts]); // eslint-disable-line react-hooks/exhaustive-deps
   const overdueMTO = madeToOrderAlerts.filter(x => (x.left ?? 0) < 0); // เกินกำหนดแล้ว → เด้งกระดิ่ง (ข)
+  const notifTotal = pendingAlerts.length + waiting + warrantyDueCount + agingOver90 + overdueMTO.length;
 
   // Settings — standard dropdown handlers
   const saveOption = () => {
@@ -715,22 +722,13 @@ export default function StockMain() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* กระดิ่ง 0 (ส้ม) — คำขอจอง รออนุมัติ (ต้องกดอนุมัติ/ปฏิเสธ) → คลิกเลื่อนไปการ์ด */}
-            <button onClick={() => document.getElementById("pending-bookings")?.scrollIntoView({ behavior: "smooth" })}
-              title="คำขอจอง รออนุมัติจากสต็อก"
-              className="relative flex items-center text-slate-600 hover:text-orange-600 hover:bg-orange-50 p-2 rounded-lg transition-all border border-transparent hover:border-orange-200">
-              <ShoppingCart className="w-5 h-5" />
-              {pendingBookings.length > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-orange-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{pendingBookings.length}</span>
-              )}
-            </button>
-            {/* กระดิ่ง 2 (ชมพู) — ออเดอร์ขายจากเซลล์ รอรับทราบ → คลิกเปิดกล่องแจ้งเตือน */}
+            {/* 🔔 ศูนย์แจ้งเตือนรวม — รวมทุกหมวด (ออเดอร์ใหม่/รถรอรับ/รอบเช็ค/รถค้าง/สั่งผลิตเกิน) */}
             <button onClick={() => setShowAlerts(true)}
-              title="ออเดอร์ขายจากเซลล์ รอรับทราบ"
+              title="ศูนย์แจ้งเตือน"
               className="relative flex items-center text-slate-600 hover:text-rose-600 hover:bg-rose-50 p-2 rounded-lg transition-all border border-transparent hover:border-rose-200">
               <Bell className="w-5 h-5" />
-              {pendingAlerts.length > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{pendingAlerts.length}</span>
+              {notifTotal > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{notifTotal > 99 ? "99+" : notifTotal}</span>
               )}
             </button>
             <button onClick={() => setShowSaleHistory(true)}
@@ -1269,7 +1267,7 @@ export default function StockMain() {
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 flex-shrink-0">
               <div className="flex items-center gap-2">
                 <Bell className="w-4 h-4 text-rose-500" />
-                <h3 className="text-sm font-bold text-slate-800">รายการรอยืนยันตัดออกจากสต็อก</h3>
+                <h3 className="text-sm font-bold text-slate-800">ศูนย์แจ้งเตือน{notifTotal > 0 ? ` (${notifTotal})` : ""}</h3>
               </div>
               <button onClick={() => setShowAlerts(false)} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg p-1.5"><X className="w-4 h-4" /></button>
             </div>
@@ -1280,6 +1278,32 @@ export default function StockMain() {
               </div>
             )}
             <div className="overflow-y-auto p-3 flex flex-col gap-2.5">
+              {/* หมวดแจ้งเตือนรวม — คลิกไปยังจุดที่เกี่ยวข้อง */}
+              {waiting > 0 && (
+                <button onClick={() => { setShowAlerts(false); setListStatus("รอรับ"); setListView("list"); }}
+                  className="text-left flex items-center gap-2.5 bg-sky-50 border border-sky-200 rounded-xl p-2.5 hover:border-sky-300">
+                  <span className="text-lg flex-shrink-0">📦</span>
+                  <div className="flex-1 min-w-0"><p className="text-xs font-bold text-sky-800">รถรอรับเข้าคลัง</p><p className="text-[11px] text-sky-600">{waiting} คัน รอผู้ขนส่งรับ</p></div>
+                  <ChevronRight className="w-4 h-4 text-sky-400 flex-shrink-0" />
+                </button>
+              )}
+              {warrantyDueCount > 0 && (
+                <button onClick={() => { setShowAlerts(false); router.push("/dashboard/warranty"); }}
+                  className="text-left flex items-center gap-2.5 bg-teal-50 border border-teal-200 rounded-xl p-2.5 hover:border-teal-300">
+                  <span className="text-lg flex-shrink-0">🔧</span>
+                  <div className="flex-1 min-w-0"><p className="text-xs font-bold text-teal-800">รอบเช็ครับประกัน</p><p className="text-[11px] text-teal-600">{warrantyDueCount} คัน เกิน/ใกล้ถึงกำหนด</p></div>
+                  <ChevronRight className="w-4 h-4 text-teal-400 flex-shrink-0" />
+                </button>
+              )}
+              {agingOver90 > 0 && (
+                <button onClick={() => { setShowAlerts(false); setListView("aging"); }}
+                  className="text-left flex items-center gap-2.5 bg-amber-50 border border-amber-200 rounded-xl p-2.5 hover:border-amber-300">
+                  <span className="text-lg flex-shrink-0">⏳</span>
+                  <div className="flex-1 min-w-0"><p className="text-xs font-bold text-amber-800">รถค้างสต็อกนาน</p><p className="text-[11px] text-amber-600">{agingOver90} คัน ค้าง &gt; 90 วัน</p></div>
+                  <ChevronRight className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                </button>
+              )}
+              {(waiting > 0 || warrantyDueCount > 0 || agingOver90 > 0) && (overdueMTO.length > 0 || pendingAlerts.length > 0) && <div className="h-px bg-slate-100 my-0.5" />}
               {/* ข: รถสั่งผลิตเกินกำหนด เด้งในกระดิ่ง */}
               {overdueMTO.length > 0 && (
                 <div className="flex flex-col gap-1.5">
@@ -1296,9 +1320,9 @@ export default function StockMain() {
                 </div>
               )}
               {pendingAlerts.length === 0 ? (
-                overdueMTO.length === 0 && (
+                notifTotal === 0 && (
                 <div className="text-center py-10 text-slate-400 text-sm flex flex-col items-center gap-2">
-                  <CheckCircle className="w-8 h-8 opacity-40" />ไม่มีรายการค้าง
+                  <CheckCircle className="w-8 h-8 opacity-40" />ไม่มีการแจ้งเตือน
                 </div>
                 )
               ) : pendingAlerts.map(al => {
