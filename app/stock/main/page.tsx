@@ -165,13 +165,20 @@ export default function StockMain() {
     setNoteEdit((detailItem?.custom_fields?.["หมายเหตุการขาย"] as string) ?? ""); setNoteSaved(false);
     setOrderDateEdit((detailItem?.custom_fields?.["วันสั่งรถ"] as string) ?? ""); setOrderSaved(false);
     const cf = (detailItem?.custom_fields ?? {}) as Record<string, unknown>;
+    // ดีลล่าสุดของรถคันนี้จากฝ่ายขาย — ใช้เติมช่องการเงินถ้ายังไม่เคยบันทึกเอง (cf ว่าง)
+    const saleForCar = detailItem
+      ? [...sales].filter(s => s.forklift_id === detailItem.id)
+          .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))[0]
+      : undefined;
+    const addonTotal = (saleForCar?.add_ons ?? []).reduce((sum, a) => sum + (Number(a.price) || 0), 0);
     setFinEdit({
       pi: detailItem?.pi_no ?? "",
       cost: detailItem?.cost_price ? String(detailItem.cost_price) : "",
-      sale: cf["ราคาขายจริง"] != null ? String(cf["ราคาขายจริง"]) : "",
-      ship: cf["ค่าขนส่งจริง"] != null ? String(cf["ค่าขนส่งจริง"]) : "",
-      addon: cf["ทุนอุปกรณ์เสริม"] != null ? String(cf["ทุนอุปกรณ์เสริม"]) : "",
-      freebie: cf["ของแถม"] != null ? String(cf["ของแถม"]) : "",
+      // cf (บันทึกเอง) มาก่อน · ถ้าว่าง → ดึงจากดีลฝ่ายขาย
+      sale: cf["ราคาขายจริง"] != null ? String(cf["ราคาขายจริง"]) : (saleForCar?.actual_sale ? String(saleForCar.actual_sale) : ""),
+      ship: cf["ค่าขนส่งจริง"] != null ? String(cf["ค่าขนส่งจริง"]) : (saleForCar?.shipping_cost ? String(saleForCar.shipping_cost) : ""),
+      addon: cf["ทุนอุปกรณ์เสริม"] != null ? String(cf["ทุนอุปกรณ์เสริม"]) : (addonTotal ? String(addonTotal) : ""),
+      freebie: cf["ของแถม"] != null ? String(cf["ของแถม"]) : (saleForCar?.freebie ? "2800" : ""),
       profit: cf["กำไร(ไฟล์)"] != null ? String(cf["กำไร(ไฟล์)"]) : "",
     });
     setFinSaved(false);
@@ -1851,8 +1858,13 @@ export default function StockMain() {
                 {/* ข้อมูลการขายจริง (จากไฟล์สต็อก) — ราคาขาย/ค่าขนส่ง/ทุนอุปกรณ์ + กำไรจริงคำนวณ (เฟส 3) */}
                 {(() => {
                   const cf = (it.custom_fields || {}) as Record<string, unknown>;
-                  const sale = Number(cf["ราคาขายจริง"]) || 0, ship = Number(cf["ค่าขนส่งจริง"]) || 0, addon = Number(cf["ทุนอุปกรณ์เสริม"]) || 0;
-                  const free = Number(cf["ของแถม"]) || 0;
+                  // ถ้ายังไม่บันทึกเอง (cf ว่าง) → ใช้ข้อมูลจากดีลฝ่ายขายที่ลงมาแล้ว
+                  const deal = saleByFk.get(it.id);
+                  const dealAddon = (deal?.add_ons ?? []).reduce((s, a) => s + (Number(a.price) || 0), 0);
+                  const sale = Number(cf["ราคาขายจริง"]) || Number(deal?.actual_sale) || 0;
+                  const ship = Number(cf["ค่าขนส่งจริง"]) || Number(deal?.shipping_cost) || 0;
+                  const addon = Number(cf["ทุนอุปกรณ์เสริม"]) || dealAddon || 0;
+                  const free = Number(cf["ของแถม"]) || (deal?.freebie ? 2800 : 0);
                   const fp = cf["กำไร(ไฟล์)"];
                   if (!(sale || ship || addon || free || fp)) return null;
                   const cost = Number(it.cost_price) || 0;
