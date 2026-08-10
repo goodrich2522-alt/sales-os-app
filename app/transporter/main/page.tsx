@@ -64,8 +64,11 @@ export default function TransporterMain() {
   const isReceiver = role === "ผู้รับรถ";
 
   // ===== ผู้รับรถ: เลือกผู้ผลิต → PI → คัน =====
-  const waitingList = forklifts.filter(f => String(f.status || "") === "รอรับ");
-  // ตัวกรองตามผู้ผลิต (โฟล์คลิฟท์ที่ต้องรับเข้า) — โชว์ HELI/HANGCHA/EP เสมอ + ยี่ห้ออื่นที่มีรถรอรับ
+  // โชว์ทุก PI ที่มีรถจริงในสต็อก (ตั้งแต่ PI แรกถึงปัจจุบัน) — คนรับเลื่อนหา PI ที่รับจริงเอง
+  // ยกเว้นรถที่ปิดการขาย/ส่งมอบ/รถเช่าไปแล้ว (แก้ไข/รับซ้ำไม่ได้)
+  const isLockedStatus = (st: string) => /ปิดการขาย|ขายแล้ว|ส่งมอบ|เช่า/.test(st);
+  const waitingList = forklifts.filter(f => !isLockedStatus(String(f.status || "").trim()));
+  // ตัวกรองตามผู้ผลิต (โฟล์คลิฟท์ที่ต้องรับเข้า) — โชว์ HELI/HANGCHA/EP เสมอ + ยี่ห้ออื่นที่มีรถในสต็อก
   const FORKLIFT_BRANDS = ["HELI", "HANGCHA", "EP"];
   const brandOf = (f: Forklift) => String(f.brand || "").trim().toUpperCase();
   const brandCount = (b: string) => waitingList.filter(f => brandOf(f) === b.toUpperCase()).length;
@@ -187,14 +190,18 @@ export default function TransporterMain() {
     const rd = thaiDate(receivedDate);
     addInspection({ id: insId, unit_no: snKey, transporter_name: receiverName.trim() || username, transporter_phone: userphone || undefined, date: receivedDate || today(), ...buildImagePayload(), role: "ผู้รับรถ" });
     const before = { ...recvTarget };
-    // นำเข้าอัตโนมัติ — รับรถแล้วขึ้น "พร้อมขาย" ทันที (ไม่ต้องรอฝ่ายสต็อกยืนยันนำเข้า)
+    // รถที่ติดจอง/มัดจำ/รอไฟแนนซ์ไว้แล้ว → คงสถานะเดิม (กันรถหลุดกลับพร้อมขายแล้วโดนขายซ้ำ)
+    // รถทั่วไป (รอรับ/สั่งผลิต ฯลฯ) → นำเข้าอัตโนมัติขึ้น "พร้อมขาย" ทันที
+    const curStatus = String(recvTarget.status || "").trim();
+    const keepStatus = /จอง|มัดจำ|ไฟแนนซ์/.test(curStatus);
+    const newStatus = keepStatus ? curStatus : "พร้อมขาย";
     updateForklift({
       ...recvTarget,
       SN: carHasSN ? recvTarget.SN : snForSave,     // รถสั่งผลิต → เติม SN จริงที่กรอก
       received_date: rd || recvTarget.received_date,
-      status: "พร้อมขาย",
+      status: newStatus,
     });
-    setDone({ insId, before, label: `รับรถ ${snForSave} แล้ว → พร้อมขาย (นำเข้าอัตโนมัติ)` });
+    setDone({ insId, before, label: keepStatus ? `รับรถ ${snForSave} แล้ว (คงสถานะ: ${curStatus})` : `รับรถ ${snForSave} แล้ว → พร้อมขาย (นำเข้าอัตโนมัติ)` });
   };
 
   const submitDeliverer = () => {
@@ -233,7 +240,8 @@ export default function TransporterMain() {
     setRecvCarId(null); setUnitNo("");
   };
   // จำนวนรถใน PI นี้ที่ยังรอรับ — ใช้โชว์ปุ่ม "รับคันถัดไป"
-  const remainingInPI = openPI ? (piGroups.find(g => g.pi === openPI)?.cars.length ?? 0) : 0;
+  // เหลือกี่คันที่ "ยังรอรับ" จริงใน PI นี้ (ไม่นับคันที่รับ/มีสถานะอื่นแล้ว) — ใช้โชว์ปุ่มรับคันถัดไป
+  const remainingInPI = openPI ? (piGroups.find(g => g.pi === openPI)?.cars.filter(c => String(c.status || "").trim() === "รอรับ").length ?? 0) : 0;
 
   const switchRole = (r: TransporterRole) => { setRole(r); resetForm(); };
   const handleLogout = () => { localStorage.removeItem("transporter_name"); localStorage.removeItem("transporter_phone"); router.push("/transporter/login"); };
@@ -428,8 +436,8 @@ export default function TransporterMain() {
                 /* ── ระดับ 1: การ์ดเลข PI ── */
                 <>
                   <h2 className="text-base font-bold text-slate-800 mb-1 flex items-center gap-2"><FileText className="w-4 h-4 text-amber-500" />เลือกผู้ผลิต แล้วเลือกเลข PI ที่จะรับเข้า</h2>
-                  <p className="text-xs text-slate-500 mb-3">เลือกยี่ห้อรถก่อน → แตะการ์ด PI เพื่อดูรถทุกคันใน PI นั้น แล้วเลือกคันที่จะรับ</p>
-                  {/* แถบผู้ผลิต — HELI/HANGCHA/EP + ทั้งหมด (โชว์จำนวนรถรอรับต่อยี่ห้อ) */}
+                  <p className="text-xs text-slate-500 mb-3">โชว์ทุก PI ที่มีรถในระบบ (เลื่อนหา PI ที่รับจริง) · รถที่ปิดการขาย/รถเช่าแล้วจะไม่ขึ้น</p>
+                  {/* แถบผู้ผลิต — HELI/HANGCHA/EP + ทั้งหมด (โชว์จำนวนรถต่อยี่ห้อ) */}
                   <div className="flex flex-wrap gap-2 mb-4">
                     {[{ b: "ทั้งหมด", n: waitingList.length }, ...brandTabs.map(b => ({ b, n: brandCount(b) }))].map(({ b, n }) => (
                       <button key={b} onClick={() => { setBrandFilter(b); setOpenPI(null); }}
@@ -440,8 +448,8 @@ export default function TransporterMain() {
                   </div>
                   {piGroups.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                      <Truck className="w-10 h-10 text-slate-300 mb-2" /><p className="text-sm">{brandFilter === "ทั้งหมด" ? "ยังไม่มีรถรอรับเข้า" : `ยังไม่มีรถ ${brandFilter} รอรับเข้า`}</p>
-                      <p className="text-xs text-slate-400 mt-1">รถต้องอยู่ในระบบสถานะ &quot;รอรับ&quot; ก่อน (ฝ่ายสต็อก/นำเข้า PI)</p>
+                      <Truck className="w-10 h-10 text-slate-300 mb-2" /><p className="text-sm">{brandFilter === "ทั้งหมด" ? "ยังไม่มีรถในระบบ" : `ยังไม่มีรถ ${brandFilter} ในระบบ`}</p>
+                      <p className="text-xs text-slate-400 mt-1">เพิ่มรถที่ฝ่ายสต็อก (นำเข้า PI) ก่อน</p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
@@ -479,12 +487,17 @@ export default function TransporterMain() {
                     {openPICars.map(c => {
                       const noSN = !(c.SN && String(c.SN).trim());
                       const docRef = String(c.custom_fields?.["รหัสอ้างอิงนำเข้า"] || "").trim();
+                      const st = String(c.status || "").trim();
+                      const waiting = st === "รอรับ";                       // ยังไม่รับ = ป้ายส้ม · รับแล้ว/สถานะอื่น = เทา
                       return (
                         <button key={c.id} onClick={() => { setRecvCarId(c.id); setUnitNo(String(c.SN || "")); }}
                           className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-amber-50 hover:border-amber-300 p-3.5 transition-all text-left active:scale-[0.99]">
                           <div className="bg-white border border-slate-200 rounded-lg p-2 flex-shrink-0"><Truck className="w-4 h-4 text-amber-600" /></div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-slate-800 text-sm">{c.brand} {c.model}</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-semibold text-slate-800 text-sm">{c.brand} {c.model}</p>
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${waiting ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-600"}`}>{st || "—"}</span>
+                            </div>
                             <p className="text-[11px] text-slate-500 mt-0.5">{noSN
                               ? <span className="text-amber-600 font-semibold">รหัส {c.id} · รถสั่งผลิต (ยังไม่มี SN — กรอกตอนรับ)</span>
                               : <>SN: <span className="font-semibold text-slate-700">{c.SN}</span></>}</p>
