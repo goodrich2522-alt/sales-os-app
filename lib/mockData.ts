@@ -54,7 +54,7 @@ export const DEFAULT_LOCATIONS = ["สำนักงานใหญ่", "ส�
 // ชุดสถานะรวม (ใช้ตัวกรองเดียวกันทั้งหน้าขาย+สต็อก · 5 ส.ค. 2026)
 export const DEFAULT_STOCK_STATUSES = ["พร้อมขาย", "ติดจอง (รอโอนมัดจำ)", "มัดจำแล้ว/เงินสด", "มัดจำแล้ว/ไฟแนนซ์", "ปิดการขายแล้ว", "สั่งผลิต", "รอรับ", "รถเช่า", "เคลม/รับกลับ"];
 export const CONTACT_SOURCES = ["Line", "Facebook", "TikTok", "โทร", "Google", "คนอื่นบอกต่อ"] as const;
-export const SALE_TYPES = ["รถเช่า", "รถขายเต็มคัน", "รถมือสอง", "งานซ่อม"] as const;
+export const SALE_TYPES = ["รถเช่า", "รถใหม่"] as const;
 
 export const mockForklifts: Forklift[] = [
   { id: "1",  SN: "HEL-001", brand: "HELI",       model: "CPCD30",    capacity: "3 ตัน",   height: "3 เมตร",   fuel: "ดีเซล",    cost_price: 420000, stock_price: 520000, status: "พร้อมขาย",    created_at: "2024-01-15", vehicle_category: "Forklift" },

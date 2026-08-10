@@ -6,7 +6,8 @@ export type SaleStatus =
   | "มัดจำแล้ว" | "ขายแล้ว" | "จอง" | "รอผ่านไฟแนนซ์"; // (เก่า — backward compat)
 export type VehicleType = "Forklift" | "Stacker" | "Handlift" | "Electric Pallet Truck" | "Reach Truck";
 export type ContactSource = "Line" | "Facebook" | "TikTok" | "โทร" | "Google" | "คนอื่นบอกต่อ";
-export type SaleType = "รถเช่า" | "รถขายเต็มคัน" | "รถมือสอง" | "งานซ่อม";
+// ประเภทการขาย: ใช้จริง 2 ค่า (รถเช่า/รถใหม่) · คงค่าเดิมไว้เพื่อ backward compat ข้อมูลเก่า
+export type SaleType = "รถเช่า" | "รถใหม่" | "รถขายเต็มคัน" | "รถมือสอง" | "งานซ่อม";
 
 // Kept as string aliases for flexibility — dropdown options are user-configurable
 export type FuelType = string;
