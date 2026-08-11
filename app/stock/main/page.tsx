@@ -6,7 +6,7 @@ import {
   Package, Plus, LogOut, CheckCircle, AlertCircle, List, X,
   TrendingUp, Boxes, Trash2, Settings, Pencil, Check, ChevronDown, ChevronRight,
   Clock, Hash, Camera, ImageOff, Eye, Bell, MapPin, History,
-  Download, Upload, FileText, ShoppingCart, User, QrCode
+  Download, Upload, FileText, ShoppingCart, User, QrCode, PackageCheck
 } from "lucide-react";
 import { Forklift, Sale, STOCK_APPROVAL_FIELD, isVoidSale } from "@/lib/types";
 import { COMMISSION_FIELD, COMMISSION_CATEGORIES } from "@/lib/commission";
@@ -199,6 +199,23 @@ export default function StockMain() {
       for (const f of Array.from(files)) { try { imgs.push(await resizeImageFile(f)); } catch { /* ข้ามรูปที่อ่านไม่ได้ */ } }
       if (imgs.length) addInspection({ id: `ins_stock_${Date.now()}`, unit_no: target.SN || target.id, transporter_name: `${username} (สต็อก)`, date: today(), images: imgs, role: "ผู้รับรถ" });
     } finally { setPhotoBusy(false); }
+  };
+
+  // ── ฝ่ายสต็อกกดรับรถแทนผู้ขนส่ง (ลงข้อมูลเก่า) — รอรับ → พร้อมขาย + ตั้งวันรับ + สร้าง inspection ถ้ายังไม่มี ──
+  const receiveInStock = (target: Forklift) => {
+    const key = String(target.SN || target.id).toUpperCase();
+    const idKey = String(target.id).toUpperCase();
+    const hasRecv = inspections.some(r => {
+      const u = String(r.unit_no ?? "").toUpperCase();
+      return (u === key || u === idKey) && (r.role ?? "ผู้รับรถ") === "ผู้รับรถ";
+    });
+    // ยังไม่มีบันทึกผู้รับ → สร้างให้ (ระบุว่าฝ่ายสต็อกรับแทน) · ถ้าแนบรูปไว้แล้วจะมี inspection อยู่แล้ว
+    if (!hasRecv) addInspection({ id: `ins_stock_${Date.now()}`, unit_no: target.SN || target.id, transporter_name: `${username} (สต็อก)`, date: today(), images: [], role: "ผู้รับรถ" });
+    // รถที่ติดจอง/มัดจำ/ไฟแนนซ์ไว้แล้ว → คงสถานะเดิม (กันขายซ้ำ) · รถทั่วไป → พร้อมขาย
+    const cur = String(target.status || "").trim();
+    const keepStatus = /จอง|มัดจำ|ไฟแนนซ์/.test(cur);
+    updateForklift({ ...target, received_date: target.received_date || today(), status: keepStatus ? cur : "พร้อมขาย" });
+    showToast(keepStatus ? `รับรถเข้าคลังแล้ว (คงสถานะ ${cur})` : "รับรถเข้าคลังแล้ว → พร้อมขาย ✓");
   };
 
   // ── แนบเอกสาร PDF ต่อคัน (ใบกำกับ/PI/ใบรับประกัน) → อัปโหลด GAS→Drive เก็บ URL ใน custom_fields["เอกสารแนบ"] ──
@@ -1773,6 +1790,19 @@ export default function StockMain() {
               </div>
               {/* body */}
               <div className="overflow-y-auto flex-1 min-h-0 p-5 flex flex-col gap-5">
+                {/* รับรถแทนผู้ขนส่ง (ลงข้อมูลเก่า) — โชว์เฉพาะรถที่ยัง "รอรับ" */}
+                {String(it.status).trim() === "รอรับ" && (
+                  <div className="bg-sky-50 border border-sky-200 rounded-xl p-3 flex items-center gap-3 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-sky-800 flex items-center gap-1.5"><PackageCheck className="w-4 h-4" />รถนี้ยังรอรับเข้าคลัง</p>
+                      <p className="text-[11px] text-sky-600 mt-0.5">แนบรูป (ด้านล่าง) แล้วกดรับรถแทนผู้ขนส่งได้เลย → รถจะขึ้น “พร้อมขาย”</p>
+                    </div>
+                    <button onClick={() => receiveInStock(it)}
+                      className="flex-shrink-0 flex items-center gap-1.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-sm font-bold px-4 py-2.5 rounded-xl transition-all active:scale-95">
+                      <CheckCircle className="w-4 h-4" />รับรถเข้าคลัง
+                    </button>
+                  </div>
+                )}
                 <Section title="สเปกรถ" rows={spec} />
                 <Section title="ข้อมูลสต็อก / จัดซื้อ" rows={info} />
                 {/* ข้อมูลการขาย (ลูกค้า/ราคา/สถานะ) — สำคัญสุดสำหรับรถที่ขายแล้ว จึงอยู่บนสุด */}
