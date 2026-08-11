@@ -1,18 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
-  ArrowLeft, ShieldCheck, Download, AlertTriangle, Clock, CheckCircle, Wrench,
+  ArrowLeft, ShieldCheck, Download, AlertTriangle, Clock, CheckCircle, Wrench, ChevronDown,
 } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
 import { parseSvc, nextDue, daysUntil, SVC_SOON_DAYS, SVC_ROUNDS } from "@/lib/warranty";
+import { WarrantyBlock } from "@/components/WarrantyBlock";
 import { DashboardGuard } from "@/components/DashboardGuard";
 
 function WarrantyPageInner() {
   const { forklifts, sales } = useApp();
   const today = new Date().toISOString().slice(0, 10);
   const [filter, setFilter] = useState<"due" | "overdue" | "soon" | "all">("due");
+  const [openId, setOpenId] = useState<string | null>(null); // การ์ดที่กางดู/แก้รอบเช็ค
+  const [actor, setActor] = useState("แดชบอร์ด");
+  useEffect(() => {
+    try { const du = localStorage.getItem("dash_user"); if (du) { const p = JSON.parse(du); setActor(p.name || p.email || "แดชบอร์ด"); } } catch {}
+  }, []);
 
   // ลูกค้าล่าสุดต่อรถ (จากดีล)
   const custByFk = useMemo(() => {
@@ -125,21 +131,33 @@ function WarrantyPageInner() {
           )}
           {shown.map(r => {
             const b = badgeOf(r);
+            const open = openId === r.fk.id;
             return (
-              <div key={r.fk.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center gap-3 flex-wrap">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md text-slate-500 bg-slate-100 border border-slate-200">#{r.fk.SN || r.fk.id}</span>
-                    <span className="font-bold text-slate-800 text-sm">{r.fk.brand} {r.fk.model}</span>
+              <div key={r.fk.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                {/* หัวการ์ด — กดเพื่อกาง/พับ รายละเอียด + แก้รอบเช็ค */}
+                <button onClick={() => setOpenId(open ? null : r.fk.id)}
+                  className="w-full p-4 flex items-center gap-3 flex-wrap text-left hover:bg-slate-50 transition-all">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md text-slate-500 bg-slate-100 border border-slate-200">#{r.fk.SN || r.fk.id}</span>
+                      <span className="font-bold text-slate-800 text-sm">{r.fk.brand} {r.fk.model}</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {r.customer || "—"} · เริ่มรับประกัน {r.svc.start || "—"} · เช็คแล้ว {r.doneCount}/{SVC_ROUNDS} รอบ
+                    </p>
+                    {!r.complete && (
+                      <p className="text-[11px] text-teal-700 mt-0.5 font-semibold">รอบถัดไป: รอบที่ {(r.nextIndex ?? 0) + 1} · กำหนด {r.due || "— (ยังไม่ระบุวันเริ่ม)"}</p>
+                    )}
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {r.customer || "—"} · เริ่มรับประกัน {r.svc.start || "—"} · เช็คแล้ว {r.doneCount}/{SVC_ROUNDS} รอบ
-                  </p>
-                  {!r.complete && (
-                    <p className="text-[11px] text-teal-700 mt-0.5 font-semibold">รอบถัดไป: รอบที่ {(r.nextIndex ?? 0) + 1} · กำหนด {r.due || "— (ยังไม่ระบุวันเริ่ม)"}</p>
-                  )}
-                </div>
-                <span className={`text-xs font-bold px-2.5 py-1 rounded-full border flex-shrink-0 ${b.c}`}>{b.t}</span>
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full border flex-shrink-0 ${b.c}`}>{b.t}</span>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+                </button>
+                {/* กางแล้ว → แก้/บันทึกรอบเช็คได้เลย (WarrantyBlock เดียวกับหน้าสต็อก) */}
+                {open && (
+                  <div className="px-4 pb-4 border-t border-slate-100 pt-3">
+                    <WarrantyBlock forklift={r.fk} actor={actor} />
+                  </div>
+                )}
               </div>
             );
           })}
@@ -150,7 +168,7 @@ function WarrantyPageInner() {
           <div className="mt-3 flex flex-col gap-2 text-xs leading-relaxed">
             <div>คิดเป็น <b>เดือน</b> ไม่ผูกกับชั่วโมงใช้งาน (แต่ละคันใช้งานต่างกัน) · ฟรี {SVC_ROUNDS} รอบ</div>
             <div><b>รอบแรก</b> = วันเริ่มรับประกัน (วันส่งมอบ) + 3 เดือน · <b>รอบถัดไป</b> = วันเข้าเช็คจริงครั้งก่อน + 3 เดือน</div>
-            <div className="text-slate-400">🔴 เกินกำหนด · 🟡 ใกล้ถึง (≤{SVC_SOON_DAYS} วัน) · 🟢 ยังไม่ถึง · อัปเดตรอบเช็คได้ที่กล่องรายละเอียดรถ (หน้าสต็อก) เมื่อรถเข้ามาเช็ค</div>
+            <div className="text-slate-400">🔴 เกินกำหนด · 🟡 ใกล้ถึง (≤{SVC_SOON_DAYS} วัน) · 🟢 ยังไม่ถึง · <b>กดที่การ์ดรถ</b>เพื่อกางบันทึกรอบเช็ค/แก้เงื่อนไขรับประกันได้ที่หน้านี้เลย</div>
           </div>
         </details>
       </main>
