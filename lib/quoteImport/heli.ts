@@ -23,9 +23,9 @@ function firstPrice(s: string): number | undefined {
 export function parseHeli(rawText: string): QuoteParseResult {
   const text = rawText.replace(/\s+/g, " ").trim();
 
-  // เลขสัญญา/PI: รูปแบบ C20726201-120 (ตัวอักษร + ตัวเลข + -เลข) → เก็บเป็น PIxxx (เลขท้าย = เลข PI จริง)
-  const piRaw = text.match(/\b([A-Z]\d{6,9}-\d{2,3})\b/)?.[1];
-  const pi = piRaw ? (piRaw.match(/-(\d+)$/) ? `PI${piRaw.match(/-(\d+)$/)![1].padStart(3, "0")}` : piRaw) : undefined;
+  // รหัสอ้างอิงนำเข้าจริงจากเอกสาร เช่น C20726201-001 — เก็บไว้อ้างอิง
+  // ⛔ ไม่แปลงเป็นเลข PI เอง (เดิม -001 → PI001 ทำให้ชนเลข PI จริงของคันอื่น) · เว้น pi_no ว่างให้เติมเลข PI จริงทีหลัง
+  const importRef = text.match(/\b([A-Z]\d{6,9}-\d{2,3})\b/)?.[1];
   // วันที่: 29-Dec-25
   const date = text.match(/\b(\d{1,2}-[A-Z][a-z]{2}-\d{2,4})\b/)?.[1];
 
@@ -44,7 +44,7 @@ export function parseHeli(rawText: string): QuoteParseResult {
   const vehicles: ParsedVehicle[] = [];
 
   if (models.length === 0) {
-    return { vendor: "HELI", pi_no: pi, quote_date: date, vehicles: [], rawText };
+    return { vendor: "HELI", pi_no: undefined, quote_date: date, vehicles: [], rawText };
   }
 
   // กรณีปกติ HELI = 1 รุ่นต่อใบ · จับคู่ SN ให้ครบ (1 คัน/SN)
@@ -63,7 +63,7 @@ export function parseHeli(rawText: string): QuoteParseResult {
     if (!mast) flags.push("ไม่พบ MAST");
     return {
       brand: "HELI", model, SN: sn, capacity, fuel, mast, valve,
-      cost_price: cost, pi_no: pi, vendor: "HELI",
+      cost_price: cost, pi_no: undefined, import_ref: importRef, vendor: "HELI",
       flags: flags.length ? flags : undefined,
     };
   };
@@ -76,5 +76,5 @@ export function parseHeli(rawText: string): QuoteParseResult {
     vehicles.forEach((v) => (v.flags = [...(v.flags ?? []), `ใบนี้มีหลายรุ่น: ${models.join(", ")} — ตรวจว่าจับคู่ SN ถูก`]));
   }
 
-  return { vendor: "HELI", pi_no: pi, quote_date: date, vehicles, rawText };
+  return { vendor: "HELI", pi_no: undefined, quote_date: date, vehicles, rawText };
 }

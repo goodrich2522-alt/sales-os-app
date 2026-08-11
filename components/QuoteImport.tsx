@@ -105,7 +105,8 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
   const addBlankRow = () => setRows((r) => [...r, { brand: "HELI", model: "", SN: "", vendor: "unknown", flags: ["เพิ่มเอง — ตรวจข้อมูลให้ครบ"] }]);
 
   const toForklift = (v: ParsedVehicle, i: number): Forklift => ({
-    id: v.SN || `${v.pi_no || "PI"}#${i + 1}`,
+    // id: SN จริง > เลข PI ที่คนกรอก > รหัสอ้างอิงนำเข้าจริง > "PI" (กันชนกัน + ไม่โชว์ "#PI" เปล่า)
+    id: v.SN || `${v.pi_no || v.import_ref || "PI"}#${i + 1}`,
     SN: v.SN || "",
     brand: v.brand, model: v.model,
     capacity: v.capacity || "", capacity_kg: v.capacity_kg || "",
@@ -116,11 +117,12 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
     created_at: today(),
     received_date: receivedDate || undefined, // วันรับรถเข้า (ทั้งล็อต) — ถ้าไม่กรอกเว้นว่าง
     vehicle_category: categorizeModel(v.model),
-    pi_no: v.pi_no,
+    pi_no: v.pi_no || undefined,   // เว้นว่างสำหรับใบเสนอราคา — เติมเลข PI จริงทีหลัง
     custom_fields: {
       ...(v.mast ? { MAST: v.mast } : {}),
       ...(v.valve ? { Valve: v.valve } : {}),
       ...(v.fobUsd ? { "ราคา FOB (USD)": String(v.fobUsd) } : {}),
+      ...(v.import_ref ? { "รหัสอ้างอิงนำเข้า": v.import_ref } : {}), // ref จริงจากเอกสาร (เช่น C20726201-001)
       ...(orderDate ? { "วันสั่งรถ": orderDate } : {}), // วันสั่งซื้อรถ (ทั้งล็อต)
       ชีตต้นทาง: "ใบเสนอราคา",
     },
@@ -244,7 +246,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
                               <Cell val={v.brand ?? ""} onChange={(x) => edit(i, "brand", x)} w="w-24" ph="แบรนด์" />
                               <Cell val={v.model} onChange={(x) => edit(i, "model", x)} w="w-40" ph="รุ่น" />
                               <Cell val={v.SN ?? ""} onChange={(x) => edit(i, "SN", x)} w="w-32" ph="SN" />
-                              <Cell val={v.pi_no ?? ""} onChange={(x) => edit(i, "pi_no", x)} w="w-24" ph="PI" />
+                              <Cell val={v.pi_no ?? ""} onChange={(x) => edit(i, "pi_no", x)} w="w-24" ph="เลข PI จริง (เว้นได้)" />
                               <Cell val={v.capacity ?? ""} onChange={(x) => edit(i, "capacity", x)} w="w-20" ph="พิกัด" />
                               <Cell val={v.fuel ?? ""} onChange={(x) => edit(i, "fuel", x)} w="w-20" ph="พลังงาน" />
                               <Cell val={v.mast ?? ""} onChange={(x) => edit(i, "mast", x)} w="w-20" ph="เสา" />
