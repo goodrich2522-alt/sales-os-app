@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
 import { parseSvc, nextDue, daysUntil, SVC_SOON_DAYS, SVC_ROUNDS } from "@/lib/warranty";
+import { displayCode } from "@/lib/productId";
 import { WarrantyBlock } from "@/components/WarrantyBlock";
 import { DashboardGuard } from "@/components/DashboardGuard";
 
@@ -139,7 +140,7 @@ function WarrantyPageInner() {
                   className="w-full p-4 flex items-center gap-3 flex-wrap text-left hover:bg-slate-50 transition-all">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md text-slate-500 bg-slate-100 border border-slate-200">#{r.fk.SN || r.fk.id}</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md text-slate-500 bg-slate-100 border border-slate-200">#{displayCode(r.fk)}</span>
                       <span className="font-bold text-slate-800 text-sm">{r.fk.brand} {r.fk.model}</span>
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">

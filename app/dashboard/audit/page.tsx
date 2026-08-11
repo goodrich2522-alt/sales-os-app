@@ -104,7 +104,7 @@ function AuditPageInner() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold text-slate-800 text-sm">{e.action}</span>
-                    {e.entity_id && <span className="text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-md">#{e.entity_id}</span>}
+                    {e.entity_id && <span className="text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-md">#{String(e.entity_id).replace(/#\d+$/, "")}</span>}
                   </div>
                   <p className="text-xs text-slate-600 mt-0.5 break-words">{summarize(e)}</p>
                   <p className="text-[11px] text-slate-400 mt-1">โดย <span className="font-semibold text-slate-600">{e.actor || "—"}</span> · {fmtTime(e.at)}</p>
