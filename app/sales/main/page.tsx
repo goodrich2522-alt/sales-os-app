@@ -128,6 +128,7 @@ export default function SalesMain() {
   const [historyTab, setHistoryTab]       = useState<SaleStatus | "all">("all");
   const [historyView, setHistoryView]     = useState<"deals" | "customers">("deals"); // ดีลของฉัน / ลูกค้าของฉัน
   const [detailSale, setDetailSale]       = useState<Sale | null>(null);
+  const [showBooked, setShowBooked]       = useState(false); // โมดัลรายการรถติดจอง (กดจาก stat banner)
   const [cancelBox, setCancelBox]         = useState(false);   // กล่องยกเลิกการจอง
   const [cancelReason, setCancelReason]   = useState("");      // เหตุผลการยกเลิก
   const [addOns, setAddOns]               = useState<{ name: string; price: number }[]>([]); // อุปกรณ์เสริม (เฟส 4)
@@ -267,6 +268,10 @@ export default function SalesMain() {
 
   const available = forklifts.filter(isSellable);
   const readyCount = available.filter(f => String(f.status).trim() === "พร้อมขาย").length;
+  // รถติดจอง = ขายได้แต่ยังไม่ใช่ "พร้อมขาย" (จอง/มัดจำ/รอไฟแนนซ์) — โชว์ทีละยอดในโมดัล
+  const bookedCars = available.filter(f => String(f.status).trim() !== "พร้อมขาย");
+  const latestSaleFor = (fid: string) => [...sales].filter(s => s.forklift_id === fid)
+    .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))[0];
   // ฐานรายการ: ปกติ = รถขายได้ · เลือกสถานะ = ทุกสถานะที่ตรง · "รับมาล่าสุด" = รถขายได้ (เรียงวันรับทีหลัง)
   const listBase   = (fStatus && fStatus !== "__recent__") ? forklifts.filter(f => String(f.status).trim() === fStatus) : available;
   const brands     = [...new Set(forklifts.map(f => f.brand).filter(Boolean))].sort(); // ทุกยี่ห้อในระบบ (CNC ฯลฯ)
@@ -822,8 +827,11 @@ export default function SalesMain() {
               <div>
                 <p className="text-indigo-200 text-sm font-medium">สต็อกพร้อมขาย</p>
                 <p className="text-4xl font-bold leading-tight">{readyCount} <span className="text-lg font-semibold text-indigo-300">คัน</span></p>
-                {available.length - readyCount > 0 && (
-                  <p className="text-amber-300 text-xs font-medium mt-0.5">+ ติดจอง {available.length - readyCount} คัน</p>
+                {bookedCars.length > 0 && (
+                  <button onClick={() => setShowBooked(true)}
+                    className="text-amber-300 hover:text-amber-200 text-xs font-medium mt-0.5 flex items-center gap-1 underline decoration-dotted underline-offset-2">
+                    + ติดจอง {bookedCars.length} คัน <ChevronRight className="w-3 h-3" />
+                  </button>
                 )}
               </div>
             </div>
@@ -1613,6 +1621,44 @@ export default function SalesMain() {
             {selectedPhotos[lightboxIdx].label && <span className="font-semibold text-white">{selectedPhotos[lightboxIdx].label} · </span>}
             {lightboxIdx + 1} / {selectedPhotos.length}
           </p>
+        </div>
+      )}
+
+      {/* ── รายการรถติดจอง (กดจาก stat banner) — ดูทีละยอด → กดเข้าดีล ── */}
+      {showBooked && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[54] flex items-end sm:items-center justify-center p-4"
+          onClick={e => e.target === e.currentTarget && setShowBooked(false)}>
+          <div className="bg-white rounded-3xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-amber-50 flex-shrink-0">
+              <div>
+                <h3 className="text-base font-bold text-slate-800">รถติดจอง</h3>
+                <p className="text-xs text-slate-500">{bookedCars.length} คัน — แตะแต่ละคันเพื่อดูรายละเอียดดีล</p>
+              </div>
+              <button onClick={() => setShowBooked(false)} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="overflow-y-auto flex-1 min-h-0 p-4 flex flex-col gap-2">
+              {bookedCars.map(f => {
+                const sale = latestSaleFor(f.id);
+                return (
+                  <button key={f.id} onClick={() => { setShowBooked(false); if (sale) setDetailSale(sale); else openCheckout(f); }}
+                    className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-amber-50 hover:border-amber-300 p-3 text-left transition-all active:scale-[0.99]">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md text-slate-600 bg-white border border-slate-200">#{displayCode(f)}</span>
+                        {f.pi_no && displayCode(f) !== f.pi_no && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md text-violet-700 bg-violet-50 border border-violet-200">PI {f.pi_no}</span>}
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md text-amber-700 bg-amber-100 border border-amber-200">{f.status}</span>
+                      </div>
+                      <p className="font-semibold text-slate-800 text-sm">{f.brand} {f.model}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">{sale
+                        ? <>{sale.customer_name || "—"}{sale.sales_staff ? ` · ${sale.sales_staff}` : ""}{sale.deposit ? ` · มัดจำ ฿${Number(sale.deposit).toLocaleString()}` : ""}</>
+                        : <span className="text-slate-400">ยังไม่มีดีลผูก — แตะเพื่อเปิดปิดการขาย</span>}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 
