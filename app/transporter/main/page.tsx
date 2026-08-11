@@ -499,7 +499,7 @@ export default function TransporterMain() {
                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${waiting ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-600"}`}>{st || "—"}</span>
                             </div>
                             <p className="text-[11px] text-slate-500 mt-0.5">{noSN
-                              ? <span className="text-amber-600 font-semibold">รหัส {c.id} · รถสั่งผลิต (ยังไม่มี SN — กรอกตอนรับ)</span>
+                              ? <span className="text-amber-600 font-semibold">รถสั่งผลิต · PI {c.pi_no || "—"} (ยังไม่มี SN — กรอกตอนรับ)</span>
                               : <>SN: <span className="font-semibold text-slate-700">{c.SN}</span></>}</p>
                             {docRef && <p className="text-[11px] text-sky-600 mt-0.5">เลขเอกสาร: <span className="font-semibold">{docRef}</span></p>}
                           </div>
@@ -517,7 +517,7 @@ export default function TransporterMain() {
               <button onClick={() => { setRecvCarId(null); setSlotImages({}); setExtraImages([]); }} className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-amber-700 mb-3"><ChevronRight className="w-3.5 h-3.5 rotate-180" />เลือกคันอื่นใน PI {recvTarget.pi_no}</button>
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
                 <p className="font-bold text-slate-800 text-sm">{recvTarget.brand} {recvTarget.model}</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">รหัส {recvTarget.id} · PI {recvTarget.pi_no || "—"}</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">{recvTarget.SN ? <>SN {recvTarget.SN} · </> : "รถสั่งผลิต · "}PI {recvTarget.pi_no || "—"}</p>
               </div>
               <div className="flex flex-col gap-3.5">
                 {/* SN — มีแล้วโชว์เฉยๆ · รถสั่งผลิตให้กรอก */}

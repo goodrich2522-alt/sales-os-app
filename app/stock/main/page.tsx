@@ -11,7 +11,7 @@ import {
 import { Forklift, Sale, STOCK_APPROVAL_FIELD, isVoidSale } from "@/lib/types";
 import { COMMISSION_FIELD, COMMISSION_CATEGORIES } from "@/lib/commission";
 import { useApp, FieldConfig } from "@/lib/AppContext";
-import { isPendingId } from "@/lib/productId";
+import { isPendingId, displayCode } from "@/lib/productId";
 import { thaiMonthShort, today } from "@/lib/format";
 import { Lightbox } from "@/components/ui/Lightbox";
 import { Chip } from "@/components/ui/Chip";
@@ -849,7 +849,7 @@ export default function StockMain() {
                   <div key={f.id} className="bg-white border border-blue-100 rounded-xl p-3 flex items-center gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-md flex-shrink-0">#{f.id}</span>
+                        <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-md flex-shrink-0">#{displayCode(f)}</span>
                         <span className="font-semibold text-slate-800 text-sm">{f.SN ? `${f.SN} — ` : ""}{f.brand} {f.model}</span>
                         {owner && <span className="text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-md flex items-center gap-0.5 flex-shrink-0"><User className="w-2.5 h-2.5" />#{owner}</span>}
                       </div>
@@ -1178,7 +1178,7 @@ export default function StockMain() {
                             return (
                               <tr key={f.id} onClick={() => setDetailItem(f)} className={`border-b border-slate-50 hover:bg-emerald-50/60 cursor-pointer transition-colors ${tone}`}>
                                 <td className="px-2.5 py-2 text-slate-400 font-bold">{i + 1}</td>
-                                <td className="px-2.5 py-2 whitespace-nowrap"><span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md text-slate-500 bg-slate-100 border border-slate-200">#{f.id}</span></td>
+                                <td className="px-2.5 py-2 whitespace-nowrap"><span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md text-slate-500 bg-slate-100 border border-slate-200">#{displayCode(f)}</span></td>
                                 <td className="px-2.5 py-2"><span className="font-semibold text-slate-800">{f.brand}</span> <span className="text-slate-500">{f.model}{mast ? ` · เสา ${mast}` : ""}</span></td>
                                 <td className="px-2.5 py-2 text-slate-500 whitespace-nowrap">{f.SN || "—"}</td>
                                 <td className="px-2.5 py-2 text-slate-500 whitespace-nowrap">{f.received_date || "—"}</td>
@@ -1211,7 +1211,7 @@ export default function StockMain() {
                         <tr key={item.id} onClick={() => bulkMode ? toggleSel(item.id) : setDetailItem(item)}
                           className={`border-b border-slate-50 cursor-pointer transition-colors ${bulkMode && selIds.has(item.id) ? "bg-indigo-50" : "hover:bg-emerald-50/40"}`}>
                           {bulkMode && <td className="px-2 py-2"><input type="checkbox" checked={selIds.has(item.id)} onChange={() => toggleSel(item.id)} onClick={e => e.stopPropagation()} className="w-4 h-4 accent-indigo-600" /></td>}
-                          <td className="px-2.5 py-2 whitespace-nowrap"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-500 bg-slate-100 border border-slate-200"}`}>#{item.id}</span></td>
+                          <td className="px-2.5 py-2 whitespace-nowrap"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-500 bg-slate-100 border border-slate-200"}`}>#{displayCode(item)}</span></td>
                           <td className="px-2.5 py-2"><span className="font-semibold text-slate-800">{item.brand}</span> <span className="text-slate-500">{item.model}</span></td>
                           <td className="px-2.5 py-2 text-slate-500 whitespace-nowrap">{item.SN || "—"}</td>
                           <td className="px-2.5 py-2 text-slate-500 whitespace-nowrap">{item.pi_no || "—"}</td>
@@ -1266,7 +1266,7 @@ export default function StockMain() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       {/* รหัสสินค้า (ID) — โชว์ทุกคันเพื่อแยกรถถูกตัว */}
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{item.id}</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{displayCode(item)}</span>
                       <p className="font-semibold text-slate-800 text-sm">{item.SN ? `${item.SN} — ` : ""}{item.brand} {item.model}</p>
                       {ownerOf(item) && (
                         <span className="text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-md flex-shrink-0 flex items-center gap-0.5" title="เซลล์เจ้าของงาน"><User className="w-2.5 h-2.5" />#{ownerOf(item)}</span>
@@ -1742,7 +1742,7 @@ export default function StockMain() {
               <div className="px-6 py-4 border-b border-slate-100 flex items-start justify-between gap-3 flex-shrink-0">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${isPendingId(it.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{it.id}</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${isPendingId(it.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{displayCode(it)}</span>
                     <StatusBadge status={it.status} />
                   </div>
                   <h3 className="text-lg font-bold text-slate-800 truncate">{it.brand} {it.model}</h3>

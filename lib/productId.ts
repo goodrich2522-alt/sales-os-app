@@ -19,9 +19,12 @@ export function isDuplicateSnId(id: unknown): boolean {
   return SPECIAL.test(s) && !/^PI/i.test(s);
 }
 
-/** ป้ายที่แสดงบนการ์ด — ใช้ SN เป็นหลัก ถ้ายังไม่มีให้โชว์รหัสชั่วคราว */
-export function displayCode(f: Pick<Forklift, "id" | "SN">): string {
-  return String(f.SN ?? "").trim() || String(f.id ?? "");
+/** ป้ายที่แสดงบนการ์ด — ใช้ SN เป็นหลัก · รถสั่งผลิตยังไม่มี SN → โชว์เลข PI สะอาดๆ (ไม่โชว์รหัสชั่วคราว PI#N ที่ดูเหมือนซ้ำ) */
+export function displayCode(f: Pick<Forklift, "id" | "SN" | "pi_no">): string {
+  const sn = String(f.SN ?? "").trim();
+  if (sn) return sn;
+  if (isPendingId(f.id)) return String(f.pi_no ?? "").trim() || String(f.id ?? ""); // PI103#3 → PI103
+  return String(f.id ?? "");
 }
 
 /**
