@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
 import { getRegion } from "@/lib/mockData";
+import { displayCode } from "@/lib/productId";
 import { buildStaffMonthly, buildStaffWeekly, buildAllMonthlyWeekly } from "@/components/charts/Charts";
 import { CONTACT_SOURCE_COLORS, paymentBadgeClass } from "@/lib/constants";
 import { parseSvc, nextDue, daysUntil, SVC_SOON_DAYS } from "@/lib/warranty";
@@ -923,7 +924,7 @@ export default function Dashboard() {
                   <div key={f.id} className="flex items-center gap-3 border border-slate-100 rounded-xl p-3 bg-slate-50/60">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-md flex-shrink-0">#{f.id}</span>
+                        <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-md flex-shrink-0">#{displayCode(f)}</span>
                         <span className="font-semibold text-slate-800 text-sm">{f.SN ? `${f.SN} — ` : ""}{f.brand} {f.model}</span>
                       </div>
                       <p className="text-[11px] text-slate-500 mt-0.5 truncate">

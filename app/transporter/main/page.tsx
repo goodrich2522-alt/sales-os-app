@@ -903,7 +903,7 @@ export default function TransporterMain() {
               </p>
               <div className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-left">
                 <p className="font-bold text-slate-800 text-sm">{dupConfirm.brand} {dupConfirm.model}</p>
-                <p className="text-xs text-slate-500 mt-0.5">รหัส: <span className="font-medium text-slate-700">{dupConfirm.id}</span> · สถานะ: <span className="font-semibold text-amber-700">{dupConfirm.status || "—"}</span></p>
+                <p className="text-xs text-slate-500 mt-0.5">สถานะ: <span className="font-semibold text-amber-700">{dupConfirm.status || "—"}</span></p>
                 {dupConfirm.pi_no && <p className="text-xs text-slate-500 mt-0.5">PI: {dupConfirm.pi_no}</p>}
               </div>
               <p className="text-xs text-amber-600">หากดำเนินการต่อจะเป็นการรับ/เพิ่มรถ SN นี้ซ้ำ — ต้องการทำต่อหรือไม่?</p>

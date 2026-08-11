@@ -888,7 +888,7 @@ export default function StockMain() {
                     <div className="flex items-start gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-md flex-shrink-0">#{s.forklift_id}</span>
+                          <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-md flex-shrink-0">#{displayCode({ id: s.forklift_id, SN: s.forklift_unit_no, pi_no: s.custom_fields?.["PI"] as string })}</span>
                           <span className="font-semibold text-slate-800 text-sm">{s.forklift_unit_no ? `${s.forklift_unit_no} — ` : ""}{s.forklift_brand} {s.forklift_model}</span>
                           <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md">{s.sale_status}</span>
                         </div>

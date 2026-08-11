@@ -19,7 +19,11 @@ function summarize(e: AuditEntry): string {
   if (e.action?.includes("นำเข้ารถ")) return `${d.count ?? ""} คัน${d.pi ? ` · PI ${d.pi}` : ""}`;
   if (e.action?.includes("ลบรถ")) return `${d.model ?? ""} · SN ${d.SN || "—"} · สถานะ ${d.status || "—"}`;
   if (e.entity === "sale") return `${d.model ?? ""} · ลูกค้า ${d.customer || "—"}${d.amount ? ` · ฿${Number(d.amount).toLocaleString("th-TH")}` : ""}${d.reason ? ` · เหตุผล: ${d.reason}` : ""}`;
-  return JSON.stringify(d);
+  // fallback: แสดงเฉพาะค่าอ่านง่าย (ไม่โชว์ JSON ดิบ)
+  return Object.entries(d)
+    .filter(([, v]) => v != null && typeof v !== "object")
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(" · ") || "—";
 }
 
 const actionStyle = (a?: string) => {
