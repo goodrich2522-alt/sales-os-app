@@ -1725,14 +1725,21 @@ export default function SalesMain() {
                   </div>
                 );
               })()}
-              {detailSale.custom_fields && Object.keys(detailSale.custom_fields).length > 0 && (
-                <div className="border-t border-slate-100 pt-3 mt-1">
-                  <p className="text-xs font-semibold text-violet-700 mb-2">รายการเพิ่มเติม</p>
-                  {Object.entries(detailSale.custom_fields).map(([k, v]) => (
-                    <DetailRow key={k} label={k} value={v} />
-                  ))}
-                </div>
-              )}
+              {(() => {
+                // โชว์เฉพาะ custom field ที่อ่านง่าย — ข้ามค่า JSON (warranty/ประวัติ) + คีย์ internal
+                const INTERNAL = new Set(["บริการหลังการขาย", "ประวัติแก้ไข", "เอกสารแนบ"]);
+                const rows = Object.entries(detailSale.custom_fields ?? {}).filter(([k, v]) => {
+                  const s = String(v ?? "").trim();
+                  return s && !s.startsWith("{") && !s.startsWith("[") && !INTERNAL.has(k);
+                });
+                if (rows.length === 0) return null;
+                return (
+                  <div className="border-t border-slate-100 pt-3 mt-1">
+                    <p className="text-xs font-semibold text-violet-700 mb-2">รายการเพิ่มเติม</p>
+                    {rows.map(([k, v]) => <DetailRow key={k} label={k} value={v} />)}
+                  </div>
+                );
+              })()}
               {detailInspPhotos.all.length > 0 && (
                 <div className="border-t border-slate-100 pt-3 mt-1">
                   <p className="text-xs font-semibold text-slate-700 mb-3 flex items-center gap-1.5">

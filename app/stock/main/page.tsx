@@ -1712,8 +1712,10 @@ export default function StockMain() {
           ["วันที่ปิดการขาย", saleForItem.created_at ?? ""],
           ["เลขที่ใบกำกับ", (saleForItem.custom_fields?.["เลขที่ใบกำกับภาษี"] as string) ?? ""],
         ] : [];
-        // custom_fields ที่โชว์ในสเปก/ข้อมูลแล้ว + คีย์ internal → ไม่ต้องโชว์ซ้ำใน "ข้อมูลเพิ่มเติม"
-        const SHOWN_CF = new Set(["ประเภทสินค้า","MAST","Valve","ขนาดงา","ชนิดล้อ","เซลล์ผู้ดูแล","รายละเอียด (ลูกค้า)","เลขที่ใบกำกับภาษี","ชีตต้นทาง"]);
+        // custom_fields ที่โชว์ในสเปก/ข้อมูลแล้ว + คีย์ internal (JSON/มี block เฉพาะ) → ไม่ต้องโชว์ซ้ำใน "ข้อมูลเพิ่มเติม"
+        const SHOWN_CF = new Set(["ประเภทสินค้า","MAST","Valve","ขนาดงา","ชนิดล้อ","เซลล์ผู้ดูแล","รายละเอียด (ลูกค้า)","เลขที่ใบกำกับภาษี","ชีตต้นทาง",
+          // คีย์ที่มี UI/บล็อกเฉพาะอยู่แล้ว หรือเก็บเป็น JSON — กัน dump เป็นข้อความดิบ
+          "บริการหลังการขาย","ประวัติแก้ไข","เอกสารแนบ","ราคาขายจริง","ค่าขนส่งจริง","ทุนอุปกรณ์เสริม","ของแถม","กำไร(ไฟล์)","หมายเหตุการขาย","วันสั่งรถ","วันคาดรับรถสั่งผลิต",COMMISSION_FIELD,"ยืนยันนำเข้าสต็อก",STOCK_APPROVAL_FIELD]);
         const customs = Object.entries(cf).filter(([k, v]) => String(v ?? "").trim() && !SHOWN_CF.has(k));
         const Section = ({ title, rows }: { title: string; rows: [string, string][] }) => {
           const shown = rows.filter(([, v]) => String(v ?? "").trim());
