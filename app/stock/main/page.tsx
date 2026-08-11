@@ -1286,6 +1286,7 @@ export default function StockMain() {
                     <div className="flex items-center gap-2 flex-wrap">
                       {/* รหัสสินค้า (ID) — โชว์ทุกคันเพื่อแยกรถถูกตัว */}
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{displayCode(item)}</span>
+                      {item.pi_no && displayCode(item) !== item.pi_no && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md text-violet-700 bg-violet-50 border border-violet-200 flex-shrink-0">PI {item.pi_no}</span>}
                       <p className="font-semibold text-slate-800 text-sm">{item.SN ? `${item.SN} — ` : ""}{item.brand} {item.model}</p>
                       {ownerOf(item) && (
                         <span className="text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-md flex-shrink-0 flex items-center gap-0.5" title="เซลล์เจ้าของงาน"><User className="w-2.5 h-2.5" />#{ownerOf(item)}</span>
@@ -1762,6 +1763,7 @@ export default function StockMain() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${isPendingId(it.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{displayCode(it)}</span>
+                    {it.pi_no && displayCode(it) !== it.pi_no && <span className="text-xs font-bold px-2 py-0.5 rounded-md text-violet-700 bg-violet-50 border border-violet-200">PI {it.pi_no}</span>}
                     <StatusBadge status={it.status} />
                   </div>
                   <h3 className="text-lg font-bold text-slate-800 truncate">{it.brand} {it.model}</h3>

@@ -1097,7 +1097,7 @@ export default function SalesMain() {
                       <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-md mb-1 ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{displayCode(item)}</span>
                       <p className="font-bold text-slate-800 text-base">{item.brand}</p>
                       <p className="text-sm text-slate-600 font-medium">{item.model}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{item.SN}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{item.SN}{item.pi_no ? ` · PI ${item.pi_no}` : ""}</p>
                       {item.status === "พร้อมขาย" && (() => {
                         const days = daysInStock(item);
                         return (
@@ -1622,9 +1622,13 @@ export default function SalesMain() {
           onClick={e => { if (e.target === e.currentTarget) { setDetailSale(null); setDetailLightboxIdx(null); } }}>
           <div className="bg-white rounded-3xl w-full max-w-lg max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-indigo-50">
-              <div>
-                <h3 className="text-base font-bold text-slate-800">รายละเอียดการขาย</h3>
-                <p className="text-xs text-slate-500">{detailSale.forklift_unit_no} — {detailSale.forklift_brand} {detailSale.forklift_model}</p>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-md text-slate-600 bg-white border border-slate-200">#{displayCode({ id: detailSale.forklift_id, SN: detailSale.forklift_unit_no, pi_no: detailSale.custom_fields?.["PI"] as string })}</span>
+                  {(detailSale.custom_fields?.["PI"] as string) && <span className="text-[11px] font-bold px-2 py-0.5 rounded-md text-violet-700 bg-violet-50 border border-violet-200">PI {detailSale.custom_fields?.["PI"] as string}</span>}
+                </div>
+                <h3 className="text-base font-bold text-slate-800 truncate">{detailSale.forklift_brand} {detailSale.forklift_model}</h3>
+                <p className="text-xs text-slate-500">รายละเอียดการขาย</p>
               </div>
               <button onClick={() => { setDetailSale(null); setDetailLightboxIdx(null); }} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2"><X className="w-5 h-5" /></button>
             </div>
