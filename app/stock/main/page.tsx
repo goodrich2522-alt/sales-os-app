@@ -1805,7 +1805,7 @@ export default function StockMain() {
                   </div>
                   {snEdit.trim() && forklifts.some(f => f.id !== it.id && String(f.SN ?? "").toUpperCase() === snEdit.trim().toUpperCase()) &&
                     <p className="text-[11px] text-red-500 mt-1">⚠️ SN นี้ซ้ำกับรถคันอื่นในระบบ — ตรวจสอบก่อนบันทึก</p>}
-                  <p className="text-[10px] text-slate-400 mt-1">* รถสั่งผลิต (รหัส PIxxx) เติม SN จริงได้ที่นี่ · รหัส #{it.id} ยังคงเดิม</p>
+                  <p className="text-[10px] text-slate-400 mt-1">* รถสั่งผลิตที่ยังไม่มี SN — เติม SN จริงได้ที่นี่เมื่อรถมาถึง</p>
                 </div>
                 {/* QR ต่อคัน — พิมพ์ติดรถ สแกนเปิดข้อมูลรถทันที */}
                 <div>
