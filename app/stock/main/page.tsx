@@ -359,12 +359,31 @@ export default function StockMain() {
       if (parsed.rowCount === 0) {
         setCsvMsg({ ok: false, text: parsed.errors[0] || "ไม่พบข้อมูลรถในไฟล์" });
       } else {
-        const rows = assignIdsAndStamp(parsed.forklifts, forklifts);
-        addForkliftsBulk(rows);
-        const warn = parsed.errors.length ? ` (ข้าม ${parsed.errors.length} แถวที่ไม่สมบูรณ์)` : "";
-        const toRecv = rows.filter(r => String(r.status) === "รอรับ").length; // เด้งเข้าหน้ารับรถ
-        const recvNote = toRecv ? ` · ส่งเข้าหน้ารับรถ ${toRecv} คัน` : "";
-        setCsvMsg({ ok: true, text: `เพิ่มรถ ${rows.length} คันเข้าสต็อกแล้ว${recvNote}${warn}` });
+        // ⛔ กติกา: SN ซ้ำกับที่มีในระบบแล้ว (หรือซ้ำกันเองในไฟล์) → ห้ามบันทึกเด็ดขาด (ข้ามทิ้ง)
+        const existSN = new Set<string>();
+        forklifts.forEach(f => {
+          const sn = String(f.SN ?? "").trim().toUpperCase(); if (sn) existSN.add(sn);
+          const id = String(f.id ?? "").trim().toUpperCase(); if (id) existSN.add(id);
+        });
+        const seen = new Set<string>();
+        let dupCount = 0;
+        const fresh = parsed.forklifts.filter(r => {
+          const sn = String(r.SN ?? "").trim().toUpperCase();
+          if (!sn) return true;                       // รถสั่งผลิตยังไม่มี SN → ไม่เช็คซ้ำด้วย SN
+          if (existSN.has(sn) || seen.has(sn)) { dupCount++; return false; } // ซ้ำ → ทิ้ง
+          seen.add(sn); return true;
+        });
+        if (fresh.length === 0) {
+          setCsvMsg({ ok: false, text: `ไม่มีรถใหม่ — ${dupCount} คันมี SN ซ้ำกับในระบบแล้ว (ข้ามทั้งหมด)` });
+        } else {
+          const rows = assignIdsAndStamp(fresh, forklifts);
+          addForkliftsBulk(rows);
+          const warn = parsed.errors.length ? ` · ข้าม ${parsed.errors.length} แถวไม่สมบูรณ์` : "";
+          const dupNote = dupCount ? ` · ข้าม ${dupCount} คัน SN ซ้ำ (ไม่บันทึก)` : "";
+          const toRecv = rows.filter(r => String(r.status) === "รอรับ").length; // เด้งเข้าหน้ารับรถ
+          const recvNote = toRecv ? ` · ส่งเข้าหน้ารับรถ ${toRecv} คัน` : "";
+          setCsvMsg({ ok: true, text: `เพิ่มรถ ${rows.length} คันเข้าสต็อกแล้ว${recvNote}${dupNote}${warn}` });
+        }
       }
     } catch {
       setCsvMsg({ ok: false, text: "อ่านไฟล์ไม่สำเร็จ — รองรับ .xlsx / .xls / .csv" });
