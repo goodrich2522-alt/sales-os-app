@@ -14,7 +14,7 @@ import { PROVINCES, CONTACT_SOURCES } from "@/lib/mockData";
 import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, ContactSource, SaleType, InspectionRecord, SLOT_LABELS, STOCK_APPROVAL_FIELD } from "@/lib/types";
 import { useApp } from "@/lib/AppContext";
 import { driveImg } from "@/lib/img";
-import { isPendingId } from "@/lib/productId";
+import { isPendingId, displayCode } from "@/lib/productId";
 import { STATUS_BADGE, SALE_STATUS_BADGE, CONTACT_SOURCE_COLORS, VEHICLE_CATS, paymentBadgeClass } from "@/lib/constants";
 import { WarrantyBlock } from "@/components/WarrantyBlock";
 import { formatBaht } from "@/lib/format";
@@ -917,7 +917,7 @@ export default function SalesMain() {
           <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-2.5">
             <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
             <div className="text-sm text-amber-800">
-              พบรถ <span className="font-bold">{searchHiddenHit.f.SN || searchHiddenHit.f.id}</span>
+              พบรถ <span className="font-bold">{displayCode(searchHiddenHit.f)}</span>
               {" "}({searchHiddenHit.f.brand} {searchHiddenHit.f.model}) ในระบบ — <span className="font-bold">แต่ไม่แสดงในรายการขายเพราะ &ldquo;{searchHiddenHit.reason}&rdquo;</span>
               <span className="block text-xs text-amber-600 mt-0.5">สถานะจริงในสต็อก: {String(searchHiddenHit.f.status)} · ถ้าคิดว่าผิด แจ้งฝ่ายสต็อกแก้สถานะ</span>
             </div>
@@ -975,7 +975,7 @@ export default function SalesMain() {
                 <div className="p-4 flex flex-col gap-3">
                   <div className="flex items-start justify-between">
                     <div>
-                      <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-md mb-1 ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{item.id}</span>
+                      <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-md mb-1 ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{displayCode(item)}</span>
                       <p className="font-bold text-slate-800 text-base">{item.brand}</p>
                       <p className="text-sm text-slate-600 font-medium">{item.model}</p>
                       <p className="text-xs text-slate-400 mt-0.5">{item.SN}{item.pi_no ? ` · PI ${item.pi_no}` : ""}</p>
@@ -1011,7 +1011,7 @@ export default function SalesMain() {
                   <tr key={item.id} onClick={() => openCheckout(item)}
                     className="border-b border-slate-50 hover:bg-indigo-50/40 cursor-pointer transition-colors">
                     <td className="px-3 py-2.5 whitespace-nowrap">
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-500 bg-slate-100 border border-slate-200"}`}>#{item.id}</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-500 bg-slate-100 border border-slate-200"}`}>#{displayCode(item)}</span>
                     </td>
                     <td className="px-3 py-2.5"><span className="font-semibold text-slate-800">{item.brand}</span> <span className="text-slate-500">{item.model}</span></td>
                     <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{item.SN || "—"}</td>
@@ -1094,7 +1094,7 @@ export default function SalesMain() {
                   <div className="flex items-start justify-between">
                     <div>
                       {/* รหัสสินค้า (ID) — โชว์ทุกคันเพื่อแยกรถถูกตัว */}
-                      <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-md mb-1 ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{item.id}</span>
+                      <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-md mb-1 ${isPendingId(item.id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{displayCode(item)}</span>
                       <p className="font-bold text-slate-800 text-base">{item.brand}</p>
                       <p className="text-sm text-slate-600 font-medium">{item.model}</p>
                       <p className="text-xs text-slate-400 mt-0.5">{item.SN}</p>
@@ -1190,7 +1190,7 @@ export default function SalesMain() {
                         <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                         <div className="text-xs text-amber-800">
                           <p className="font-bold">มีคันเข้าคลังก่อนคันนี้ (แนะนำ FIFO)</p>
-                          <p className="mt-0.5">ควรขาย <b>SN {oldest.SN || oldest.id}</b> ก่อน — เข้าคลัง {oldest.received_date || "ไม่ระบุ"}{d != null ? ` · ค้างสต็อก ${d} วัน` : ""}</p>
+                          <p className="mt-0.5">ควรขาย <b>SN {displayCode(oldest)}</b> ก่อน — เข้าคลัง {oldest.received_date || "ไม่ระบุ"}{d != null ? ` · ค้างสต็อก ${d} วัน` : ""}</p>
                           <button type="button" onClick={() => openCheckout(oldest)}
                             className="mt-1.5 text-amber-700 hover:text-amber-900 font-bold underline">สลับไปคันนั้น →</button>
                         </div>
@@ -1858,7 +1858,7 @@ export default function SalesMain() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           {sale.forklift_id && (
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isPendingId(sale.forklift_id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{sale.forklift_id}</span>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isPendingId(sale.forklift_id) ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-slate-600 bg-slate-100 border border-slate-200"}`}>#{displayCode({ id: sale.forklift_id, SN: sale.forklift_unit_no, pi_no: sale.custom_fields?.["PI"] as string })}</span>
                           )}
                           <p className="font-bold text-slate-800 text-sm">{sale.forklift_unit_no}</p>
                           <p className="text-slate-600 text-sm">{sale.forklift_brand} {sale.forklift_model}</p>
@@ -2266,7 +2266,7 @@ export default function SalesMain() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <p className={`text-xs font-bold ${approved ? "text-emerald-700" : "text-red-700"}`}>{approved ? "✅ อนุมัติจองแล้ว — สต็อกออกเรียบร้อย" : "❌ ถูกปฏิเสธจากสต็อก — รถกลับสู่สต็อก"}</p>
-                        <p className="font-semibold text-slate-800 text-sm mt-1">{s.forklift_brand} {s.forklift_model} <span className="text-xs text-slate-400">#{s.forklift_id}</span></p>
+                        <p className="font-semibold text-slate-800 text-sm mt-1">{s.forklift_brand} {s.forklift_model} <span className="text-xs text-slate-400">#{displayCode({ id: s.forklift_id, SN: s.forklift_unit_no, pi_no: s.custom_fields?.["PI"] as string })}</span></p>
                         <p className="text-[11px] text-slate-500 mt-0.5">ลูกค้า {s.customer_name || "—"} · ฿{Number(s.actual_sale || 0).toLocaleString("th-TH")}</p>
                         {!approved && s.custom_fields?.["เหตุผลปฏิเสธ"] && <p className="text-[11px] text-red-600 mt-1">เหตุผล: {s.custom_fields["เหตุผลปฏิเสธ"]}</p>}
                         {s.custom_fields?.["อนุมัติเมื่อ"] && <p className="text-[10px] text-slate-400 mt-0.5">{s.custom_fields["อนุมัติเมื่อ"]}{s.custom_fields?.["อนุมัติโดย"] ? ` · โดย ${s.custom_fields["อนุมัติโดย"]}` : ""}</p>}
