@@ -1,7 +1,7 @@
 // lib/quoteImport/types.ts — โครงข้อมูลกลางสำหรับนำเข้ารถจากใบเสนอราคา (เฟส 4)
 
 /** ผู้ผลิตที่ระบบรองรับการอ่านใบเสนอราคา */
-export type QuoteVendor = "HELI" | "STAXX" | "ROCKMAN" | "HANGCHA" | "unknown";
+export type QuoteVendor = "HELI" | "STAXX" | "ROCKMAN" | "HANGCHA" | "EP" | "unknown";
 
 /** รถ 1 คันที่ parse ได้จากใบเสนอราคา — ก่อนคนตรวจยืนยันเข้าสต็อก */
 export interface ParsedVehicle {

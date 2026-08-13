@@ -18,7 +18,7 @@ export type CatFilter = "all" | VehicleType;
 /** จัดชนิดรถจากรหัสรุ่น — กติกาเดียวกับที่จัดใน DB (ดู STOCK-SPEC-FIX-PLAN.md) */
 export function categorizeModel(model: string): VehicleType {
   const m = (model || "").trim();
-  if (/^(CPCD|CPD)/i.test(m)) return "Forklift";
+  if (/^(CPCD|CPD|EFL)/i.test(m)) return "Forklift"; // EFL = EP Electric Forklift
   if (/^(CBD|CBS)/i.test(m)) return "Electric Pallet Truck";
   if (/^CQD/i.test(m)) return "Reach Truck";
   if (/^(CDD|EPS|PS|WMS|WDS|SDA|DG|PTS|PD|BFG)/i.test(m)) return "Stacker"; // DG = ครอบคลุม DGB + DG series (lift table)

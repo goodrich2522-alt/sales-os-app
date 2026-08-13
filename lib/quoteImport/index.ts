@@ -1,6 +1,7 @@
 // lib/quoteImport/index.ts — เดาผู้ผลิตจากข้อความ แล้วส่งให้ parser ของเจ้านั้น
 
 import { parseHeli } from "./heli";
+import { parseEp } from "./ep";
 import { parseRockman } from "./rockman";
 import { parseStaxxSerialSheet, parseStaxxProforma, normalizeStaxxModel } from "./staxx";
 import { QuoteParseResult, QuoteVendor } from "./types";
@@ -13,6 +14,7 @@ export { isImageFile, readImageText } from "./imageOcr";
 /** เดาผู้ผลิตจากคำเฉพาะในเอกสาร */
 export function detectVendor(text: string): QuoteVendor {
   if (/HELI\s*SOUTHEAST|HELI\b/i.test(text)) return "HELI";
+  if (/EP\s*Distribution|ep-ep\.com|ep-zl\.com|Quote\s*No\.?\s*:?\s*EPZL/i.test(text)) return "EP";
   if (/NINGBO|STAXX/i.test(text)) return "STAXX";
   if (/cnc-?moving|rockman/i.test(text)) return "ROCKMAN";
   if (/HANGCHA/i.test(text)) return "HANGCHA";
@@ -25,6 +27,8 @@ export function parseQuoteText(text: string): QuoteParseResult {
   switch (vendor) {
     case "HELI":
       return parseHeli(text);
+    case "EP":
+      return parseEp(text);
     case "ROCKMAN":
       return parseRockman(text);
     case "STAXX":
