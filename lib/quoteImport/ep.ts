@@ -15,8 +15,8 @@ function toBaht(s?: string): number | undefined {
 export function parseEp(rawText: string): QuoteParseResult {
   const text = rawText.replace(/\s+/g, " ").trim();
 
-  // Quote No. = รหัสอ้างอิงประจำ EP (เก็บเป็น import_ref · ⛔ ไม่ใช่เลข PI — เว้น pi_no ว่าง)
-  const importRef = text.match(/Quote\s*No\.?\s*:?\s*([A-Z]{2,}[A-Z0-9-]+)/i)?.[1];
+  // ⭐ EP: Quote No. (เช่น EPZL260808) = เลข PI ของแบรนด์นี้เลย (ต่างจาก HELI) → ใช้เป็น pi_no
+  const quoteNo = text.match(/Quote\s*No\.?\s*:?\s*([A-Z]{2,}[A-Z0-9-]+)/i)?.[1];
   const date = text.match(/Quote\s*Date\s*:?\s*(\d{4}\/\d{1,2}\/\d{1,2})/i)?.[1];
 
   // รุ่น: หลัง "/" ต่อจากชนิดรถ (Forklift/Truck/Stacker/...) เช่น "Electric Forklift/EFL302B3"
@@ -52,8 +52,8 @@ export function parseEp(rawText: string): QuoteParseResult {
       mast: mastType || (mastH ? `${mastH}M` : undefined),
       fuel,
       cost_price: cost,
-      pi_no: undefined,          // ใบเสนอราคา → เว้นเลข PI ว่าง
-      import_ref: importRef,     // Quote No. = รหัสอ้างอิง EP
+      pi_no: quoteNo,            // ⭐ EP: Quote No. = เลข PI เลย
+      import_ref: quoteNo,       // เก็บซ้ำใน "รหัสอ้างอิงนำเข้า" ด้วย (ค่าเดียวกัน)
       vendor: "EP",
       flags: flags.length ? flags : undefined,
     };
@@ -63,5 +63,5 @@ export function parseEp(rawText: string): QuoteParseResult {
     vehicles.forEach((v) => (v.flags = [...(v.flags ?? []), "ใบนี้มีหลายรุ่น — ตรวจสเปกแต่ละคัน"]));
   }
 
-  return { vendor: "EP", pi_no: undefined, quote_date: date, vehicles, rawText };
+  return { vendor: "EP", pi_no: quoteNo, quote_date: date, vehicles, rawText };
 }
