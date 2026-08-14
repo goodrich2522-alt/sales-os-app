@@ -55,6 +55,11 @@ const fmtCap = (v: string) => {
 
 // ยอดเงินย่อ — หลักล้านโชว์ "ล." (ใช้ในกราฟสรุปรายเซลล์)
 const fmtM = (n: number) => Math.abs(n) >= 1_000_000 ? (n / 1_000_000).toFixed(1) + " ล." : (Number(n) || 0).toLocaleString("th-TH");
+// ป้ายกลุ่มดีลที่ไม่มีชื่อเซลล์ (ข้อมูลนำเข้าเก่า — บิลภาษี/ชุดเก่าไม่ได้บันทึกคนขาย) + ค่า sentinel สำหรับกรอง
+const NO_STAFF_LABEL = "ไม่ระบุเซลล์ (นำเข้าเก่า)";
+const HIST_NO_STAFF = "__none__";
+// เวลาของดีลสำหรับเรียงลำดับ — รองรับทั้งวันที่ล้วน (บิลภาษี) และ ISO เต็ม (ป้อนในแอป) · เพี้ยน = 0 (ไปท้าย)
+const dealTime = (s: Sale) => { const t = Date.parse(String(s.created_at || "")); return isNaN(t) ? 0 : t; };
 
 // แปลงเวลาเติม → "10 ก.ค. 69 · 14:30 น." (พ.ศ. + เวลา) · ถ้าเป็นแค่วันที่ (ของเก่า) ไม่โชว์เวลา
 function fmtAdded(iso?: string) {
@@ -131,7 +136,7 @@ export default function StockMain() {
   const [histSearch, setHistSearch]       = useState("");
   const [histView, setHistView]           = useState<"deals" | "summary">("deals"); // รายดีล / สรุปรายเซลล์
   const [histDetail, setHistDetail]       = useState<Sale | null>(null); // ดีลที่กางดูรายละเอียด
-  const [histEdit, setHistEdit]           = useState<{ sale_status: string; delivery_date: string; remark: string; eta: string; sn: string; commCat: string } | null>(null); // eta=วันคาดรับ · sn=SN จริงรถสั่งผลิต · commCat=หมวดค่าคอม
+  const [histEdit, setHistEdit]           = useState<{ sale_status: string; delivery_date: string; remark: string; eta: string; sn: string; commCat: string; staff: string } | null>(null); // eta=วันคาดรับ · sn=SN จริงรถสั่งผลิต · commCat=หมวดค่าคอม · staff=เซลล์ผู้ขาย (เติมดีลนำเข้าเก่า)
 
   // ── แจ้งเตือนเซลล์ทำรายการขาย — คงค้างจนแอดมินอ่าน + กดยืนยันตัดออกจากสต็อก (เก็บ ack ใน localStorage) ──
   type SaleAlert = { id: string; staff: string; status: string; title: string; sub: string };
@@ -659,19 +664,21 @@ export default function StockMain() {
     return sales
       .filter(s => !isVoidSale(s)) // ตัดดีลที่ถูกปฏิเสธจากสต็อกออกจากประวัติการขาย
       .filter(s => {
-        const okStaff = histStaff === "all" || s.sales_staff === histStaff;
+        const okStaff = histStaff === "all" ? true
+          : histStaff === HIST_NO_STAFF ? !String(s.sales_staff ?? "").trim() // เฉพาะดีลที่ไม่มีชื่อเซลล์
+          : s.sales_staff === histStaff;
         const okStatus = histStatus === "all" || saleStatusGroup(s.sale_status) === histStatus;
         const okQ = !q || [s.customer_name, s.customer_tel, s.forklift_unit_no, s.forklift_brand, s.forklift_model, s.sales_staff].some(v => String(v ?? "").toLowerCase().includes(q));
         return okStaff && okStatus && okQ;
       })
-      .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || ""))); // ล่าสุดบน
+      .sort((a, b) => dealTime(b) - dealTime(a) || String(b.id).localeCompare(String(a.id))); // ล่าสุดบนเสมอ · id คุมลำดับซ้ำ
   }, [sales, histStaff, histStatus, histSearch]);
 
   // สรุปยอดรายเซลล์ (จากดีลที่กรองอยู่) — จำนวนดีล/ยอดขาย/ปิดได้/ค้าง
   const staffSummary = useMemo(() => {
     const m = new Map<string, { staff: string; deals: number; revenue: number; closed: number; pending: number }>();
     histFiltered.forEach(s => {
-      const staff = s.sales_staff || "ไม่ระบุ";
+      const staff = s.sales_staff?.trim() || NO_STAFF_LABEL;
       const g = m.get(staff) ?? { staff, deals: 0, revenue: 0, closed: 0, pending: 0 };
       g.deals++;
       g.revenue += Number(s.actual_sale) || 0;
@@ -719,6 +726,7 @@ export default function StockMain() {
       eta: (s.custom_fields?.["วันคาดรับรถสั่งผลิต"] as string) ?? "",
       sn: s.forklift_unit_no ?? "",
       commCat: (s.custom_fields?.[COMMISSION_FIELD] as string) ?? "",
+      staff: s.sales_staff ?? "",
     });
   };
   const saveHistEdit = () => {
@@ -732,6 +740,8 @@ export default function StockMain() {
     const snChanged = !!histEdit.sn.trim() && histEdit.sn.trim() !== (histDetail.forklift_unit_no ?? "");
     if (snChanged) changes.push(`เติม SN→${histEdit.sn.trim()}`); // ก: รถสั่งผลิตมาถึง เติม SN จริง
     if (histEdit.commCat !== ((histDetail.custom_fields?.[COMMISSION_FIELD] as string) ?? "")) changes.push(`หมวดค่าคอม→${histEdit.commCat || "-"}`);
+    const staffChanged = histEdit.staff.trim() !== (histDetail.sales_staff ?? "").trim();
+    if (staffChanged) changes.push(`เซลล์→${histEdit.staff.trim() || "-"}`); // เติม/แก้ชื่อเซลล์ (ดีลนำเข้าเก่าไม่มีเซลล์)
 
     const cf: Record<string, string> = { ...(histDetail.custom_fields ?? {}) };
     if (histEdit.eta.trim()) cf["วันคาดรับรถสั่งผลิต"] = histEdit.eta.trim(); else delete cf["วันคาดรับรถสั่งผลิต"];
@@ -742,6 +752,7 @@ export default function StockMain() {
       cf["ประวัติแก้ไข"] = [(histDetail.custom_fields?.["ประวัติแก้ไข"] as string) || "", line].filter(Boolean).join("\n");
     }
     const u: Sale = { ...histDetail, sale_status: histEdit.sale_status as Sale["sale_status"], delivery_date: histEdit.delivery_date, remark: histEdit.remark,
+      sales_staff: histEdit.staff.trim(),
       forklift_unit_no: snChanged ? histEdit.sn.trim() : histDetail.forklift_unit_no,
       custom_fields: Object.keys(cf).length ? cf : undefined };
     updateSale(u); setHistDetail(u);
@@ -1504,6 +1515,7 @@ export default function StockMain() {
               <select value={histStaff} onChange={e => setHistStaff(e.target.value)} className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
                 <option value="all">ทุกเซลล์</option>
                 {histStaffOptions.map(n => <option key={n} value={n}>{n}</option>)}
+                {sales.some(s => !isVoidSale(s) && !String(s.sales_staff ?? "").trim()) && <option value={HIST_NO_STAFF}>— {NO_STAFF_LABEL} —</option>}
               </select>
               <select value={histStatus} onChange={e => setHistStatus(e.target.value)} className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
                 <option value="all">ทุกสถานะ</option>
@@ -1542,7 +1554,7 @@ export default function StockMain() {
                     </thead>
                     <tbody>
                       {staffSummary.map((g, i) => (
-                        <tr key={g.staff} onClick={() => { setHistStaff(g.staff === "ไม่ระบุ" ? "all" : g.staff); setHistView("deals"); }}
+                        <tr key={g.staff} onClick={() => { setHistStaff(g.staff === NO_STAFF_LABEL ? HIST_NO_STAFF : g.staff); setHistView("deals"); }}
                           className="border-b border-slate-50 hover:bg-indigo-50/50 cursor-pointer transition-colors" title="คลิกดูรายดีลของเซลล์คนนี้">
                           <td className="px-3 py-2.5"><span className="text-xs font-bold text-slate-400 mr-1.5">{i + 1}</span><span className="font-semibold text-slate-800">{g.staff}</span> <ChevronRight className="w-3 h-3 text-slate-300 inline" /></td>
                           <td className="px-3 py-2.5 text-right text-slate-700 font-semibold">{g.deals}</td>
@@ -1574,7 +1586,7 @@ export default function StockMain() {
                 <button key={s.id} onClick={() => openHistDetail(s)}
                   className="text-left bg-slate-50 border border-slate-100 rounded-xl p-3 hover:border-indigo-200 hover:bg-white transition-all">
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-xs text-slate-400">{s.created_at}</span>
+                    <span className="text-xs text-slate-400">{fmtAdded(s.created_at) || "—"}</span>
                     <div className="flex items-center gap-1.5">
                       {isPendingId(s.forklift_id) && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200">🏭 สั่งผลิต</span>}
                       <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${SALE_STATUS_BADGE[s.sale_status ?? "ขายแล้ว"] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>{s.sale_status ?? "ขายแล้ว"}</span>
@@ -1659,6 +1671,11 @@ export default function StockMain() {
                         {/* สถานะให้เลือกชุดเดียว + คงค่าปัจจุบันของดีลไว้ (ถ้าเป็นสถานะเก่า) */}
                         {(SALE_STATUS_OPTIONS.includes(histEdit.sale_status) ? SALE_STATUS_OPTIONS : [histEdit.sale_status, ...SALE_STATUS_OPTIONS]).map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
+                    </label>
+                    <label className="text-xs text-slate-500">เซลล์ผู้ขาย{!histEdit.staff.trim() && <span className="text-amber-600 font-semibold"> — ยังไม่ระบุ (ดีลนำเข้าเก่า)</span>}
+                      <input list="hist-staff-opts" value={histEdit.staff} onChange={e => setHistEdit({ ...histEdit, staff: e.target.value })}
+                        placeholder="พิมพ์/เลือกชื่อเซลล์ที่ขายดีลนี้" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 bg-white" />
+                      <datalist id="hist-staff-opts">{histStaffOptions.map(n => <option key={n} value={n} />)}</datalist>
                     </label>
                     <label className="text-xs text-slate-500">วันส่งมอบ
                       <input type="date" value={histEdit.delivery_date} onChange={e => setHistEdit({ ...histEdit, delivery_date: e.target.value })} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800" />
