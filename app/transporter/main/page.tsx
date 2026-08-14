@@ -64,10 +64,10 @@ export default function TransporterMain() {
   const isReceiver = role === "ผู้รับรถ";
 
   // ===== ผู้รับรถ: เลือกผู้ผลิต → PI → คัน =====
-  // โชว์ทุก PI ที่มีรถจริงในสต็อก (ตั้งแต่ PI แรกถึงปัจจุบัน) — คนรับเลื่อนหา PI ที่รับจริงเอง
-  // ยกเว้นรถที่ปิดการขาย/ส่งมอบ/รถเช่าไปแล้ว (แก้ไข/รับซ้ำไม่ได้)
-  const isLockedStatus = (st: string) => /ปิดการขาย|ขายแล้ว|ส่งมอบ|เช่า/.test(st);
-  const waitingList = forklifts.filter(f => !isLockedStatus(String(f.status || "").trim()));
+  // โชว์ทุก PI ทุกคันในระบบ (เก็บข้อมูลไว้ทั้งหมด — รวมที่รับ/ขาย/เช่าแล้ว) · คนรับกดรับได้เฉพาะคัน "รอรับ"
+  const waitingList = forklifts;
+  // สถานะที่ผ่านขั้นรับแล้ว (ดูอย่างเดียว กดรับซ้ำไม่ได้)
+  const isLockedStatus = (st: string) => String(st || "").trim() !== "รอรับ";
   // ตัวกรองตามผู้ผลิต (โฟล์คลิฟท์ที่ต้องรับเข้า) — โชว์ HELI/HANGCHA/EP เสมอ + ยี่ห้ออื่นที่มีรถในสต็อก
   const FORKLIFT_BRANDS = ["HELI", "HANGCHA", "EP"];
   const brandOf = (f: Forklift) => String(f.brand || "").trim().toUpperCase();
@@ -438,7 +438,7 @@ export default function TransporterMain() {
                 /* ── ระดับ 1: การ์ดเลข PI ── */
                 <>
                   <h2 className="text-base font-bold text-slate-800 mb-1 flex items-center gap-2"><FileText className="w-4 h-4 text-amber-500" />เลือกผู้ผลิต แล้วเลือกเลข PI ที่จะรับเข้า</h2>
-                  <p className="text-xs text-slate-500 mb-3">โชว์ทุก PI ที่มีรถในระบบ (เลื่อนหา PI ที่รับจริง) · รถที่ปิดการขาย/รถเช่าแล้วจะไม่ขึ้น</p>
+                  <p className="text-xs text-slate-500 mb-3">โชว์ทุก PI ทุกคันในระบบ (เลื่อนหา PI ที่รับจริง) · กดรับได้เฉพาะคัน &ldquo;รอรับ&rdquo; · คันที่รับ/ขาย/เช่าแล้วดูอย่างเดียว</p>
                   {/* แถบผู้ผลิต — HELI/HANGCHA/EP + ทั้งหมด (โชว์จำนวนรถต่อยี่ห้อ) */}
                   <div className="flex flex-wrap gap-2 mb-4">
                     {[{ b: "ทั้งหมด", n: waitingList.length }, ...brandTabs.map(b => ({ b, n: brandCount(b) }))].map(({ b, n }) => (
@@ -504,9 +504,11 @@ export default function TransporterMain() {
                       const st = String(c.status || "").trim();
                       const waiting = st === "รอรับ";                       // ยังไม่รับ = ป้ายส้ม · รับแล้ว/สถานะอื่น = เทา
                       return (
-                        <button key={c.id} onClick={() => { setRecvCarId(c.id); setUnitNo(String(c.SN || "")); }}
-                          className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-amber-50 hover:border-amber-300 p-3.5 transition-all text-left active:scale-[0.99]">
-                          <div className="bg-white border border-slate-200 rounded-lg p-2 flex-shrink-0"><Truck className="w-4 h-4 text-amber-600" /></div>
+                        // กดรับได้เฉพาะคัน "รอรับ" · คันที่ผ่านแล้ว (รับ/ขาย/เช่า) = ดูอย่างเดียว
+                        <button key={c.id} disabled={!waiting}
+                          onClick={() => { if (waiting) { setRecvCarId(c.id); setUnitNo(String(c.SN || "")); } }}
+                          className={`flex items-center gap-3 rounded-xl border p-3.5 transition-all text-left ${waiting ? "border-slate-200 bg-slate-50 hover:bg-amber-50 hover:border-amber-300 active:scale-[0.99]" : "border-slate-100 bg-white cursor-default opacity-90"}`}>
+                          <div className={`border rounded-lg p-2 flex-shrink-0 ${waiting ? "bg-white border-slate-200" : "bg-slate-50 border-slate-100"}`}><Truck className={`w-4 h-4 ${waiting ? "text-amber-600" : "text-slate-400"}`} /></div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className="font-semibold text-slate-800 text-sm">{c.brand} {c.model}</p>
@@ -517,7 +519,7 @@ export default function TransporterMain() {
                               : <>SN: <span className="font-semibold text-slate-700">{c.SN}</span></>}</p>
                             {docRef && <p className="text-[11px] text-sky-600 mt-0.5">เลขเอกสาร: <span className="font-semibold">{docRef}</span></p>}
                           </div>
-                          <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                          {waiting ? <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" /> : <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
                         </button>
                       );
                     })}
