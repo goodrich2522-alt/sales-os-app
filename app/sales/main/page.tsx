@@ -107,7 +107,7 @@ function labeledPhotos(recs: InspectionRecord[]): LabeledPhoto[] {
 export default function SalesMain() {
   const router = useRouter();
   const {
-    forklifts, sales, addSale, updateSale, deleteSale, inspections, fieldConfig, refresh, setActor,
+    forklifts, sales, addSale, updateSale, deleteSale, updateForklift, inspections, fieldConfig, refresh, setActor,
     updateFieldOptions,
     addSaleExtraFieldDef, removeSaleExtraFieldDef, renameSaleExtraFieldDef,
     addSaleExtraFieldOption, removeSaleExtraFieldOption, editSaleExtraFieldOption,
@@ -158,6 +158,8 @@ export default function SalesMain() {
   // Vehicle type selector in checkout (auto-set from product category)
   const [vehicleType, setVehicleType] = useState<VehicleType>("Forklift");
   const [commCategory, setCommCategory] = useState(""); // หมวดค่าคอม (โฟล์คลิฟท์) — เลือกตอนปิดการขาย
+  const [rentCarNo, setRentCarNo]       = useState(""); // รถเช่า: เบอร์รถเช่า
+  const [rentBy, setRentBy]             = useState(""); // รถเช่า: ผู้เบิกรถเช่า
 
   // Custom notification items in checkout
   const [showCustomNotifs, setShowCustomNotifs] = useState(false);
@@ -637,7 +639,7 @@ export default function SalesMain() {
     setNewNotifLabel(""); setNewNotifDate(""); setPaymentProofs([]);
     setAddOns([]); setNewAddon({ name: "", price: "" }); setCancelBox(false); setCancelReason("");
     setFreebie(false); setShippingCost(""); setCommCategory("");
-    setShipSupplier(""); setShipSupplierOther("");
+    setShipSupplier(""); setShipSupplierOther(""); setRentCarNo(""); setRentBy("");
   };
 
   // เปิดฟอร์มปิดการขายของรถคันหนึ่ง (ใช้ร่วมทั้งมุมมองการ์ดและตาราง)
@@ -645,6 +647,9 @@ export default function SalesMain() {
     setSelected(item); setForm(emptyCheckout); setErrors({}); setSubmitted(false);
     setLightboxIdx(null); setSaleCustomVals({}); setVehicleType(item.vehicle_category ?? "Forklift");
     setCustomNotifItems([]); setShowCustomNotifs(false); setNewNotifLabel(""); setNewNotifDate("");
+    // รถเช่า: เติมค่าเดิมถ้ารถคันนี้เคยเป็นรถเช่า
+    setRentCarNo((item.custom_fields?.["เบอร์รถเช่า"] as string) ?? "");
+    setRentBy((item.custom_fields?.["ผู้เบิกรถเช่า"] as string) ?? "");
   };
 
   // ตรวจฟอร์มแล้วบันทึกดีลด้วยสถานะที่เลือก (ใช้ร่วมทุกปุ่ม)
@@ -658,7 +663,24 @@ export default function SalesMain() {
     }
     commitSale(status);
   };
-  const handleSell = (e: React.FormEvent) => { e.preventDefault(); submitSale("ปิดการขาย/จัดส่งแล้ว"); };
+  // รถเช่า: ต่างจากการขาย — กรอกแค่ เบอร์รถเช่า + ผู้เบิกรถเช่า → ตั้งสถานะรถ "รถเช่า" (ไม่สร้างดีลขาย/ไม่คิดค่าคอม)
+  const submitRental = () => {
+    if (!selected) return;
+    const errs: Record<string, string> = {};
+    if (!rentCarNo.trim()) errs.rentCarNo = "กรุณากรอกเบอร์รถเช่า";
+    if (!rentBy.trim())    errs.rentBy    = "กรุณากรอกผู้เบิกรถเช่า";
+    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    const cf = { ...(selected.custom_fields || {}), "เบอร์รถเช่า": rentCarNo.trim(), "ผู้เบิกรถเช่า": rentBy.trim() };
+    updateForklift({ ...selected, status: "รถเช่า", custom_fields: cf });
+    setUndoToast(`บันทึกรถเช่า ${selected.SN || selected.model} แล้ว — ผู้เบิก ${rentBy.trim()}`);
+    setTimeout(() => setUndoToast(null), 4000);
+    resetCheckout();
+  };
+  const handleSell = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (form.sale_type === "รถเช่า") return submitRental(); // รถเช่า → เส้นทางแยก
+    submitSale("ปิดการขาย/จัดส่งแล้ว");
+  };
   const handleReserve = (e: React.MouseEvent) => { e.preventDefault(); submitSale("จอง/รอโอน"); };            // จองไว้ก่อน ยังไม่โอน — ไม่ต้องแนบสลิป
   const handleBook = (e: React.MouseEvent) => { e.preventDefault(); submitSale("จอง/โอนมัดจำแล้ว"); };        // จอง + โอนมัดจำแล้ว — ต้องแนบสลิป
   const handleShipping = (e: React.MouseEvent) => { e.preventDefault(); submitSale("รอจัดส่ง"); };
@@ -1302,6 +1324,24 @@ export default function SalesMain() {
                       </SField>
                     </div>
 
+                    {/* ── รถเช่า: กรอกแค่ 2 ช่อง (เบอร์รถเช่า + ผู้เบิก) · ซ่อนช่องขายทั้งหมด ── */}
+                    {form.sale_type === "รถเช่า" && (
+                      <div className="border border-teal-200 bg-teal-50/50 rounded-xl p-3.5 flex flex-col gap-3">
+                        <p className="text-xs font-bold text-teal-700 flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5" />รายการรถเช่า — กรอกแค่ 2 ช่องนี้</p>
+                        <SField label="เบอร์รถเช่า *" error={errors.rentCarNo}>
+                          <input value={rentCarNo} onChange={e => { setRentCarNo(e.target.value); setErrors(p => ({ ...p, rentCarNo: "" })); }} placeholder="เช่น GR-001" className={si(errors.rentCarNo)} />
+                        </SField>
+                        <SField label="ผู้เบิกรถเช่า *" error={errors.rentBy}>
+                          <input value={rentBy} onChange={e => { setRentBy(e.target.value); setErrors(p => ({ ...p, rentBy: "" })); }} placeholder="ชื่อผู้เบิก / หน่วยงาน" className={si(errors.rentBy)} />
+                        </SField>
+                        <button type="submit" className="w-full bg-gradient-to-r from-teal-600 to-emerald-700 hover:from-teal-500 hover:to-emerald-600 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+                          <CheckCircle className="w-4 h-4" />บันทึกรถเช่า
+                        </button>
+                      </div>
+                    )}
+
+                    {/* ── ช่องการขายปกติ (ซ่อนเมื่อเลือกรถเช่า) ── */}
+                    {form.sale_type !== "รถเช่า" && (<>
                     {/* ── หมวดค่าคอม (โฟล์คลิฟท์) — สแตกเกอร์คิดตามยอดขาย · ลูกค้าเก่าตรวจอัตโนมัติจากประวัติ ── */}
                     {isStackerModel(selected?.model) ? (
                       <div className="text-xs text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
@@ -1604,6 +1644,7 @@ export default function SalesMain() {
                         </button>
                       </div>
                     </div>
+                    </>)}
                   </form>
                 </div>
               )}
