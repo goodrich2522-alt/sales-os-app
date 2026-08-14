@@ -110,6 +110,8 @@ export default function StockMain() {
   const [finSaved, setFinSaved]           = useState(false);
   const [snEdit, setSnEdit]               = useState(""); // เติม/แก้ SN (รถสั่งผลิต/ลงข้อมูลเก่า)
   const [snSaved, setSnSaved]             = useState(false);
+  const [piEdit, setPiEdit]               = useState(""); // เติม/แก้เลขที่ PI (ฝ่ายสต็อกทุกคนกรอกได้)
+  const [piSaved, setPiSaved]             = useState(false);
   const [photoBusy, setPhotoBusy]         = useState(false); // กำลังอัปโหลดรูปจากฝ่ายสต็อก
   const [docBusy, setDocBusy]             = useState(false); // กำลังอัปโหลดเอกสาร PDF
   const [docMsg, setDocMsg]               = useState("");    // ข้อความแจ้ง (ไฟล์ใหญ่/อัปไม่ได้)
@@ -183,6 +185,7 @@ export default function StockMain() {
     });
     setFinSaved(false);
     setSnEdit(detailItem?.SN ?? ""); setSnSaved(false);
+    setPiEdit(detailItem?.pi_no ?? ""); setPiSaved(false);
     setQrData(null); setDocMsg("");
   }, [detailItem]);
 
@@ -1857,6 +1860,20 @@ export default function StockMain() {
                   {snEdit.trim() && forklifts.some(f => f.id !== it.id && String(f.SN ?? "").toUpperCase() === snEdit.trim().toUpperCase()) &&
                     <p className="text-[11px] text-red-500 mt-1">⚠️ SN นี้ซ้ำกับรถคันอื่นในระบบ — ตรวจสอบก่อนบันทึก</p>}
                   <p className="text-[10px] text-slate-400 mt-1">* รถสั่งผลิตที่ยังไม่มี SN — เติม SN จริงได้ที่นี่เมื่อรถมาถึง</p>
+                </div>
+                {/* เติม/แก้เลขที่ PI (ฝ่ายสต็อกทุกคนกรอกได้ — เดิมแก้ได้เฉพาะบล็อกการเงิน) */}
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" />เลขที่ PI (ใบสั่งซื้อ){!it.pi_no?.trim() && <span className="text-amber-600 font-semibold normal-case">— ยังไม่ระบุ</span>}</p>
+                  <div className="flex gap-2">
+                    <input value={piEdit} onChange={e => { setPiEdit(e.target.value); setPiSaved(false); }} placeholder="กรอกเลขที่ PI (เช่น PI104 / EPZL260808)"
+                      className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                    <button onClick={() => { const u = { ...it, pi_no: piEdit.trim() }; updateForklift(u); setDetailItem(u); setPiSaved(true); }}
+                      disabled={piEdit.trim() === (it.pi_no ?? "").trim()}
+                      className="px-4 py-2 rounded-xl text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
+                      {piSaved ? "บันทึกแล้ว ✓" : "บันทึก PI"}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">* กรอกเลขที่ PI จริงจากใบสั่งซื้อ — อัปเดตทุกฝ่ายทันที</p>
                 </div>
                 {/* QR ต่อคัน — พิมพ์ติดรถ สแกนเปิดข้อมูลรถทันที */}
                 <div>
