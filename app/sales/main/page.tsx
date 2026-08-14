@@ -17,6 +17,7 @@ import { driveImg } from "@/lib/img";
 import { isPendingId, displayCode } from "@/lib/productId";
 import { STATUS_BADGE, SALE_STATUS_BADGE, CONTACT_SOURCE_COLORS, VEHICLE_CATS, paymentBadgeClass } from "@/lib/constants";
 import { WarrantyBlock } from "@/components/WarrantyBlock";
+import { parseSvc, nextDue, SVC_SOON_DAYS } from "@/lib/warranty";
 import { formatBaht } from "@/lib/format";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
 import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isStackerModel, isOtherGroup, priorPurchaseByCustomer } from "@/lib/commission";
@@ -441,20 +442,28 @@ export default function SalesMain() {
 
   // Notifications — sales with warranty/parts approaching
   const notifications = useMemo(() => {
-    const result: { sale: Sale; type: "warranty" | "parts" | "custom"; days: number; label?: string }[] = [];
+    const result: { sale: Sale; type: "warranty" | "parts" | "custom" | "service"; days: number; label?: string }[] = [];
     mySales.forEach(s => {
       if (s.warranty_expiry) {
         const d = daysUntil(s.warranty_expiry);
-        if (d >= 0 && d <= 7) result.push({ sale: s, type: "warranty", days: d });
+        if (d != null && d >= 0 && d <= 7) result.push({ sale: s, type: "warranty", days: d });
       }
       if (s.parts_schedule) {
         const d = daysUntil(s.parts_schedule);
-        if (d >= 0 && d <= 7) result.push({ sale: s, type: "parts", days: d });
+        if (d != null && d >= 0 && d <= 7) result.push({ sale: s, type: "parts", days: d });
       }
       (s.custom_notifications ?? []).forEach(n => {
         const d = daysUntil(n.date);
-        if (d >= 0 && d <= 7) result.push({ sale: s, type: "custom", days: d, label: n.label });
+        if (d != null && d >= 0 && d <= 7) result.push({ sale: s, type: "custom", days: d, label: n.label });
       });
+      // รอบเช็ครับประกัน (บริการหลังการขาย) — แจ้งเซลล์ผู้ขายคันนี้ · ใกล้ถึง ≤30 วัน หรือเกินกำหนด
+      const fk = forklifts.find(f => f.id === s.forklift_id);
+      const svc = fk ? parseSvc(fk) : undefined;
+      const nd = svc ? nextDue(svc) : undefined;
+      if (nd?.due) {
+        const d = daysUntil(nd.due);
+        if (d != null && d <= SVC_SOON_DAYS) result.push({ sale: s, type: "service", days: d, label: `รอบเช็คที่ ${nd.index + 1}` });
+      }
     });
     if (testNotifActive) {
       result.unshift({
@@ -463,7 +472,7 @@ export default function SalesMain() {
       });
     }
     return result;
-  }, [mySales, testNotifActive]);
+  }, [mySales, testNotifActive, forklifts]);
 
   // ── แจ้งเตือนผลอนุมัติจอง — ครั้งแรกตั้ง baseline (ผลเก่าถือว่ารับทราบแล้ว กันสแปม) ──
   useEffect(() => {
@@ -836,13 +845,13 @@ export default function SalesMain() {
               {notifications.map((n, i) => (
                 <div key={i} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm ${n.days <= 1 ? "bg-red-100 border border-red-200" : "bg-amber-100 border border-amber-200"}`}>
                   <span className={`font-bold text-xs px-2 py-0.5 rounded-full ${n.days <= 1 ? "bg-red-500 text-white" : "bg-amber-500 text-white"}`}>
-                    {n.days === 0 ? "วันนี้!" : `อีก ${n.days} วัน`}
+                    {n.days === 0 ? "วันนี้!" : n.days < 0 ? `เกิน ${Math.abs(n.days)} วัน` : `อีก ${n.days} วัน`}
                   </span>
                   <span className={`font-semibold ${n.days <= 1 ? "text-red-800" : "text-amber-800"}`}>
                     {n.sale.forklift_unit_no} — {n.sale.customer_name}
                   </span>
                   <span className={`text-xs ${n.days <= 1 ? "text-red-600" : "text-amber-600"}`}>
-                    {n.type === "warranty" ? "ประกันรถหมดอายุ" : n.type === "parts" ? "ถึงรอบเปลี่ยนอะไหล่" : (n.label ?? "การแจ้งเตือนพิเศษ")}
+                    {n.type === "warranty" ? "ประกันรถหมดอายุ" : n.type === "parts" ? "ถึงรอบเปลี่ยนอะไหล่" : n.type === "service" ? `🔧 ถึงรอบเช็ครับประกัน (${n.label})` : (n.label ?? "การแจ้งเตือนพิเศษ")}
                   </span>
                   {n.sale.id === "__test__" && (
                     <span className="text-xs bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded font-semibold ml-1">TEST</span>
