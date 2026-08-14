@@ -1892,6 +1892,16 @@ export default function StockMain() {
                   </div>
                   <p className="text-[10px] text-slate-400 mt-1">* กรอกเลขที่ PI จริงจากใบสั่งซื้อ — อัปเดตทุกฝ่ายทันที</p>
                 </div>
+                {/* แก้สถานะรถรายคัน (ฝ่ายสต็อก) — เปลี่ยนแล้วอัปเดตทุกฝ่ายทันที */}
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><Boxes className="w-3.5 h-3.5" />สถานะรถ</p>
+                  <select value={it.status}
+                    onChange={e => { const u = { ...it, status: e.target.value }; updateForklift(u); setDetailItem(u); showToast(`เปลี่ยนสถานะเป็น “${e.target.value}” ✓`); }}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                    {statusOpts.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <p className="text-[10px] text-slate-400 mt-1">* เปลี่ยนสถานะรถ (พร้อมขาย/รอรับ/รถเช่า/เคลม ฯลฯ) — อัปเดตทุกฝ่ายทันที</p>
+                </div>
                 {/* QR ต่อคัน — พิมพ์ติดรถ สแกนเปิดข้อมูลรถทันที */}
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><QrCode className="w-3.5 h-3.5" />QR รถคันนี้</p>
