@@ -28,6 +28,13 @@ function WarrantyPageInner() {
       .forEach(s => { if (s.forklift_id && s.customer_name) m.set(s.forklift_id, s.customer_name); });
     return m;
   }, [sales]);
+  // เซลล์เจ้าของงาน (ผู้ขาย) ต่อรถ — ให้ฝ่ายสต็อกรู้ว่าคันไหนของเซลล์ใคร
+  const sellerByFk = useMemo(() => {
+    const m = new Map<string, string>();
+    [...sales].sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")))
+      .forEach(s => { if (s.forklift_id && s.sales_staff) m.set(s.forklift_id, s.sales_staff); });
+    return m;
+  }, [sales]);
 
   // รถที่มีข้อมูลบริการหลังการขาย → คำนวณรอบถัดไป + จำนวนวันถึงกำหนด
   const rows = useMemo(() => {
@@ -38,7 +45,7 @@ function WarrantyPageInner() {
       const doneCount = svc.rounds.filter(r => r.done).length;
       const days = nd ? daysUntil(nd.due, today) : null;
       return [{
-        fk: f, svc, customer: custByFk.get(f.id) || "",
+        fk: f, svc, customer: custByFk.get(f.id) || "", seller: sellerByFk.get(f.id) || "",
         nextIndex: nd?.index ?? null, due: nd?.due ?? "", days,
         doneCount, complete: !nd,
       }];
@@ -46,7 +53,7 @@ function WarrantyPageInner() {
       if (a.complete !== b.complete) return a.complete ? 1 : -1; // ยังไม่ครบก่อน
       return (a.days ?? 9999) - (b.days ?? 9999);                // ใกล้/เกินกำหนดก่อน
     });
-  }, [forklifts, custByFk, today]);
+  }, [forklifts, custByFk, sellerByFk, today]);
 
   const overdue = rows.filter(r => !r.complete && r.days != null && r.days < 0);
   const soon = rows.filter(r => !r.complete && r.days != null && r.days >= 0 && r.days <= SVC_SOON_DAYS);
@@ -66,12 +73,12 @@ function WarrantyPageInner() {
     const XLSX = await import("xlsx");
     const data = rows.map(r => ({
       "SN": r.fk.SN || r.fk.id, "ยี่ห้อ/รุ่น": `${r.fk.brand ?? ""} ${r.fk.model ?? ""}`.trim(),
-      "ลูกค้า": r.customer, "วันเริ่มรับประกัน": r.svc.start,
+      "ลูกค้า": r.customer, "เซลล์ผู้ขาย": r.seller, "วันเริ่มรับประกัน": r.svc.start,
       "เช็คแล้ว (รอบ)": r.doneCount, "รอบถัดไป": r.complete ? "ครบแล้ว" : `รอบที่ ${(r.nextIndex ?? 0) + 1}`,
       "กำหนดรอบถัดไป": r.due, "สถานะ": r.complete ? "ครบทุกรอบ" : r.days == null ? "-" : r.days < 0 ? `เกิน ${Math.abs(r.days)} วัน` : `อีก ${r.days} วัน`,
     }));
     const ws = XLSX.utils.json_to_sheet(data);
-    ws["!cols"] = [16, 22, 22, 14, 12, 12, 14, 14].map(w => ({ wch: w }));
+    ws["!cols"] = [16, 22, 22, 16, 14, 12, 12, 14, 14].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "รอบเช็ครับประกัน");
     XLSX.writeFile(wb, `รับประกัน_รอบเช็ค_${today}.xlsx`);
@@ -144,7 +151,7 @@ function WarrantyPageInner() {
                       <span className="font-bold text-slate-800 text-sm">{r.fk.brand} {r.fk.model}</span>
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      {r.customer || "—"} · เริ่มรับประกัน {r.svc.start || "—"} · เช็คแล้ว {r.doneCount}/{SVC_ROUNDS} รอบ
+                      {r.customer || "—"}{r.seller ? ` · เซลล์ ${r.seller}` : ""} · เริ่มรับประกัน {r.svc.start || "—"} · เช็คแล้ว {r.doneCount}/{SVC_ROUNDS} รอบ
                     </p>
                     {!r.complete && (
                       <p className="text-[11px] text-teal-700 mt-0.5 font-semibold">รอบถัดไป: รอบที่ {(r.nextIndex ?? 0) + 1} · กำหนด {r.due || "— (ยังไม่ระบุวันเริ่ม)"}</p>
