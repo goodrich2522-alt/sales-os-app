@@ -1769,19 +1769,24 @@ export default function StockMain() {
           // คีย์ที่มี UI/บล็อกเฉพาะอยู่แล้ว หรือเก็บเป็น JSON — กัน dump เป็นข้อความดิบ
           "บริการหลังการขาย","ประวัติแก้ไข","เอกสารแนบ","ราคาขายจริง","ค่าขนส่งจริง","ทุนอุปกรณ์เสริม","ของแถม","กำไร(ไฟล์)","หมายเหตุการขาย","วันสั่งรถ","วันคาดรับรถสั่งผลิต",COMMISSION_FIELD,"ยืนยันนำเข้าสต็อก",STOCK_APPROVAL_FIELD]);
         const customs = Object.entries(cf).filter(([k, v]) => String(v ?? "").trim() && !SHOWN_CF.has(k));
-        const Section = ({ title, rows }: { title: string; rows: [string, string][] }) => {
-          const shown = rows.filter(([, v]) => String(v ?? "").trim());
+        // ช่องสเปกหลักที่ "โชว์เสมอทุกคัน" แม้ว่าง (กติกา: การ์ดต้องมีรายละเอียดครบเหมือนกันทุกคัน)
+        const SPEC_ALWAYS = new Set(["หมวดรถ", "ยี่ห้อ", "รุ่น", "พิกัดยก", "ยกสูง", "เสา (MAST)", "Valve / คอนโทรล", "ความยาวงา", "พลังงาน"]);
+        const Section = ({ title, rows, keepAlways }: { title: string; rows: [string, string][]; keepAlways?: Set<string> }) => {
+          const shown = rows.filter(([k, v]) => (keepAlways?.has(k)) || String(v ?? "").trim());
           if (shown.length === 0) return null;
           return (
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">{title}</p>
               <div className="grid grid-cols-2 gap-2">
-                {shown.map(([k, v]) => (
-                  <div key={k} className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2">
-                    <p className="text-[11px] text-slate-400">{k}</p>
-                    <p className="text-sm font-semibold text-slate-700 break-words">{v}</p>
-                  </div>
-                ))}
+                {shown.map(([k, v]) => {
+                  const empty = !String(v ?? "").trim();
+                  return (
+                    <div key={k} className={`border rounded-xl px-3 py-2 ${empty ? "bg-amber-50/40 border-amber-100" : "bg-slate-50 border-slate-100"}`}>
+                      <p className="text-[11px] text-slate-400">{k}</p>
+                      <p className={`text-sm font-semibold break-words ${empty ? "text-amber-500" : "text-slate-700"}`}>{empty ? "— ยังไม่ระบุ" : v}</p>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );
@@ -1818,7 +1823,7 @@ export default function StockMain() {
                     </button>
                   </div>
                 )}
-                <Section title="สเปกรถ" rows={spec} />
+                <Section title="สเปกรถ" rows={spec} keepAlways={SPEC_ALWAYS} />
                 <Section title="ข้อมูลสต็อก / จัดซื้อ" rows={info} />
                 {/* ข้อมูลการขาย (ลูกค้า/ราคา/สถานะ) — สำคัญสุดสำหรับรถที่ขายแล้ว จึงอยู่บนสุด */}
                 {saleForItem && (
