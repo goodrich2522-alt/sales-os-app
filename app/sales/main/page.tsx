@@ -797,25 +797,18 @@ export default function SalesMain() {
               className="flex items-center gap-1.5 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-transparent hover:border-emerald-200">
               <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin text-emerald-600" : ""}`} /><span className="hidden sm:inline">รีเฟรช</span>
             </button>
-            {notifications.length > 0 && (
-              <button onClick={() => setShowNotif(!showNotif)}
-                className="relative flex items-center gap-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-amber-200">
-                <Bell className="w-4 h-4" />
-                <span className="bg-red-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">{notifications.length}</span>
-              </button>
-            )}
             <button
-              onClick={() => { setTestNotifActive(p => !p); setShowNotif(true); }}
+              onClick={() => { setTestNotifActive(p => !p); setShowBookingNotif(true); }}
               title="ทดสอบการแจ้งเตือน"
               className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border transition-all ${testNotifActive ? "bg-amber-100 text-amber-700 border-amber-300" : "text-slate-500 border-dashed border-slate-300 hover:border-amber-300 hover:text-amber-600"}`}>
               <Bell className="w-3.5 h-3.5" />ทดสอบ
             </button>
-            {/* กระดิ่งผลอนุมัติจองจากฝ่ายสต็อก */}
-            <button onClick={() => setShowBookingNotif(true)} title="ผลอนุมัติจองจากสต็อก"
+            {/* กระดิ่งรวมทุกแจ้งเตือน (รอบเช็ค/ประกัน + ผลอนุมัติจอง) */}
+            <button onClick={() => setShowBookingNotif(true)} title="การแจ้งเตือน"
               className="relative flex items-center text-slate-600 hover:text-amber-600 hover:bg-amber-50 p-2 rounded-lg transition-all border border-transparent hover:border-amber-200">
               <Bell className="w-5 h-5" />
-              {bookingNotifs.length > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{bookingNotifs.length}</span>
+              {(bookingNotifs.length + notifications.length) > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{bookingNotifs.length + notifications.length}</span>
               )}
             </button>
             <button onClick={() => setShowHistory(true)}
@@ -831,37 +824,6 @@ export default function SalesMain() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-5">
-        {/* Notification Banner */}
-        {notifications.length > 0 && showNotif && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Bell className="w-4 h-4 text-amber-600" />
-                <span className="text-sm font-bold text-amber-800">การแจ้งเตือน ({notifications.length} รายการ)</span>
-              </div>
-              <button onClick={() => setShowNotif(false)} className="text-amber-500 hover:text-amber-700"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="flex flex-col gap-2">
-              {notifications.map((n, i) => (
-                <div key={i} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm ${n.days <= 1 ? "bg-red-100 border border-red-200" : "bg-amber-100 border border-amber-200"}`}>
-                  <span className={`font-bold text-xs px-2 py-0.5 rounded-full ${n.days <= 1 ? "bg-red-500 text-white" : "bg-amber-500 text-white"}`}>
-                    {n.days === 0 ? "วันนี้!" : n.days < 0 ? `เกิน ${Math.abs(n.days)} วัน` : `อีก ${n.days} วัน`}
-                  </span>
-                  <span className={`font-semibold ${n.days <= 1 ? "text-red-800" : "text-amber-800"}`}>
-                    {n.sale.forklift_unit_no} — {n.sale.customer_name}
-                  </span>
-                  <span className={`text-xs ${n.days <= 1 ? "text-red-600" : "text-amber-600"}`}>
-                    {n.type === "warranty" ? "ประกันรถหมดอายุ" : n.type === "parts" ? "ถึงรอบเปลี่ยนอะไหล่" : n.type === "service" ? `🔧 ถึงรอบเช็ครับประกัน (${n.label})` : (n.label ?? "การแจ้งเตือนพิเศษ")}
-                  </span>
-                  {n.sale.id === "__test__" && (
-                    <span className="text-xs bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded font-semibold ml-1">TEST</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Stats Banner */}
         <div className="bg-gradient-to-r from-indigo-600 via-indigo-700 to-blue-800 rounded-2xl p-5 text-white relative overflow-hidden shadow-lg shadow-indigo-200">
           <div className="absolute right-0 top-0 w-48 h-full bg-white/5 rounded-l-full" />
@@ -2360,18 +2322,29 @@ export default function SalesMain() {
           <div className="bg-white rounded-3xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0 bg-amber-50">
               <div>
-                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2"><Bell className="w-4 h-4 text-amber-500" />ผลอนุมัติจองจากฝ่ายสต็อก</h3>
-                <p className="text-xs text-slate-500 mt-0.5">{bookingNotifs.length} รายการใหม่</p>
+                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2"><Bell className="w-4 h-4 text-amber-500" />การแจ้งเตือน</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{bookingNotifs.length + notifications.length} รายการ (รอบเช็ค/ประกัน + ผลอนุมัติจอง)</p>
               </div>
               <div className="flex items-center gap-1.5">
-                {bookingNotifs.length > 0 && <button onClick={ackAllBookings} className="text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 rounded-lg">รับทราบทั้งหมด</button>}
+                {bookingNotifs.length > 0 && <button onClick={ackAllBookings} className="text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 rounded-lg">รับทราบจองทั้งหมด</button>}
                 <button onClick={() => setShowBookingNotif(false)} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all"><X className="w-5 h-5" /></button>
               </div>
             </div>
             <div className="overflow-y-auto flex-1 min-h-0 p-4 flex flex-col gap-2.5">
-              {bookingNotifs.length === 0 && (
+              {bookingNotifs.length === 0 && notifications.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-14 text-slate-400"><Bell className="w-10 h-10 text-slate-300 mb-2" /><p className="text-sm">ไม่มีการแจ้งเตือนใหม่</p></div>
               )}
+              {/* รอบเช็ค/ประกัน/อะไหล่ (แจ้งเซลล์ผู้ขายคันนั้น) */}
+              {notifications.map((n, i) => (
+                <div key={`n${i}`} className={`border rounded-2xl p-3.5 ${n.days <= 1 ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200"}`}>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`font-bold text-[11px] px-2 py-0.5 rounded-full ${n.days <= 1 ? "bg-red-500 text-white" : "bg-amber-500 text-white"}`}>{n.days === 0 ? "วันนี้!" : n.days < 0 ? `เกิน ${Math.abs(n.days)} วัน` : `อีก ${n.days} วัน`}</span>
+                    <p className="font-semibold text-slate-800 text-sm">{n.sale.forklift_unit_no} — {n.sale.customer_name}</p>
+                    {n.sale.id === "__test__" && <span className="text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded font-semibold">TEST</span>}
+                  </div>
+                  <p className={`text-[11px] mt-1 font-medium ${n.days <= 1 ? "text-red-600" : "text-amber-700"}`}>{n.type === "warranty" ? "🛡️ ประกันรถหมดอายุ" : n.type === "parts" ? "🔧 ถึงรอบเปลี่ยนอะไหล่" : n.type === "service" ? `🔧 ถึงรอบเช็ครับประกัน (${n.label})` : (n.label ?? "การแจ้งเตือนพิเศษ")}</p>
+                </div>
+              ))}
               {bookingNotifs.map(s => {
                 const approved = String(s.custom_fields?.[STOCK_APPROVAL_FIELD] ?? "") === "อนุมัติแล้ว";
                 return (
