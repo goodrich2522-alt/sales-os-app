@@ -644,10 +644,11 @@ export default function SalesMain() {
 
   // เปิดฟอร์มปิดการขายของรถคันหนึ่ง (ใช้ร่วมทั้งมุมมองการ์ดและตาราง)
   const openCheckout = (item: Forklift) => {
-    setSelected(item); setForm(emptyCheckout); setErrors({}); setSubmitted(false);
+    // รถคันนี้เป็นรถเช่าอยู่แล้ว → เปิดมาเป็นฟอร์มรถเช่าเลย (ซ่อนช่องขายทั้งหมด)
+    const isRent = String(item.status ?? "").includes("เช่า") || !!item.custom_fields?.["เบอร์รถเช่า"];
+    setSelected(item); setForm({ ...emptyCheckout, sale_type: isRent ? "รถเช่า" : "" }); setErrors({}); setSubmitted(false);
     setLightboxIdx(null); setSaleCustomVals({}); setVehicleType(item.vehicle_category ?? "Forklift");
     setCustomNotifItems([]); setShowCustomNotifs(false); setNewNotifLabel(""); setNewNotifDate("");
-    // รถเช่า: เติมค่าเดิมถ้ารถคันนี้เคยเป็นรถเช่า
     setRentCarNo((item.custom_fields?.["เบอร์รถเช่า"] as string) ?? "");
     setRentBy((item.custom_fields?.["ผู้เบิกรถเช่า"] as string) ?? "");
   };
