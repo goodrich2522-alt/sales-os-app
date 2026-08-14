@@ -49,20 +49,35 @@ async function bootstrapTransporter(): Promise<BootstrapData> {
   };
 }
 
+// ดึงทุกแถวของตาราง — Supabase/PostgREST คืนสูงสุด 1000 แถว/ครั้ง → วนดึงทีละ 1000 จนครบ
+// (เดิมใช้ .limit(20000) แต่ถูก cap ที่ 1000 ทำให้รถเกิน 1000 คันหายไป)
+async function fetchAllRows(table: string): Promise<Record<string, unknown>[]> {
+  const c = sb();
+  const PAGE = 1000;
+  const out: Record<string, unknown>[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await c.from(table).select("*").range(from, from + PAGE - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as Record<string, unknown>[];
+    out.push(...rows);
+    if (rows.length < PAGE) break; // ได้ไม่ครบหน้า = หมดแล้ว
+  }
+  return out;
+}
+
 // ── อ่านข้อมูลทั้งหมดครั้งเดียว ──────────────────────────────────────────────
 export async function bootstrap(): Promise<BootstrapData> {
   if (isTransporterMode()) return bootstrapTransporter();
   const c = sb();
-  const [fk, sl, ins, cfg] = await Promise.all([
-    c.from("forklifts").select("*").limit(20000),
-    c.from("sales").select("*").limit(20000),
-    c.from("inspections").select("*").limit(20000),
+  const [fkRows, slRows, insRows, cfg] = await Promise.all([
+    fetchAllRows("forklifts"),
+    fetchAllRows("sales"),
+    fetchAllRows("inspections"),
     c.from("app_config").select("data").eq("id", 1).maybeSingle(),
   ]);
-  if (fk.error) throw fk.error;
-  if (sl.error) throw sl.error;
-  if (ins.error) throw ins.error;
-  const insAll = (ins.data ?? []) as (InspectionRecord & { deleted_at?: string | null })[];
+  const fk = { data: fkRows as unknown as Forklift[] };
+  const sl = { data: slRows as unknown as Sale[] };
+  const insAll = insRows as unknown as (InspectionRecord & { deleted_at?: string | null })[];
   const active = insAll.filter(r => !r.deleted_at) as InspectionRecord[];
   const deleted = insAll.filter(r => r.deleted_at).map(r => ({ ...r, deletedAt: r.deleted_at as string })) as DeletedInspectionRecord[];
   return {
