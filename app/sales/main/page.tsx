@@ -45,6 +45,11 @@ function notSellableReason(status: unknown): string | null {
   return null; // อื่นๆ (เช่น สั่งผลิต) → ขายล่วงหน้าได้ คงพฤติกรรมเดิม
 }
 const isSellable = (f: { status?: unknown }) => notSellableReason(f?.status) === null;
+// จับคู่รูป inspection กับรถ — เทียบทั้ง SN และ id (รถสั่งผลิตแนบรูปตอนยังไม่มี SN จะผูกด้วย id เช่น EPZL260808#1)
+const insMatches = (unitNo: unknown, sn?: unknown, id?: unknown) => {
+  const u = String(unitNo ?? "").trim().toUpperCase();
+  return !!u && (u === String(sn ?? "").trim().toUpperCase() || u === String(id ?? "").trim().toUpperCase());
+};
 
 const emptyCheckout = {
   customer_name: "", customer_tel: "",
@@ -485,7 +490,7 @@ export default function SalesMain() {
 
   const detailInspPhotos = useMemo(() => {
     if (!detailSale) return { receiver: [] as LabeledPhoto[], deliverer: [] as LabeledPhoto[], all: [] as LabeledPhoto[], receiverNames: "", delivererNames: "" };
-    const recs = inspections.filter(r => r.unit_no === detailSale.forklift_unit_no);
+    const recs = inspections.filter(r => insMatches(r.unit_no, detailSale.forklift_unit_no, detailSale.forklift_id));
     const recvRecs = recs.filter(r => r.role === "ผู้รับรถ" || !r.role);
     const delivRecs = recs.filter(r => r.role === "ผู้ส่งมอบรถ");
     const receiver  = labeledPhotos(recvRecs);
@@ -686,7 +691,7 @@ export default function SalesMain() {
   };
 
   const fmt = formatBaht; // ใช้ตัวจัดรูปแบบเงินกลาง (lib/format)
-  const selectedInspRecs = selected ? inspections.filter(r => r.unit_no === selected.SN) : [];
+  const selectedInspRecs = selected ? inspections.filter(r => insMatches(r.unit_no, selected.SN, selected.id)) : [];
   const receiverPhotos   = labeledPhotos(selectedInspRecs.filter(r => r.role === "ผู้รับรถ" || !r.role));
   const delivererPhotos  = labeledPhotos(selectedInspRecs.filter(r => r.role === "ผู้ส่งมอบรถ"));
   const receiverNames    = [...new Set(selectedInspRecs.filter(r => r.role === "ผู้รับรถ" || !r.role).map(r => r.transporter_name).filter(Boolean))].join(", ");
@@ -962,7 +967,7 @@ export default function SalesMain() {
         {/* ค้นเจอรถที่ขายแล้ว/ถูกซ่อน → โชว์การ์ดแบบดูอย่างเดียว (กดปิดการขายไม่ได้) แทนจอ "0 คัน" */}
         {searchHiddenHit && sorted.length === 0 && (() => {
           const item = searchHiddenHit.f;
-          const recs = inspections.filter(r => r.unit_no === item.SN);
+          const recs = inspections.filter(r => insMatches(r.unit_no, item.SN, item.id));
           const photos = recs.flatMap(r => r.images);
           const coverPhoto = recs.map(r => r.image_slots?.front).find(Boolean) || photos[0] || null;
           return (
@@ -1074,7 +1079,7 @@ export default function SalesMain() {
         {viewMode === "card" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {sorted.map(item => {
-            const recs = inspections.filter(r => r.unit_no === item.SN);
+            const recs = inspections.filter(r => insMatches(r.unit_no, item.SN, item.id));
             const photos = recs.flatMap(r => r.images);
             // งาน 3: รูปหน้ารถโชว์บนการ์ด — เลือกช่อง "รถด้านหน้า" ก่อน ถ้าไม่มีใช้รูปแรกที่มี
             const coverPhoto = recs.map(r => r.image_slots?.front).find(Boolean) || photos[0] || null;
