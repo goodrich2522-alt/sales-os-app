@@ -1029,23 +1029,35 @@ export default function StockMain() {
 
         {/* ── เครื่องมือข้อมูล: อัปโหลดหลายคัน / สำรอง / นำเข้า ── */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-2 mb-1">
             <FileText className="w-4 h-4 text-indigo-500" />
             <h3 className="text-sm font-bold text-slate-700">เครื่องมือข้อมูล</h3>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-            {/* นำเข้าจากใบเสนอราคา (อ่าน PDF อัตโนมัติ) */}
+          {/* ⭐ จุดเดียวสำหรับเพิ่มรถ — เพิ่มที่นี่แล้วทุกฝ่ายอัปเดตพร้อมกัน */}
+          <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1.5 mb-3 flex items-center gap-1.5">
+            <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />เพิ่มรถใหม่ <b>ที่นี่ที่เดียว</b> → อัปเดตหน้าผู้ขนส่ง · ฝ่ายขาย · แดชบอร์ด ให้อัตโนมัติ
+          </p>
+
+          {/* กลุ่ม 1: เพิ่มรถเข้าสต็อก */}
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">➊ เพิ่มรถเข้าสต็อก</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-3">
+            {/* นำเข้าจากใบเสนอราคา (อ่าน PDF อัตโนมัติ) — สำหรับออเดอร์จากซัพพลายเออร์ */}
             <button onClick={() => setShowImport(true)}
               className="flex items-center gap-2.5 rounded-xl border border-violet-200 bg-violet-50 hover:bg-violet-100 px-3.5 py-3 text-left transition-colors">
               <FileText className="w-5 h-5 text-violet-600 flex-shrink-0" />
-              <div className="min-w-0"><p className="text-sm font-bold text-violet-800">ใบเสนอราคา</p><p className="text-[11px] text-violet-600">อ่าน PDF อัตโนมัติ (HELI)</p></div>
+              <div className="min-w-0"><p className="text-sm font-bold text-violet-800">ใบเสนอราคา / PI</p><p className="text-[11px] text-violet-600">อ่าน PDF อัตโนมัติ (HELI/EP/STAXX) · กรอกเองก็ได้</p></div>
             </button>
-            {/* อัปโหลดหลายคันจาก CSV */}
+            {/* อัปโหลดหลายคันจาก Excel/CSV */}
             <button onClick={() => csvInputRef.current?.click()} disabled={dataBusy}
               className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 px-3.5 py-3 text-left transition-colors disabled:opacity-50">
               <Upload className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-              <div className="min-w-0"><p className="text-sm font-bold text-emerald-800">อัปโหลดหลายคัน</p><p className="text-[11px] text-emerald-600">จากไฟล์ Excel/CSV</p></div>
+              <div className="min-w-0"><p className="text-sm font-bold text-emerald-800">อัปโหลดหลายคัน</p><p className="text-[11px] text-emerald-600">จากไฟล์ Excel/CSV (แม่แบบด้านล่าง)</p></div>
             </button>
+          </div>
+
+          {/* กลุ่ม 2: สำรอง / กู้คืน (ไม่ใช่การเพิ่มรถ) */}
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">➋ สำรอง / กู้คืนข้อมูล</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {/* สำรองข้อมูล */}
             <button onClick={handleExport} disabled={dataBusy}
               className="flex items-center gap-2.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 px-3.5 py-3 text-left transition-colors disabled:opacity-50">
@@ -1055,8 +1067,8 @@ export default function StockMain() {
             {/* นำเข้าไฟล์สำรอง */}
             <button onClick={() => importInputRef.current?.click()} disabled={dataBusy}
               className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 px-3.5 py-3 text-left transition-colors disabled:opacity-50">
-              <FileText className="w-5 h-5 text-slate-600 flex-shrink-0" />
-              <div className="min-w-0"><p className="text-sm font-bold text-slate-700">นำเข้าข้อมูล</p><p className="text-[11px] text-slate-500">กู้จากไฟล์สำรอง</p></div>
+              <Upload className="w-5 h-5 text-slate-600 flex-shrink-0" />
+              <div className="min-w-0"><p className="text-sm font-bold text-slate-700">นำเข้าข้อมูล</p><p className="text-[11px] text-slate-500">กู้จากไฟล์สำรอง (ทั้งก้อน)</p></div>
             </button>
           </div>
           <input ref={csvInputRef} type="file" accept=".csv,text/csv,.xlsx,.xls,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" className="hidden" onChange={handleCsvFile} />
