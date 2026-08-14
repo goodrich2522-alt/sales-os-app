@@ -652,6 +652,13 @@ export default function SalesMain() {
     setRentCarNo((item.custom_fields?.["เบอร์รถเช่า"] as string) ?? "");
     setRentBy((item.custom_fields?.["ผู้เบิกรถเช่า"] as string) ?? "");
   };
+  // รถคันนี้เป็นรถเช่าไหม + ป้ายปุ่มการ์ด (รถเช่า → "รถเช่า GR-xxx" ตามเบอร์รถเช่าของคันนั้น)
+  const isRentalCar = (f: Forklift) => String(f.status ?? "").includes("เช่า");
+  const cardActionLabel = (f: Forklift) => {
+    if (!isRentalCar(f)) return "ปิดการขาย";
+    const no = String(f.custom_fields?.["เบอร์รถเช่า"] ?? "").trim();
+    return no ? `รถเช่า ${no}` : "รถเช่า";
+  };
 
   // ตรวจฟอร์มแล้วบันทึกดีลด้วยสถานะที่เลือก (ใช้ร่วมทุกปุ่ม)
   const submitSale = (status: SaleStatus) => {
@@ -1061,7 +1068,7 @@ export default function SalesMain() {
                     <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{item.location || "—"}</td>
                     <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{(item.custom_fields?.["เซลล์ผู้ดูแล"] as string) || "—"}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 text-indigo-600 font-semibold text-xs">ปิดการขาย<ChevronRight className="w-3.5 h-3.5" /></span>
+                      <span className={`inline-flex items-center gap-1 font-semibold text-xs ${isRentalCar(item) ? "text-teal-600" : "text-indigo-600"}`}>{cardActionLabel(item)}<ChevronRight className="w-3.5 h-3.5" /></span>
                     </td>
                   </tr>
                 ))}
@@ -1170,8 +1177,8 @@ export default function SalesMain() {
                   <div className="border-t border-slate-100 pt-3">
                     <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-2.5"><p className="text-xs text-indigo-500 font-medium">ราคาต้นทุน</p><p className="font-bold text-indigo-700 text-sm">฿{fmt(item.cost_price)}</p></div>
                   </div>
-                  <button className="w-full bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600 text-white text-sm font-bold py-2.5 rounded-xl transition-all active:scale-[0.97] flex items-center justify-center gap-1.5 shadow-sm">
-                    ปิดการขาย <ChevronRight className="w-4 h-4" />
+                  <button className={`w-full bg-gradient-to-r text-white text-sm font-bold py-2.5 rounded-xl transition-all active:scale-[0.97] flex items-center justify-center gap-1.5 shadow-sm ${isRentalCar(item) ? "from-teal-600 to-emerald-700 hover:from-teal-500 hover:to-emerald-600" : "from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600"}`}>
+                    {cardActionLabel(item)} <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>
