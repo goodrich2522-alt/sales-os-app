@@ -72,6 +72,8 @@ export default function TransporterMain() {
   const FORKLIFT_BRANDS = ["HELI", "HANGCHA", "EP"];
   const brandOf = (f: Forklift) => String(f.brand || "").trim().toUpperCase();
   const brandCount = (b: string) => waitingList.filter(f => brandOf(f) === b.toUpperCase()).length;
+  // นับรถทั้งหมดของยี่ห้อ (รวมที่ปิดการขาย/รถเช่า) — ใช้แยกข้อความว่า "ไม่มีเลย" vs "รับ/ขาย/เช่าครบแล้ว"
+  const brandTotalAll = (b: string) => forklifts.filter(f => brandOf(f) === b.toUpperCase()).length;
   const brandTabs = (() => {
     const present = [...new Set(waitingList.map(brandOf).filter(Boolean))];
     const extra = present.filter(b => !FORKLIFT_BRANDS.some(x => x.toUpperCase() === b)); // ยี่ห้ออื่นนอกเหนือ 3 ตัวหลัก
@@ -447,10 +449,22 @@ export default function TransporterMain() {
                     ))}
                   </div>
                   {piGroups.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                      <Truck className="w-10 h-10 text-slate-300 mb-2" /><p className="text-sm">{brandFilter === "ทั้งหมด" ? "ยังไม่มีรถในระบบ" : `ยังไม่มีรถ ${brandFilter} ในระบบ`}</p>
-                      <p className="text-xs text-slate-400 mt-1">เพิ่มรถที่ฝ่ายสต็อก (นำเข้า PI) ก่อน</p>
-                    </div>
+                    (() => {
+                      // ยี่ห้อนี้มีรถในระบบไหม (รวมที่ขาย/เช่าไปแล้ว) → แยกข้อความ
+                      const allDone = brandFilter !== "ทั้งหมด" && brandTotalAll(brandFilter) > 0;
+                      return (
+                        <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                          <Truck className="w-10 h-10 text-slate-300 mb-2" />
+                          {allDone ? (
+                            <><p className="text-sm">รถ {brandFilter} รับเข้าคลัง/ขาย/เช่าครบแล้ว</p>
+                              <p className="text-xs text-slate-400 mt-1">ไม่มีรถ {brandFilter} รอรับเข้า · ดูรถทั้งหมดที่หน้าฝ่ายสต็อก</p></>
+                          ) : (
+                            <><p className="text-sm">{brandFilter === "ทั้งหมด" ? "ยังไม่มีรถในระบบ" : `ยังไม่มีรถ ${brandFilter} ในระบบ`}</p>
+                              <p className="text-xs text-slate-400 mt-1">เพิ่มรถที่ฝ่ายสต็อก (นำเข้า PI) ก่อน</p></>
+                          )}
+                        </div>
+                      );
+                    })()
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                       {piGroups.map(g => (
