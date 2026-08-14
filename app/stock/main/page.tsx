@@ -16,7 +16,7 @@ import { thaiMonthShort, today } from "@/lib/format";
 import { Lightbox } from "@/components/ui/Lightbox";
 import { Chip } from "@/components/ui/Chip";
 import { StatusBadge } from "@/components/ui/Badge";
-import { VEHICLE_CATS, CatFilter, SALE_STATUS_BADGE, saleStatusGroup, SALE_STATUS_FILTER_GROUPS, SALE_STATUS_OPTIONS } from "@/lib/constants";
+import { VEHICLE_CATS, CatFilter, categorizeModel, SALE_STATUS_BADGE, saleStatusGroup, SALE_STATUS_FILTER_GROUPS, SALE_STATUS_OPTIONS } from "@/lib/constants";
 import { QuoteImport } from "@/components/QuoteImport";
 import { parseForkliftCsv, assignIdsAndStamp, buildCsvTemplate } from "@/lib/forkliftCsv";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
@@ -112,6 +112,9 @@ export default function StockMain() {
   const [snSaved, setSnSaved]             = useState(false);
   const [piEdit, setPiEdit]               = useState(""); // เติม/แก้เลขที่ PI (ฝ่ายสต็อกทุกคนกรอกได้)
   const [piSaved, setPiSaved]             = useState(false);
+  // แก้ไขสเปกรถ (ฝ่ายสต็อกทุกคน) — ลงข้อมูลย้อนหลัง รถเก่าที่สเปกว่าง · แก้ได้ทุกสถานะ
+  const [specEdit, setSpecEdit]           = useState({ category: "", capacity: "", height: "", mast: "", valve: "", fork: "", fuel: "" });
+  const [specSaved, setSpecSaved]         = useState(false);
   const [photoBusy, setPhotoBusy]         = useState(false); // กำลังอัปโหลดรูปจากฝ่ายสต็อก
   const [docBusy, setDocBusy]             = useState(false); // กำลังอัปโหลดเอกสาร PDF
   const [docMsg, setDocMsg]               = useState("");    // ข้อความแจ้ง (ไฟล์ใหญ่/อัปไม่ได้)
@@ -186,6 +189,17 @@ export default function StockMain() {
     setFinSaved(false);
     setSnEdit(detailItem?.SN ?? ""); setSnSaved(false);
     setPiEdit(detailItem?.pi_no ?? ""); setPiSaved(false);
+    // สเปกรถ — เติมค่าเดิม (custom_fields MAST/Valve · คอลัมน์หลัก category/capacity/height/fork/fuel)
+    setSpecEdit({
+      category: detailItem?.vehicle_category ?? "",
+      capacity: detailItem?.capacity ?? "",
+      height:   detailItem?.height ?? "",
+      mast:     (cf["MAST"] as string) ?? "",
+      valve:    (cf["Valve"] as string) ?? (detailItem?.control_type ?? ""),
+      fork:     detailItem?.fork_length ? String(detailItem.fork_length) : "",
+      fuel:     detailItem?.fuel ?? "",
+    });
+    setSpecSaved(false);
     setQrData(null); setDocMsg("");
   }, [detailItem]);
 
@@ -1892,6 +1906,101 @@ export default function StockMain() {
                   </div>
                   <p className="text-[10px] text-slate-400 mt-1">* กรอกเลขที่ PI จริงจากใบสั่งซื้อ — อัปเดตทุกฝ่ายทันที</p>
                 </div>
+                {/* แก้ไขสเปกรถ (ฝ่ายสต็อกทุกคน) — ลงข้อมูลย้อนหลังรถเก่าที่สเปกว่าง · แก้ได้ทุกสถานะ รวมปิดการขายแล้ว */}
+                {(() => {
+                  const specDirty =
+                    specEdit.category !== (it.vehicle_category ?? "") ||
+                    specEdit.capacity !== (it.capacity ?? "") ||
+                    specEdit.height   !== (it.height ?? "") ||
+                    specEdit.mast     !== (((it.custom_fields?.["MAST"] as string) ?? "")) ||
+                    specEdit.valve    !== (((it.custom_fields?.["Valve"] as string) ?? (it.control_type ?? ""))) ||
+                    specEdit.fork     !== (it.fork_length ?? "") ||
+                    specEdit.fuel     !== (it.fuel ?? "");
+                  const missingCount = [it.vehicle_category, it.capacity, it.height, it.custom_fields?.["MAST"], it.fuel]
+                    .filter(v => !String(v ?? "").trim()).length;
+                  return (
+                <div className="border border-amber-200 bg-amber-50/40 rounded-xl p-3">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                    <Boxes className="w-3.5 h-3.5" />สเปกรถ (แก้ไข/เติมข้อมูล)
+                    {missingCount > 0 && <span className="text-amber-600 font-semibold normal-case">— ขาด {missingCount} ช่อง</span>}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* หมวดรถ + ปุ่มเดาจากรุ่น */}
+                    <div className="col-span-2">
+                      <label className="text-[11px] text-slate-500 font-semibold">หมวดรถ</label>
+                      <div className="flex gap-1.5 mt-1">
+                        <select value={specEdit.category} onChange={e => { setSpecEdit(s => ({ ...s, category: e.target.value })); setSpecSaved(false); }}
+                          className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400">
+                          <option value="">— ยังไม่ระบุ —</option>
+                          {VEHICLE_CATS.map(c => <option key={c.key} value={c.key}>{c.icon} {c.label}</option>)}
+                        </select>
+                        <button type="button" onClick={() => { setSpecEdit(s => ({ ...s, category: categorizeModel(it.model) })); setSpecSaved(false); }}
+                          className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 border border-amber-200 flex-shrink-0">
+                          เดาจากรุ่น
+                        </button>
+                      </div>
+                    </div>
+                    {/* พิกัดยก */}
+                    <div>
+                      <label className="text-[11px] text-slate-500 font-semibold">พิกัดยก</label>
+                      <input value={specEdit.capacity} onChange={e => { setSpecEdit(s => ({ ...s, capacity: e.target.value })); setSpecSaved(false); }}
+                        placeholder="เช่น 2.5 ตัน" className="w-full mt-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                    </div>
+                    {/* ยกสูง */}
+                    <div>
+                      <label className="text-[11px] text-slate-500 font-semibold">ยกสูง</label>
+                      <input value={specEdit.height} onChange={e => { setSpecEdit(s => ({ ...s, height: e.target.value })); setSpecSaved(false); }}
+                        placeholder="เช่น 3 เมตร" className="w-full mt-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                    </div>
+                    {/* เสา MAST */}
+                    <div>
+                      <label className="text-[11px] text-slate-500 font-semibold">เสา (MAST)</label>
+                      <input value={specEdit.mast} onChange={e => { setSpecEdit(s => ({ ...s, mast: e.target.value })); setSpecSaved(false); }}
+                        placeholder="เช่น Triplex 4.5M" className="w-full mt-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                    </div>
+                    {/* Valve / คอนโทรล */}
+                    <div>
+                      <label className="text-[11px] text-slate-500 font-semibold">Valve / คอนโทรล</label>
+                      <input value={specEdit.valve} onChange={e => { setSpecEdit(s => ({ ...s, valve: e.target.value })); setSpecSaved(false); }}
+                        placeholder="เช่น 3 วาล์ว" className="w-full mt-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                    </div>
+                    {/* ความยาวงา */}
+                    <div>
+                      <label className="text-[11px] text-slate-500 font-semibold">ความยาวงา (มม.)</label>
+                      <input value={specEdit.fork} onChange={e => { setSpecEdit(s => ({ ...s, fork: e.target.value })); setSpecSaved(false); }}
+                        placeholder="เช่น 1070" className="w-full mt-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                    </div>
+                    {/* พลังงาน */}
+                    <div>
+                      <label className="text-[11px] text-slate-500 font-semibold">พลังงาน</label>
+                      <input list="fuel-opts" value={specEdit.fuel} onChange={e => { setSpecEdit(s => ({ ...s, fuel: e.target.value })); setSpecSaved(false); }}
+                        placeholder="ดีเซล / ไฟฟ้า / แก๊ส" className="w-full mt-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                      <datalist id="fuel-opts">{(fieldConfig.fuelTypes ?? []).map(f => <option key={f} value={f} />)}</datalist>
+                    </div>
+                  </div>
+                  <button onClick={() => {
+                      const cf = { ...(it.custom_fields || {}) };
+                      if (specEdit.mast.trim())  cf["MAST"]  = specEdit.mast.trim();  else delete cf["MAST"];
+                      if (specEdit.valve.trim()) cf["Valve"] = specEdit.valve.trim(); else delete cf["Valve"];
+                      const u = {
+                        ...it,
+                        vehicle_category: (specEdit.category.trim() || undefined) as Forklift["vehicle_category"],
+                        capacity: specEdit.capacity.trim(),
+                        height:   specEdit.height.trim(),
+                        fuel:     specEdit.fuel.trim(),
+                        fork_length: specEdit.fork.trim() || undefined,
+                        custom_fields: cf,
+                      };
+                      updateForklift(u); setDetailItem(u); setSpecSaved(true);
+                    }}
+                    disabled={!specDirty}
+                    className="mt-2.5 w-full px-4 py-2 rounded-xl text-sm font-bold bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                    {specSaved ? "บันทึกสเปกแล้ว ✓" : "บันทึกสเปก"}
+                  </button>
+                  <p className="text-[10px] text-slate-400 mt-1.5">* ฝ่ายสต็อกกรอกสเปกรถได้ทุกคัน ทุกสถานะ (รวมปิดการขายแล้ว) — อัปเดตการ์ด/แดชบอร์ด/ฝ่ายขายทันที</p>
+                </div>
+                  );
+                })()}
                 {/* แก้สถานะรถรายคัน (ฝ่ายสต็อก) — เปลี่ยนแล้วอัปเดตทุกฝ่ายทันที */}
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><Boxes className="w-3.5 h-3.5" />สถานะรถ</p>
