@@ -2,11 +2,17 @@
 
 import Link from "next/link";
 import { useState, useMemo } from "react";
-import { ArrowLeft, Users, Search, Plus, Pencil, Trash2, X, Phone, MapPin, FileText, User } from "lucide-react";
+import { ArrowLeft, Users, Search, Plus, Pencil, Trash2, X, Phone, MapPin, FileText, User, TrendingUp, Repeat, ChevronRight, Calendar } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
 import { DashboardGuard } from "@/components/DashboardGuard";
 import { PROVINCES } from "@/lib/mockData";
-import type { Customer } from "@/lib/types";
+import type { Customer, Sale } from "@/lib/types";
+
+const fmt = (n: number) => Math.round(Number(n) || 0).toLocaleString("th-TH");
+const fmtM = (n: number) => Math.abs(n) >= 1_000_000 ? (n / 1_000_000).toFixed(1) + " ล." : fmt(n);
+const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+type CustStat = { deals: number; revenue: number; lastAt: string; cars: Sale[] };
+type SortKey = "name" | "spend" | "deals" | "recent";
 
 const blank = (): Customer => ({
   id: "", name: "", tax_id: "", tel: "", address: "",
@@ -16,25 +22,49 @@ const blank = (): Customer => ({
 function CustomersPageInner() {
   const { customers, sales, fieldConfig, addCustomer, updateCustomer, deleteCustomer } = useApp();
   const [q, setQ] = useState("");
+  const [sort, setSort] = useState<SortKey>("name");
   const [edit, setEdit] = useState<Customer | null>(null); // ฟอร์มเพิ่ม/แก้ไข (id ว่าง = เพิ่มใหม่)
   const [delId, setDelId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Customer | null>(null); // โมดัลประวัติการซื้อ
 
-  // จำนวนดีลของลูกค้าแต่ละราย (จับชื่อตรง) — โชว์ว่าเคยซื้อกี่ครั้ง
-  const dealCount = useMemo(() => {
-    const m = new Map<string, number>();
-    const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
-    sales.forEach(s => { const k = norm(s.customer_name || ""); if (k) m.set(k, (m.get(k) ?? 0) + 1); });
+  // สถิติต่อลูกค้า (จับชื่อตรง) — จำนวนดีล/ยอดซื้อรวม/ซื้อล่าสุด/รถที่เคยซื้อ
+  const statMap = useMemo(() => {
+    const m = new Map<string, CustStat>();
+    sales.forEach(s => {
+      const k = norm(s.customer_name || ""); if (!k) return;
+      const g = m.get(k) ?? { deals: 0, revenue: 0, lastAt: "", cars: [] };
+      g.deals++; g.revenue += Number(s.actual_sale) || 0;
+      const at = String(s.created_at || ""); if (at.localeCompare(g.lastAt) > 0) g.lastAt = at;
+      g.cars.push(s);
+      m.set(k, g);
+    });
     return m;
   }, [sales]);
-  const dealsOf = (name: string) => dealCount.get(name.trim().toLowerCase().replace(/\s+/g, " ")) ?? 0;
+  const statOf = (name: string): CustStat => statMap.get(norm(name)) ?? { deals: 0, revenue: 0, lastAt: "", cars: [] };
+
+  // สรุปภาพรวม
+  const summary = useMemo(() => {
+    let repeat = 0, revenue = 0;
+    customers.forEach(c => { const st = statOf(c.name); if (st.deals >= 2) repeat++; });
+    statMap.forEach(st => { revenue += st.revenue; });
+    return { total: customers.length, repeat, revenue };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customers, statMap]);
 
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
     const arr = s
       ? customers.filter(c => [c.name, c.tel, c.province, c.tax_id, c.contact_person].some(v => String(v ?? "").toLowerCase().includes(s)))
       : customers;
-    return [...arr].sort((a, b) => a.name.localeCompare(b.name, "th"));
-  }, [customers, q]);
+    const withStat = arr.map(c => ({ c, st: statOf(c.name) }));
+    withStat.sort((a, b) =>
+      sort === "spend"  ? b.st.revenue - a.st.revenue :
+      sort === "deals"  ? b.st.deals - a.st.deals :
+      sort === "recent" ? b.st.lastAt.localeCompare(a.st.lastAt) :
+      a.c.name.localeCompare(b.c.name, "th"));
+    return withStat.map(x => x.c);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customers, q, sort, statMap]);
 
   const save = () => {
     if (!edit || !edit.name.trim()) return;
@@ -65,11 +95,36 @@ function CustomersPageInner() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-4">
-        {/* ค้นหา */}
-        <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="ค้นหา ชื่อ / เบอร์ / จังหวัด / เลขภาษี / ผู้ติดต่อ..."
-            className="w-full border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+        {/* สรุปภาพรวม (CRM) */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3.5 flex flex-col gap-0.5">
+            <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1"><Users className="w-3.5 h-3.5" />ลูกค้าทั้งหมด</span>
+            <span className="text-xl font-bold text-slate-800">{fmt(summary.total)}</span>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3.5 flex flex-col gap-0.5">
+            <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1"><Repeat className="w-3.5 h-3.5" />ลูกค้าซื้อซ้ำ</span>
+            <span className="text-xl font-bold text-emerald-600">{fmt(summary.repeat)}</span>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3.5 flex flex-col gap-0.5">
+            <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" />ยอดซื้อรวม</span>
+            <span className="text-xl font-bold text-indigo-700">฿{fmtM(summary.revenue)}</span>
+          </div>
+        </div>
+
+        {/* ค้นหา + เรียง */}
+        <div className="flex gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="ค้นหา ชื่อ / เบอร์ / จังหวัด / เลขภาษี / ผู้ติดต่อ..."
+              className="w-full border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+          </div>
+          <select value={sort} onChange={e => setSort(e.target.value as SortKey)}
+            className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+            <option value="name">เรียง: ชื่อ (ก-ฮ)</option>
+            <option value="spend">เรียง: ยอดซื้อรวม</option>
+            <option value="deals">เรียง: จำนวนครั้ง</option>
+            <option value="recent">เรียง: ซื้อล่าสุด</option>
+          </select>
         </div>
 
         {list.length === 0 ? (
@@ -79,13 +134,16 @@ function CustomersPageInner() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {list.map(c => (
-              <div key={c.id} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm flex flex-col gap-1.5">
+            {list.map(c => {
+              const st = statOf(c.name);
+              return (
+              <div key={c.id} onClick={() => st.deals > 0 && setDetail(c)}
+                className={`bg-white border border-slate-100 rounded-2xl p-4 shadow-sm flex flex-col gap-1.5 ${st.deals > 0 ? "cursor-pointer hover:border-indigo-200" : ""}`}>
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-bold text-slate-800 leading-snug">{c.name}</p>
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    <button onClick={() => setEdit(c)} className="text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg p-1.5" title="แก้ไข"><Pencil className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => setDelId(c.id)} className="text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg p-1.5" title="ลบ"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={e => { e.stopPropagation(); setEdit(c); }} className="text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg p-1.5" title="แก้ไข"><Pencil className="w-3.5 h-3.5" /></button>
+                    <button onClick={e => { e.stopPropagation(); setDelId(c.id); }} className="text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg p-1.5" title="ลบ"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
                 <div className="text-xs text-slate-500 flex flex-col gap-0.5">
@@ -96,11 +154,14 @@ function CustomersPageInner() {
                   {c.address && <span className="text-slate-400 leading-snug">{c.address}</span>}
                   {c.note && <span className="text-amber-600 leading-snug">📝 {c.note}</span>}
                 </div>
-                <div className="mt-1 flex items-center gap-2">
-                  <span className="text-[11px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">ซื้อ {dealsOf(c.name)} ครั้ง</span>
+                <div className="mt-1 flex items-center gap-2 flex-wrap">
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${st.deals >= 2 ? "bg-emerald-50 text-emerald-600" : "bg-indigo-50 text-indigo-600"}`}>ซื้อ {st.deals} ครั้ง</span>
+                  {st.revenue > 0 && <span className="text-[11px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">฿{fmt(st.revenue)}</span>}
+                  {st.lastAt && <span className="text-[11px] text-slate-400 flex items-center gap-1"><Calendar className="w-3 h-3" />ล่าสุด {st.lastAt.slice(0, 10)}</span>}
+                  {st.deals > 0 && <ChevronRight className="w-3.5 h-3.5 text-slate-300 ml-auto" />}
                 </div>
               </div>
-            ))}
+            ); })}
           </div>
         )}
       </main>
@@ -165,6 +226,37 @@ function CustomersPageInner() {
           </div>
         </div>
       )}
+
+      {/* ── ประวัติการซื้อของลูกค้า (CRM) ── */}
+      {detail && (() => {
+        const st = statOf(detail.name);
+        const cars = [...st.cars].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+        return (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center p-4"
+            onClick={e => e.target === e.currentTarget && setDetail(null)}>
+            <div className="bg-white rounded-3xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl">
+              <div className="px-6 py-4 bg-gradient-to-r from-indigo-600 to-blue-700 flex items-center justify-between flex-shrink-0">
+                <div className="min-w-0">
+                  <h3 className="text-base font-bold text-white truncate">{detail.name}</h3>
+                  <p className="text-xs text-indigo-200">ซื้อ {st.deals} ครั้ง · รวม ฿{fmt(st.revenue)}{detail.tel ? ` · ☎ ${detail.tel}` : ""}</p>
+                </div>
+                <button onClick={() => setDetail(null)} className="text-white/70 hover:text-white hover:bg-white/20 rounded-xl p-2 flex-shrink-0"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="overflow-y-auto flex-1 min-h-0 p-4 flex flex-col gap-2">
+                {cars.map(s => (
+                  <div key={s.id} className="bg-slate-50 border border-slate-100 rounded-xl p-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-800">{s.forklift_brand} {s.forklift_model} <span className="text-slate-400 font-normal">· {s.forklift_unit_no}</span></p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">{String(s.created_at).slice(0, 10)} · {s.sales_staff || "—"} · {s.sale_status ?? "ขายแล้ว"}</p>
+                    </div>
+                    <span className="text-sm font-bold text-indigo-700 whitespace-nowrap">฿{fmt(Number(s.actual_sale) || 0)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
