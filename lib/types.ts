@@ -52,6 +52,21 @@ export interface Forklift {
   custom_fields?: Record<string, string>;
 }
 
+// ทะเบียนลูกค้า (เฟส 3) — แหล่งข้อมูลกลาง ใช้ autofill + จัดการ
+export interface Customer {
+  id: string;
+  name: string;
+  tax_id?: string;
+  tel?: string;
+  address?: string;
+  customer_type?: string;
+  province?: string;
+  contact_person?: string;
+  note?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface VehicleSpec {
   fuel?: string;
   weight?: string;

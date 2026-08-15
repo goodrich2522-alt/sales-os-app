@@ -120,7 +120,7 @@ function labeledPhotos(recs: InspectionRecord[]): LabeledPhoto[] {
 export default function SalesMain() {
   const router = useRouter();
   const {
-    forklifts, sales, addSale, updateSale, deleteSale, updateForklift, inspections, fieldConfig, refresh, setActor,
+    forklifts, sales, customers, addSale, updateSale, deleteSale, updateForklift, inspections, fieldConfig, refresh, setActor,
     updateFieldOptions,
     addSaleExtraFieldDef, removeSaleExtraFieldDef, renameSaleExtraFieldDef,
     addSaleExtraFieldOption, removeSaleExtraFieldOption, editSaleExtraFieldOption,
@@ -621,8 +621,23 @@ export default function SalesMain() {
         }
       }
     }
+    // เฟส 3: รวมทะเบียนลูกค้าจริง (แหล่งกลาง) — ค่าที่แก้ในทะเบียนชนะ + ลูกค้าใหม่ที่ยังไม่มีดีลก็เลือกได้
+    for (const c of customers) {
+      const nm = (c.name || "").trim();
+      if (!nm) continue;
+      const key = norm(nm);
+      const g = m.get(key);
+      if (g) {
+        g.name = nm;
+        if (c.tel) g.tel = c.tel;
+        if (c.customer_type) g.customer_type = c.customer_type;
+        if (c.province) g.province = c.province;
+      } else {
+        m.set(key, { name: nm, tel: c.tel || "", customer_type: c.customer_type || "", province: c.province || "", contact_source: "", count: 0, lastAt: "", lastCar: "" });
+      }
+    }
     return [...m.values()];
-  }, [sales]);
+  }, [sales, customers]);
 
   // รายการลูกค้าเก่าที่ชื่อตรงกับที่กำลังพิมพ์ (โชว์เป็นดรอปดาวน์)
   const custMatches = useMemo(() => {

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
-import { Forklift, Sale, InspectionRecord, DeletedInspectionRecord, CustomFieldDef,
+import { Forklift, Sale, InspectionRecord, DeletedInspectionRecord, CustomFieldDef, Customer,
   STOCK_APPROVAL_FIELD } from "./types";
 import {
   mockForklifts, mockSales, mockInspections,
@@ -89,7 +89,11 @@ interface AppContextType {
   sales: Sale[];
   inspections: InspectionRecord[];
   deletedInspections: DeletedInspectionRecord[];
+  customers: Customer[];
   fieldConfig: FieldConfig;
+  addCustomer: (c: Customer) => void;
+  updateCustomer: (c: Customer) => void;
+  deleteCustomer: (id: string) => void;
   addForklift: (f: Forklift) => void;
   addForkliftsBulk: (fs: Forklift[]) => void;
   updateForklift: (f: Forklift) => void;
@@ -140,6 +144,7 @@ const LS_KEYS = {
   deleted:      "salesos_deleted_insp_v2",
   deletedImages:"salesos_deleted_images_v2",
   fieldConfig:  "salesos_field_config_v2",
+  customers:    "salesos_customers_v1",
 } as const;
 
 function lsLoad<T>(key: string, fallback: T): T {
@@ -163,10 +168,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [sales, setSales]         = useState<Sale[]>(mockSales);
   const [inspections, setInspections]         = useState<InspectionRecord[]>(mockInspections);
   const [deletedInspections, setDeletedInspections] = useState<DeletedInspectionRecord[]>([]);
+  const [customers, setCustomers]             = useState<Customer[]>([]);
   const [fieldConfig, setFieldConfig]         = useState<FieldConfig>(DEFAULT_FIELD_CFG);
 
   // ref ข้อมูลล่าสุด — ใช้หา forklift/sale ตอนต้องอัปเดตสถานะรถผ่าน API
   const forkliftsRef   = useRef<Forklift[]>(forklifts);
+  const customersRef   = useRef<Customer[]>(customers);
+  useEffect(() => { customersRef.current = customers; }, [customers]);
   const salesRef       = useRef<Sale[]>(sales);
   const inspectionsRef = useRef<InspectionRecord[]>(inspections);
   const lastLocalEditRef = useRef(0); // เวลาที่แก้ข้อมูลในเครื่องล่าสุด — กัน auto-refresh ทับของที่เพิ่ง optimistic
@@ -204,6 +212,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       );
       const lsOverride = lsLoad<Partial<FieldConfig>>(LS_KEYS.fieldConfig, {});
       setFieldConfig({ ...DEFAULT_FIELD_CFG, ...lsOverride });
+      setCustomers(lsLoad<Customer[]>(LS_KEYS.customers, []));
     };
 
     (async () => {
@@ -216,6 +225,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setSales(data.sales ?? []);
           setInspections((data.inspections ?? []) as InspectionRecord[]);
           setDeletedInspections((data.deletedInspections ?? []) as DeletedInspectionRecord[]);
+          setCustomers(data.customers ?? []);
           setFieldConfig({ ...DEFAULT_FIELD_CFG, ...(data.fieldConfig as Partial<FieldConfig>) });
           setMounted(true);
           return;
@@ -243,6 +253,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setSales(data.sales ?? []);
         setInspections((data.inspections ?? []) as InspectionRecord[]);
         setDeletedInspections((data.deletedInspections ?? []) as DeletedInspectionRecord[]);
+        setCustomers(data.customers ?? []);
         // ไม่อัปเดต fieldConfig จาก realtime — กัน loop การเซฟกลับ
       } catch (e) { console.warn("realtime pull", e); }
     };
@@ -252,6 +263,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .on("postgres_changes", { event: "*", schema: "public", table: "forklifts" }, onChange)
       .on("postgres_changes", { event: "*", schema: "public", table: "sales" }, onChange)
       .on("postgres_changes", { event: "*", schema: "public", table: "inspections" }, onChange)
+      .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, onChange)
       .subscribe();
 
     // สำรอง: กลับมาที่แท็บ = ดึงสด + poll กัน realtime หลุด
@@ -270,6 +282,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { if (mounted) lsSave(LS_KEYS.forklifts, forklifts); }, [forklifts, mounted]);
   useEffect(() => { if (mounted) lsSave(LS_KEYS.sales, sales); }, [sales, mounted]);
+  useEffect(() => { if (mounted) lsSave(LS_KEYS.customers, customers); }, [customers, mounted]);
   useEffect(() => {
     if (!mounted) return;
     lsSave(LS_KEYS.inspMeta, stripImages(inspections));
@@ -291,6 +304,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     lsSave(LS_KEYS.fieldConfig, fieldConfig);
     if (api.apiEnabled) api.saveFieldConfigApi(fieldConfig).catch(() => {});
   }, [fieldConfig, mounted]);
+
+  // ── Customer CRUD (เฟส 3) ──────────────────────────────────────────────────
+  const addCustomer = useCallback((c: Customer) => {
+    lastLocalEditRef.current = Date.now();
+    setCustomers(p => [c, ...p]);
+    if (api.apiEnabled) api.addCustomerApi(c).catch(e => console.warn("addCustomer", e));
+  }, []);
+  const updateCustomer = useCallback((c: Customer) => {
+    lastLocalEditRef.current = Date.now();
+    setCustomers(p => p.map(x => x.id === c.id ? c : x));
+    if (api.apiEnabled) api.updateCustomerApi(c).catch(e => console.warn("updateCustomer", e));
+  }, []);
+  const deleteCustomer = useCallback((id: string) => {
+    lastLocalEditRef.current = Date.now();
+    setCustomers(p => p.filter(x => x.id !== id));
+    if (api.apiEnabled) api.deleteCustomerApi(id).catch(e => console.warn("deleteCustomer", e));
+  }, []);
 
   // ── Forklift CRUD ─────────────────────────────────────────────────────────
   const addForklift = useCallback((f: Forklift) => {
@@ -659,12 +689,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSales(data.sales ?? []);
       setInspections((data.inspections ?? []) as InspectionRecord[]);
       setDeletedInspections((data.deletedInspections ?? []) as DeletedInspectionRecord[]);
+      setCustomers(data.customers ?? []);
     } catch (e) { console.warn("refresh", e); }
   }, []);
 
   return (
     <AppContext.Provider value={{
-      forklifts, sales, inspections, deletedInspections, fieldConfig,
+      forklifts, sales, inspections, deletedInspections, customers, fieldConfig,
+      addCustomer, updateCustomer, deleteCustomer,
       addForklift, addForkliftsBulk, updateForklift, deleteForklift,
       addSale, updateSale, deleteSale, approveStockSale, rejectStockSale, setActor,
       exportData, importData,

@@ -370,6 +370,9 @@ export default function Dashboard() {
             <Link href="/dashboard/commission" className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg px-3 py-1.5 transition-all">
               <DollarSign className="w-4 h-4" /><span className="hidden sm:inline">ค่าคอมรายเดือน</span>
             </Link>
+            <Link href="/dashboard/customers" className="flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg px-3 py-1.5 transition-all">
+              <Users className="w-4 h-4" /><span className="hidden sm:inline">ทะเบียนลูกค้า</span>
+            </Link>
             <Link href="/dashboard/audit" className="flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg px-3 py-1.5 transition-all">
               <ShieldCheck className="w-4 h-4" /><span className="hidden sm:inline">ประวัติแก้ไข</span>
             </Link>

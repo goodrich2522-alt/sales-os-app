@@ -4,7 +4,7 @@
 
 import { supabase, supabaseEnabled } from "./supabaseClient";
 import type {
-  Forklift, Sale, InspectionRecord, DeletedInspectionRecord,
+  Forklift, Sale, InspectionRecord, DeletedInspectionRecord, Customer,
 } from "./types";
 
 const GAS_URL = process.env.NEXT_PUBLIC_GAS_URL ?? "";
@@ -15,6 +15,7 @@ export interface BootstrapData {
   sales: Sale[];
   inspections: InspectionRecord[];
   deletedInspections: DeletedInspectionRecord[];
+  customers: Customer[];
   fieldConfig: Record<string, unknown>;
 }
 
@@ -45,6 +46,7 @@ async function bootstrapTransporter(): Promise<BootstrapData> {
     sales: [],                                   // ผู้ขนส่งไม่มีสิทธิ์เห็นดีลขาย
     inspections: (ins.data ?? []) as InspectionRecord[],
     deletedInspections: [],
+    customers: [],                               // ผู้ขนส่งไม่เห็นข้อมูลลูกค้า
     fieldConfig: {},                             // ใช้ค่าเริ่มต้นในเครื่องแทน
   };
 }
@@ -69,10 +71,11 @@ async function fetchAllRows(table: string): Promise<Record<string, unknown>[]> {
 export async function bootstrap(): Promise<BootstrapData> {
   if (isTransporterMode()) return bootstrapTransporter();
   const c = sb();
-  const [fkRows, slRows, insRows, cfg] = await Promise.all([
+  const [fkRows, slRows, insRows, custRows, cfg] = await Promise.all([
     fetchAllRows("forklifts"),
     fetchAllRows("sales"),
     fetchAllRows("inspections"),
+    fetchAllRows("customers"),
     c.from("app_config").select("data").eq("id", 1).maybeSingle(),
   ]);
   const fk = { data: fkRows as unknown as Forklift[] };
@@ -85,9 +88,19 @@ export async function bootstrap(): Promise<BootstrapData> {
     sales: (sl.data ?? []) as Sale[],
     inspections: active,
     deletedInspections: deleted,
+    customers: (custRows as unknown as Customer[]) ?? [],
     fieldConfig: ((cfg.data as { data?: Record<string, unknown> } | null)?.data) ?? {},
   };
 }
+
+// ── Customer (ทะเบียนลูกค้า — เฟส 3) ──────────────────────────────────────────
+export const addCustomerApi    = async (c: Customer) => { const { error } = await sb().from("customers").insert(c); if (error) throw error; };
+export const updateCustomerApi = async (c: Customer) => {
+  const { id, ...rest } = c;
+  const { error } = await sb().from("customers").update({ ...rest, updated_at: new Date().toISOString() }).eq("id", id);
+  if (error) throw error;
+};
+export const deleteCustomerApi = async (id: string) => { const { error } = await sb().from("customers").delete().eq("id", id); if (error) throw error; };
 
 // ── Forklift ────────────────────────────────────────────────────────────────
 export const addForkliftApi    = async (f: Forklift) => { const { error } = await sb().from("forklifts").upsert(f); if (error) throw error; return { id: f.id }; };
