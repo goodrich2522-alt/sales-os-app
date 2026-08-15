@@ -52,6 +52,14 @@ const insMatches = (unitNo: unknown, sn?: unknown, id?: unknown) => {
   return !!u && (u === String(sn ?? "").trim().toUpperCase() || u === String(id ?? "").trim().toUpperCase());
 };
 
+// ป้ายเดือนไทยจากคีย์ YYYY-MM → "พ.ค. 2569"
+const TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+const monthLabel = (key: string) => {
+  const [y, m] = key.split("-").map(Number);
+  if (!y || !m) return key;
+  return `${TH_MONTHS[m - 1]} ${y + 543}`;
+};
+
 const emptyCheckout = {
   customer_name: "", customer_tel: "",
   customer_type: "" as CustomerType | "",
@@ -133,7 +141,8 @@ export default function SalesMain() {
   const [editingTarget, setEditingTarget] = useState(false);
   const [targetInput, setTargetInput]     = useState("");
   const [historyTab, setHistoryTab]       = useState<SaleStatus | "all">("all");
-  const [historyView, setHistoryView]     = useState<"deals" | "customers">("deals"); // ดีลของฉัน / ลูกค้าของฉัน
+  const [historyView, setHistoryView]     = useState<"deals" | "customers" | "monthly">("deals"); // ดีลของฉัน / ลูกค้าของฉัน / สรุปรายเดือน
+  const [histMonth, setHistMonth]         = useState(""); // เดือนที่เลือกในสรุปรายเดือน (YYYY-MM)
   const [detailSale, setDetailSale]       = useState<Sale | null>(null);
   const [showBooked, setShowBooked]       = useState(false); // โมดัลรายการรถติดจอง (กดจาก stat banner)
   const [cancelBox, setCancelBox]         = useState(false);   // กล่องยกเลิกการจอง
@@ -442,6 +451,33 @@ export default function SalesMain() {
     });
     return [...m.values()].sort((a, b) => b.deals.length - a.deals.length);
   }, [mySales]);
+
+  // ── สรุปยอดขายของฉันรายเดือน (แดชบอร์ดตามรูป) — เดือน → ยอดรวม + กราฟรายสัปดาห์ + รายการต่อสัปดาห์ ──
+  const monthKeyOf = (s: Sale) => String(s.created_at || "").slice(0, 7); // YYYY-MM
+  const myMonths = useMemo(() => {
+    const set = new Set<string>();
+    mySales.forEach(s => { const k = monthKeyOf(s); if (k.length === 7) set.add(k); });
+    return [...set].sort((a, b) => b.localeCompare(a)); // ใหม่สุดก่อน
+  }, [mySales]);
+  // ตั้งเดือนเริ่มต้น = เดือนล่าสุดที่มีการขาย
+  useEffect(() => { if (!histMonth && myMonths.length) setHistMonth(myMonths[0]); }, [myMonths, histMonth]);
+  const monthly = useMemo(() => {
+    if (!histMonth) return null;
+    const deals = mySales.filter(s => monthKeyOf(s) === histMonth)
+      .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+    const revenue = deals.reduce((a, s) => a + (Number(s.actual_sale) || 0), 0);
+    // แบ่งสัปดาห์ตามวันในเดือน (1-7 = สัปดาห์ 1, 8-14 = สัปดาห์ 2, ...)
+    const weeks: { deals: Sale[]; total: number }[] = [];
+    deals.forEach(s => {
+      const day = Number(String(s.created_at).slice(8, 10)) || 1;
+      const w = Math.min(Math.ceil(day / 7), 5) - 1;
+      if (!weeks[w]) weeks[w] = { deals: [], total: 0 };
+      weeks[w].deals.push(s); weeks[w].total += Number(s.actual_sale) || 0;
+    });
+    const nWeeks = Math.max(4, weeks.length);
+    const wk = Array.from({ length: nWeeks }, (_, i) => weeks[i] ?? { deals: [], total: 0 });
+    return { deals, revenue, count: deals.length, weeks: wk };
+  }, [histMonth, mySales]);
 
   // Notifications — sales with warranty/parts approaching
   const notifications = useMemo(() => {
@@ -2053,6 +2089,7 @@ export default function SalesMain() {
             <div className="flex gap-2 px-4 pt-3 flex-shrink-0">
               <button onClick={() => setHistoryView("deals")} className={`flex-1 px-3 py-2 rounded-lg text-sm font-bold transition ${historyView === "deals" ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>📋 ดีลของฉัน ({mySales.length})</button>
               <button onClick={() => setHistoryView("customers")} className={`flex-1 px-3 py-2 rounded-lg text-sm font-bold transition ${historyView === "customers" ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>👥 ลูกค้าของฉัน ({myCustomers.length})</button>
+              <button onClick={() => setHistoryView("monthly")} className={`flex-1 px-3 py-2 rounded-lg text-sm font-bold transition ${historyView === "monthly" ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>📊 สรุปรายเดือน</button>
             </div>
 
             {/* Category Tabs (เฉพาะมุมมองดีล) */}
@@ -2199,6 +2236,73 @@ export default function SalesMain() {
                 ))}
               </div>
             ))}
+
+            {/* มุมมองสรุปรายเดือน (แดชบอร์ดของเซลล์ ตามรูป) */}
+            {historyView === "monthly" && (
+              myMonths.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                  <History className="w-12 h-12 mb-3 opacity-40" /><p className="text-sm">ยังไม่มีข้อมูลการขาย</p>
+                </div>
+              ) : (
+                <div className="overflow-y-auto flex-1 min-h-0 p-4 flex flex-col gap-4">
+                  {/* หัว: ชื่อเซลล์ — เดือน + ตัวเลือกเดือน */}
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-800">{salesUser?.name} — เดือน {monthLabel(histMonth)}</h4>
+                      <p className="text-sm text-slate-500 mt-0.5">ขายทั้งหมด {monthly?.count ?? 0} คัน · รายได้ ฿{fmt(monthly?.revenue ?? 0)}</p>
+                    </div>
+                    <select value={histMonth} onChange={e => setHistMonth(e.target.value)}
+                      className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                      {myMonths.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
+                    </select>
+                  </div>
+
+                  {/* กราฟแท่งยอดขายรายสัปดาห์ */}
+                  {monthly && (
+                    <div className="bg-slate-50/70 border border-slate-100 rounded-2xl p-4">
+                      <p className="text-xs font-semibold text-slate-500 mb-3">ยอดขายรายสัปดาห์</p>
+                      {(() => {
+                        const max = Math.max(...monthly.weeks.map(w => w.total), 1);
+                        return (
+                          <div className="flex items-end justify-around gap-3 h-40">
+                            {monthly.weeks.map((w, i) => (
+                              <div key={i} className="flex-1 flex flex-col items-center justify-end h-full gap-1.5">
+                                <span className="text-[10px] font-bold text-slate-500">{w.total ? `฿${fmt(w.total)}` : ""}</span>
+                                <div className="w-full rounded-t-lg bg-gradient-to-t from-orange-500 to-amber-400 transition-all"
+                                  style={{ height: `${Math.max((w.total / max) * 100, w.total ? 4 : 0)}%` }} />
+                                <span className="text-[11px] text-slate-400">สัปดาห์ {i + 1}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* รายการต่อสัปดาห์ */}
+                  {monthly?.weeks.map((w, i) => w.deals.length === 0 ? null : (
+                    <div key={i} className="border border-slate-100 rounded-2xl overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-100">
+                        <span className="text-sm font-bold text-slate-700">สัปดาห์ {i + 1}</span>
+                        <span className="text-sm font-semibold text-slate-500">฿{fmt(w.total)} · {w.deals.length} คัน</span>
+                      </div>
+                      <div className="flex flex-col">
+                        {w.deals.map(s => (
+                          <button key={s.id} onClick={() => { setShowHistory(false); setDetailSale(s); }}
+                            className="flex items-start justify-between gap-3 px-4 py-3 border-b border-slate-50 last:border-0 hover:bg-indigo-50/40 text-left transition-colors">
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-slate-800">{s.forklift_unit_no} — {s.forklift_brand} {s.forklift_model}</p>
+                              <p className="text-xs text-slate-500 mt-0.5 truncate">{s.customer_name || "ไม่ระบุลูกค้า"} · </p>
+                            </div>
+                            <span className="text-sm font-bold text-indigo-700 whitespace-nowrap">฿{fmt(Number(s.actual_sale) || 0)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            )}
           </div>
         </div>
       )}
