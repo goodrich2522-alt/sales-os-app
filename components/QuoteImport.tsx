@@ -231,40 +231,37 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
                     {receivedDate && <button onClick={() => setReceivedDate("")} className="text-xs text-slate-400 hover:text-red-500">ล้าง</button>}
                     <span className="text-[11px] text-slate-400">ใส่ให้รถทุกคันในล็อตนี้</span>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs border-collapse">
-                      <thead>
-                        <tr className="text-slate-400 text-left">
-                          {["แบรนด์", "รุ่น", "SN", "PI", "พิกัด", "พลังงาน", "MAST", "Valve", "ราคาทุน", "ชนิด", ""].map((h) => <th key={h} className="px-2 py-2 text-[11px] font-bold text-slate-500 whitespace-nowrap">{h}</th>)}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rows.map((v, i) => {
-                          const dup = existingIds.has(toForklift(v, i).id);
-                          return (
-                            <tr key={i} className={`border-t border-slate-100 ${dup ? "bg-red-50/60" : ""}`}>
-                              <Cell val={v.brand ?? ""} onChange={(x) => edit(i, "brand", x)} w="w-24" ph="แบรนด์" />
-                              <Cell val={v.model} onChange={(x) => edit(i, "model", x)} w="w-40" ph="รุ่น" />
-                              <Cell val={v.SN ?? ""} onChange={(x) => edit(i, "SN", x)} w="w-32" ph="SN" />
-                              <Cell val={v.pi_no ?? ""} onChange={(x) => edit(i, "pi_no", x)} w="w-24" ph="เลข PI จริง (เว้นได้)" />
-                              <Cell val={v.capacity ?? ""} onChange={(x) => edit(i, "capacity", x)} w="w-20" ph="พิกัด" />
-                              <Cell val={v.fuel ?? ""} onChange={(x) => edit(i, "fuel", x)} w="w-20" ph="พลังงาน" />
-                              <Cell val={v.mast ?? ""} onChange={(x) => edit(i, "mast", x)} w="w-20" ph="เสา" />
-                              <Cell val={v.valve ?? ""} onChange={(x) => edit(i, "valve", x)} w="w-16" ph="วาล์ว" />
-                              <Cell val={v.cost_price ? String(v.cost_price) : ""} onChange={(x) => edit(i, "cost_price", x)} w="w-24" ph="ราคาทุน" />
-                              <td className="px-2 py-1 text-slate-500 whitespace-nowrap">{categorizeModel(v.model)}</td>
-                              <td className="px-1"><button onClick={() => removeRow(i)} className="text-slate-300 hover:text-red-600 p-1"><Trash2 className="w-3.5 h-3.5" /></button></td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                  {/* การ์ดต่อคัน — ช่องกว้าง มีป้ายกำกับ อ่าน/แก้ง่ายกว่าตารางแคบ */}
+                  <div className="flex flex-col gap-3">
+                    {rows.map((v, i) => {
+                      const dup = existingIds.has(toForklift(v, i).id);
+                      return (
+                        <div key={i} className={`rounded-2xl border p-4 ${dup ? "border-red-300 bg-red-50/50" : "border-slate-200 bg-slate-50/60"}`}>
+                          <div className="flex items-center justify-between gap-2 mb-3">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-bold text-slate-700">คันที่ {i + 1}</span>
+                              {v.model?.trim() && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{categorizeModel(v.model)}</span>}
+                              {dup && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">⚠️ SN ซ้ำในสต็อก</span>}
+                            </div>
+                            <button onClick={() => removeRow(i)} title="ลบคันนี้"
+                              className="text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0"><Trash2 className="w-4 h-4" /></button>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            <Field label="แบรนด์" val={v.brand ?? ""} onChange={(x) => edit(i, "brand", x)} ph="เช่น HELI" />
+                            <Field label="รุ่น" val={v.model} onChange={(x) => edit(i, "model", x)} ph="เช่น CDD12J-M300" />
+                            <Field label="SN (เลขตัวถัง)" val={v.SN ?? ""} onChange={(x) => edit(i, "SN", x)} ph="SN จริงจากรถ" />
+                            <Field label="เลข PI" val={v.pi_no ?? ""} onChange={(x) => edit(i, "pi_no", x)} ph="เว้นได้ถ้ายังไม่มี" />
+                            <Field label="พิกัดยก" val={v.capacity ?? ""} onChange={(x) => edit(i, "capacity", x)} ph="เช่น 2.5 ตัน" />
+                            <Field label="พลังงาน" val={v.fuel ?? ""} onChange={(x) => edit(i, "fuel", x)} ph="ดีเซล / ไฟฟ้า" />
+                            <Field label="เสา (MAST)" val={v.mast ?? ""} onChange={(x) => edit(i, "mast", x)} ph="เช่น 3M / Triplex 4.5M" />
+                            <Field label="Valve" val={v.valve ?? ""} onChange={(x) => edit(i, "valve", x)} ph="เช่น 3 วาล์ว" />
+                            <Field label="ราคาทุน" val={v.cost_price ? String(v.cost_price) : ""} onChange={(x) => edit(i, "cost_price", x)} ph="บาท" />
+                          </div>
+                          {v.flags?.length ? <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mt-2.5">⚠️ {v.flags.join(" · ")}</p> : null}
+                        </div>
+                      );
+                    })}
                   </div>
-                  {rows.some((v) => v.flags?.length) && (
-                    <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                      ⚠️ บางคันมีข้อมูลที่ parser ไม่มั่นใจ: {[...new Set(rows.flatMap((v) => v.flags ?? []))].join(" · ")}
-                    </div>
-                  )}
                 </>
               )}
             </>
@@ -285,11 +282,12 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
   );
 }
 
-function Cell({ val, onChange, w, ph }: { val: string; onChange: (v: string) => void; w: string; ph?: string }) {
+function Field({ label, val, onChange, ph }: { label: string; val: string; onChange: (v: string) => void; ph?: string }) {
   return (
-    <td className="px-1 py-1.5 align-top">
+    <label className="flex flex-col gap-1 min-w-0">
+      <span className="text-[11px] font-semibold text-slate-500">{label}</span>
       <input value={val} onChange={(e) => onChange(e.target.value)} placeholder={ph}
-        className={`${w} border border-slate-300 rounded-lg px-2.5 py-2 text-sm text-slate-800 bg-white placeholder:text-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 focus:outline-none`} />
-    </td>
+        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 bg-white placeholder:text-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 focus:outline-none" />
+    </label>
   );
 }
