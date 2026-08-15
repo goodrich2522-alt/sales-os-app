@@ -1,4 +1,4 @@
-export type PaymentType = "เงินสด" | "ไฟแนนซ์";
+export type PaymentType = "เงินสด" | "บิลเงินสด" | "บิลแวท" | "ไฟแนนซ์" | "เครดิต";
 export type CustomerType = "บุคคลทั่วไป" | "นิติบุคคล" | "ราชการ";
 // 4 สถานะใหม่ (ตามลำดับขั้น) + คงค่าเก่าไว้เพื่อดีลที่บันทึกไปแล้ว
 export type SaleStatus =

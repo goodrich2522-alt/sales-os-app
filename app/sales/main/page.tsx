@@ -61,6 +61,7 @@ const emptyCheckout = {
   warranty_expiry: "", parts_schedule: "",
   contact_source: "" as ContactSource | "",
   sale_type: "" as SaleType | "",
+  bill_note_no: "", // เลขใบวางบิล (เฉพาะลูกค้าเครดิต)
 };
 
 type SaleInlineStep = "name" | "type" | "options" | null;
@@ -162,6 +163,7 @@ export default function SalesMain() {
   const [rentCarNo, setRentCarNo]       = useState(""); // รถเช่า: เบอร์รถเช่า
   const [rentBy, setRentBy]             = useState(""); // รถเช่า: ผู้เบิกรถเช่า
   const [custFocus, setCustFocus]       = useState(false); // เฟส 1: โฟกัสช่องชื่อลูกค้า → โชว์รายการลูกค้าเก่า
+  const [draftRestored, setDraftRestored] = useState(false); // กู้ข้อมูลฟอร์มที่กรอกค้างไว้ (เด้งออกก่อนบันทึก)
 
   // Custom notification items in checkout
   const [showCustomNotifs, setShowCustomNotifs] = useState(false);
@@ -523,9 +525,12 @@ export default function SalesMain() {
     if (!form.actual_sale || isNaN(Number(form.actual_sale))) e.actual_sale = "กรุณากรอกราคาขาย";
     // วันส่งมอบ + สลิป: บังคับเฉพาะตอนเงินเข้าแล้ว · "จอง/โอนมัดจำแล้ว"+มัดจำเก่าต้องมีสลิป · "จอง/รอโอน"+รอไฟแนนซ์ ยังไม่ต้อง (จองได้เลย)
     const needDelivery = status === "ปิดการขาย/จัดส่งแล้ว" || status === "รอจัดส่ง";
-    const needProof    = status === "ปิดการขาย/จัดส่งแล้ว" || status === "รอจัดส่ง" || status === "จอง/โอนมัดจำแล้ว" || status === "มัดจำแล้ว";
+    // ลูกค้าเครดิต: ไม่ต้องแนบสลิป — จบแค่กรอกเลขใบวางบิล
+    const isCredit = form.payment_type === "เครดิต";
+    const needProof    = !isCredit && (status === "ปิดการขาย/จัดส่งแล้ว" || status === "รอจัดส่ง" || status === "จอง/โอนมัดจำแล้ว" || status === "มัดจำแล้ว");
     if (needDelivery && !form.delivery_date) e.delivery_date = "กรุณาระบุวันส่งมอบ";
     if (needProof && paymentProofs.length === 0) e.payment_proof = "กรุณาแนบรูปหลักฐานการชำระเงิน (บังคับ)";
+    if (isCredit && !form.bill_note_no.trim()) e.bill_note_no = "กรุณากรอกเลขใบวางบิล";
     return e;
   };
 
@@ -610,6 +615,8 @@ export default function SalesMain() {
     // ผู้ให้บริการขนส่ง (รถสไลด์) — เลือกจาก dropdown หรือระบุเอง
     const supplier = shipSupplier === "อื่นๆ (ระบุเอง)" ? shipSupplierOther.trim() : shipSupplier.trim();
     if (supplier) customFields["ผู้ให้บริการขนส่ง"] = supplier;
+    // ลูกค้าเครดิต — เก็บเลขใบวางบิล
+    if (form.payment_type === "เครดิต" && form.bill_note_no.trim()) customFields["เลขใบวางบิล"] = form.bill_note_no.trim();
     // ข้อมูลรถจากสต็อก — เติมให้อัตโนมัติ ไม่ต้องให้เซลล์กรอกเอง
     if (selected) {
       const auto: Record<string, string> = {
@@ -653,6 +660,7 @@ export default function SalesMain() {
   const commitSale = (status: SaleStatus) => {
     const s = buildSale(status);
     if (editingSale) updateSale(s); else addSale(s);
+    clearDraft(); setDraftRestored(false); // บันทึกสำเร็จ → ล้างร่าง
     setSubmitted(true);
     setTimeout(resetCheckout, editingSale ? 1400 : 3000);
   };
@@ -679,6 +687,7 @@ export default function SalesMain() {
       warranty_expiry: sale.warranty_expiry ?? "", parts_schedule: sale.parts_schedule ?? "",
       contact_source: (sale.contact_source ?? "") as ContactSource | "",
       sale_type: (sale.sale_type ?? "") as SaleType | "",
+      bill_note_no: (sale.custom_fields?.["เลขใบวางบิล"] as string) ?? "",
     });
     // เติมค่าช่องที่เพิ่มเอง (จับคู่ตามชื่อ)
     const cvals: Record<string, string> = {};
@@ -712,15 +721,52 @@ export default function SalesMain() {
     setShipSupplier(""); setShipSupplierOther(""); setRentCarNo(""); setRentBy("");
   };
 
+  // ── ร่างฟอร์มปิดการขาย (กันข้อมูลหายถ้าเด้งออกก่อนบันทึก) — เก็บ localStorage ต่อรถ 1 คัน ──
+  const DRAFT_KEY = "salesos_checkout_draft_v1";
+  const clearDraft = () => { try { localStorage.removeItem(DRAFT_KEY); } catch {} };
+  // บันทึกร่างทุกครั้งที่กรอก (เฉพาะปิดการขายใหม่ ไม่ใช่แก้ไขดีลเก่า/รถเช่า) — เก็บเฉพาะที่มีข้อมูลจริง
+  useEffect(() => {
+    if (!selected || editingSale || form.sale_type === "รถเช่า") return;
+    const hasContent = !!(form.customer_name.trim() || form.customer_tel.trim() || form.actual_sale.trim()
+      || form.deposit.trim() || form.delivery_date || form.bill_note_no.trim() || paymentProofs.length || addOns.length);
+    try {
+      if (hasContent) localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        id: selected.id, form, paymentProofs, commCategory, saleCustomVals,
+        customNotifItems, addOns, freebie, shippingCost, vehicleType,
+      }));
+    } catch {}
+  }, [selected, editingSale, form, paymentProofs, commCategory, saleCustomVals, customNotifItems, addOns, freebie, shippingCost, vehicleType]);
+
   // เปิดฟอร์มปิดการขายของรถคันหนึ่ง (ใช้ร่วมทั้งมุมมองการ์ดและตาราง)
   const openCheckout = (item: Forklift) => {
     // รถคันนี้เป็นรถเช่าอยู่แล้ว → เปิดมาเป็นฟอร์มรถเช่าเลย (ซ่อนช่องขายทั้งหมด)
     const isRent = String(item.status ?? "").includes("เช่า") || !!item.custom_fields?.["เบอร์รถเช่า"];
-    setSelected(item); setForm({ ...emptyCheckout, sale_type: isRent ? "รถเช่า" : "" }); setErrors({}); setSubmitted(false);
-    setLightboxIdx(null); setSaleCustomVals({}); setVehicleType(item.vehicle_category ?? "Forklift");
-    setCustomNotifItems([]); setShowCustomNotifs(false); setNewNotifLabel(""); setNewNotifDate("");
+    setSelected(item); setErrors({}); setSubmitted(false);
+    setLightboxIdx(null); setVehicleType(item.vehicle_category ?? "Forklift");
+    setNewNotifLabel(""); setNewNotifDate("");
     setRentCarNo((item.custom_fields?.["เบอร์รถเช่า"] as string) ?? "");
     setRentBy((item.custom_fields?.["ผู้เบิกรถเช่า"] as string) ?? "");
+    // กู้ร่างที่กรอกค้างไว้ของรถคันนี้ (ถ้ามี) — ไม่งั้นเริ่มฟอร์มเปล่า
+    let draft: Record<string, unknown> | null = null;
+    try { if (!isRent) { const raw = localStorage.getItem(DRAFT_KEY); if (raw) { const d = JSON.parse(raw); if (d?.id === item.id) draft = d; } } } catch {}
+    if (draft) {
+      setForm({ ...emptyCheckout, ...(draft.form as typeof emptyCheckout) });
+      setPaymentProofs((draft.paymentProofs as string[]) ?? []);
+      setCommCategory((draft.commCategory as string) ?? "");
+      setSaleCustomVals((draft.saleCustomVals as Record<string, string>) ?? {});
+      setCustomNotifItems((draft.customNotifItems as { label: string; date: string }[]) ?? []);
+      setShowCustomNotifs(((draft.customNotifItems as unknown[]) ?? []).length > 0);
+      setAddOns((draft.addOns as { name: string; price: number }[]) ?? []);
+      setFreebie((draft.freebie as boolean) ?? false);
+      setShippingCost((draft.shippingCost as string) ?? "");
+      if (draft.vehicleType) setVehicleType(draft.vehicleType as VehicleType);
+      setDraftRestored(true);
+    } else {
+      setForm({ ...emptyCheckout, sale_type: isRent ? "รถเช่า" : "" });
+      setPaymentProofs([]); setSaleCustomVals({}); setCommCategory("");
+      setCustomNotifItems([]); setAddOns([]); setFreebie(false); setShippingCost("");
+      setShowCustomNotifs(false); setDraftRestored(false);
+    }
   };
   // รถคันนี้เป็นรถเช่าไหม + ป้ายปุ่มการ์ด (รถเช่า → "รถเช่า GR-xxx" ตามเบอร์รถเช่าของคันนั้น)
   const isRentalCar = (f: Forklift) => String(f.status ?? "").includes("เช่า");
@@ -1348,6 +1394,15 @@ export default function SalesMain() {
                   )}
 
                   <form onSubmit={handleSell} className="flex flex-col gap-4">
+                    {/* กู้ข้อมูลที่กรอกค้างไว้ (เด้งออกก่อนบันทึก) */}
+                    {draftRestored && !editingSale && (
+                      <div className="flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 text-xs text-violet-700">
+                        <RefreshCw className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span className="flex-1">กู้ข้อมูลที่กรอกค้างไว้ให้แล้ว — กรอกต่อได้เลย</span>
+                        <button type="button" onClick={() => { clearDraft(); if (selected) openCheckout(selected); }}
+                          className="font-semibold text-violet-600 hover:text-violet-800 underline flex-shrink-0">ล้าง เริ่มใหม่</button>
+                      </div>
+                    )}
                     {/* ── ช่องทางติดต่อ + ประเภทขาย ── */}
                     <div className="grid grid-cols-2 gap-3">
                       <SField label="ช่องทางที่ลูกค้าติดต่อ" error="">
@@ -1458,6 +1513,14 @@ export default function SalesMain() {
                         </select>
                       </SField>
                     )}
+                    {/* ลูกค้าเครดิต — กรอกเลขใบวางบิล (แทนการแนบสลิป) */}
+                    {form.payment_type === "เครดิต" && (
+                      <SField label="เลขใบวางบิล *" error={errors.bill_note_no}>
+                        <input value={form.bill_note_no} onChange={e => setForm({ ...form, bill_note_no: e.target.value })}
+                          placeholder="กรอกเลขใบวางบิล" className={si(errors.bill_note_no)} />
+                        <p className="text-[11px] text-slate-400 mt-1">ลูกค้าเครดิตไม่ต้องแนบสลิป — จบแค่กรอกเลขใบวางบิล</p>
+                      </SField>
+                    )}
                     <div className="grid grid-cols-2 gap-3">
                       <SField label="ราคาขายจริง (฿) *" error={errors.actual_sale}><input type="number" value={form.actual_sale} onChange={e => setForm({ ...form, actual_sale: e.target.value })} placeholder="บาท" className={si(errors.actual_sale)} /></SField>
                       <SField label="มัดจำ (฿)" error=""><input type="number" value={form.deposit} onChange={e => setForm({ ...form, deposit: e.target.value })} placeholder="บาท" className={si("")} /></SField>
@@ -1545,7 +1608,8 @@ export default function SalesMain() {
                         className="w-full border border-slate-200 hover:border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-800 placeholder:text-slate-400 resize-none transition-all" />
                     </SField>
 
-                    {/* หลักฐานการชำระเงิน — บังคับแนบรูป (แนบได้หลายรูป) */}
+                    {/* หลักฐานการชำระเงิน — บังคับแนบรูป (แนบได้หลายรูป) · ลูกค้าเครดิตซ่อน (ใช้เลขใบวางบิลแทน) */}
+                    {form.payment_type !== "เครดิต" && (
                     <SField label={`หลักฐานการชำระเงิน * ${paymentProofs.length ? `(${paymentProofs.length} รูป)` : ""}`} error={errors.payment_proof}>
                       <input ref={paymentInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handlePaymentProof} />
                       {paymentProofs.length > 0 ? (
@@ -1573,6 +1637,7 @@ export default function SalesMain() {
                         </button>
                       )}
                     </SField>
+                    )}
 
                     {/* Extra sale fields */}
                     {fieldConfig.saleExtraFieldDefs.length > 0 && (
