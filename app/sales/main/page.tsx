@@ -52,6 +52,9 @@ const insMatches = (unitNo: unknown, sn?: unknown, id?: unknown) => {
   return !!u && (u === String(sn ?? "").trim().toUpperCase() || u === String(id ?? "").trim().toUpperCase());
 };
 
+// ข้อมูลลูกค้าเก่า (รวมจากดีลทั้งหมด) — ใช้ autofill + ประวัติ + เริ่มดีลใหม่
+type CustEntry = { name: string; tel: string; customer_type: string; province: string; contact_source: string; count: number; lastAt: string; lastCar: string };
+
 // ป้ายเดือนไทยจากคีย์ YYYY-MM → "พ.ค. 2569"
 const TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 const monthLabel = (key: string) => {
@@ -173,6 +176,9 @@ export default function SalesMain() {
   const [rentBy, setRentBy]             = useState(""); // รถเช่า: ผู้เบิกรถเช่า
   const [custFocus, setCustFocus]       = useState(false); // เฟส 1: โฟกัสช่องชื่อลูกค้า → โชว์รายการลูกค้าเก่า
   const [draftRestored, setDraftRestored] = useState(false); // กู้ข้อมูลฟอร์มที่กรอกค้างไว้ (เด้งออกก่อนบันทึก)
+  const [custSearch, setCustSearch]     = useState(""); // เฟส 2: ค้นหาในแท็บลูกค้าของฉัน
+  const [pendingCustomer, setPendingCustomer] = useState<CustEntry | null>(null); // เฟส 2: ลูกค้าที่จะเปิดดีลใหม่ (เติมข้อมูลไว้)
+  const [showCustHist, setShowCustHist] = useState(true); // เฟส 2: เปิด/ปิดพาเนลประวัติการซื้อในฟอร์ม
 
   // Custom notification items in checkout
   const [showCustomNotifs, setShowCustomNotifs] = useState(false);
@@ -452,6 +458,13 @@ export default function SalesMain() {
     return [...m.values()].sort((a, b) => b.deals.length - a.deals.length);
   }, [mySales]);
 
+  // เฟส 2: ค้นหาในแท็บลูกค้าของฉัน (ชื่อ/เบอร์/จังหวัด)
+  const myCustomersFiltered = useMemo(() => {
+    const q = custSearch.trim().toLowerCase();
+    if (!q) return myCustomers;
+    return myCustomers.filter(c => c.name.toLowerCase().includes(q) || (c.tel || "").toLowerCase().includes(q) || (c.province || "").toLowerCase().includes(q));
+  }, [myCustomers, custSearch]);
+
   // ── สรุปยอดขายของฉันรายเดือน (แดชบอร์ดตามรูป) — เดือน → ยอดรวม + กราฟรายสัปดาห์ + รายการต่อสัปดาห์ ──
   const monthKeyOf = (s: Sale) => String(s.created_at || "").slice(0, 7); // YYYY-MM
   const myMonths = useMemo(() => {
@@ -580,7 +593,6 @@ export default function SalesMain() {
 
   // ── ทะเบียนลูกค้า (เฟส 1): รวมข้อมูลลูกค้าจากดีลเก่าทุกใบ → เลือกเติมอัตโนมัติ ──
   // ไม่ต้องมีตารางใหม่ — ดึงจาก sales ที่มีอยู่ · ค่าล่าสุด (created_at ใหม่สุด) ชนะ · เติมช่องว่างจากดีลเก่ากว่า
-  type CustEntry = { name: string; tel: string; customer_type: string; province: string; contact_source: string; count: number; lastAt: string; lastCar: string };
   const customerDirectory = useMemo(() => {
     const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
     const m = new Map<string, CustEntry>();
@@ -636,6 +648,31 @@ export default function SalesMain() {
       contact_source: (c.contact_source || f.contact_source) as ContactSource | "",
     }));
     setCustFocus(false);
+  };
+
+  // เฟส 2: ประวัติการซื้อของลูกค้าที่กำลังกรอก (ชื่อ/เบอร์ตรงกัน ทุกเซลล์) → โชว์พาเนลระหว่างปิดการขาย
+  const custHistory = useMemo(() => {
+    const nm = form.customer_name.trim().toLowerCase();
+    const tel = form.customer_tel.trim();
+    if (nm.length < 2 && !tel) return [] as Sale[];
+    const pool = editingSale ? sales.filter(s => s.id !== editingSale.id) : sales;
+    return pool
+      .filter(s => {
+        const n = (s.customer_name || "").trim().toLowerCase();
+        return (nm.length >= 2 && n === nm) || (tel && (s.customer_tel || "").trim() === tel);
+      })
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  }, [form.customer_name, form.customer_tel, sales, editingSale]);
+
+  // เฟส 2: เริ่มดีลใหม่ให้ลูกค้าเก่า — เก็บข้อมูลลูกค้าไว้ แล้วปิดโมดัลให้ไปเลือกรถ (openCheckout จะเติมให้)
+  const sellToCustomer = (name: string, tel: string) => {
+    const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+    const entry = customerDirectory.find(c => norm(c.name) === norm(name))
+      ?? { name, tel, customer_type: "", province: "", contact_source: "", count: 0, lastAt: "", lastCar: "" };
+    setPendingCustomer(entry);
+    setShowHistory(false);
+    setUndoToast(`เลือกรถที่จะขายให้ “${name}” — ข้อมูลลูกค้าเติมให้แล้ว`);
+    setTimeout(() => setUndoToast(null), 4000);
   };
 
   const buildSale = (status: SaleStatus): Sale => {
@@ -798,11 +835,18 @@ export default function SalesMain() {
       if (draft.vehicleType) setVehicleType(draft.vehicleType as VehicleType);
       setDraftRestored(true);
     } else {
-      setForm({ ...emptyCheckout, sale_type: isRent ? "รถเช่า" : "" });
+      // เฟส 2: ถ้ามาจาก "ขายคันใหม่ให้ลูกค้านี้" → เติมข้อมูลลูกค้าไว้ให้เลย
+      const pc = (!isRent && pendingCustomer) ? pendingCustomer : null;
+      setForm({
+        ...emptyCheckout, sale_type: isRent ? "รถเช่า" : "",
+        ...(pc ? { customer_name: pc.name, customer_tel: pc.tel, customer_type: pc.customer_type as CustomerType | "", province: pc.province, contact_source: pc.contact_source as ContactSource | "" } : {}),
+      });
       setPaymentProofs([]); setSaleCustomVals({}); setCommCategory("");
       setCustomNotifItems([]); setAddOns([]); setFreebie(false); setShippingCost("");
       setShowCustomNotifs(false); setDraftRestored(false);
     }
+    setPendingCustomer(null); // ใช้ครั้งเดียว
+    setShowCustHist(true);
   };
   // รถคันนี้เป็นรถเช่าไหม + ป้ายปุ่มการ์ด (รถเช่า → "รถเช่า GR-xxx" ตามเบอร์รถเช่าของคันนั้น)
   const isRentalCar = (f: Forklift) => String(f.status ?? "").includes("เช่า");
@@ -967,6 +1011,14 @@ export default function SalesMain() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-5">
+        {/* เฟส 2: แถบ "กำลังจะขายให้ลูกค้า X" — เลือกรถแล้วฟอร์มเติมข้อมูลลูกค้าให้เอง */}
+        {pendingCustomer && (
+          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 text-sm text-emerald-800">
+            <Users className="w-4 h-4 flex-shrink-0" />
+            <span className="flex-1"><b>กำลังจะขายให้ “{pendingCustomer.name}”</b> — เลือกรถที่จะขาย แล้วข้อมูลลูกค้าจะเติมให้อัตโนมัติ</span>
+            <button onClick={() => setPendingCustomer(null)} className="font-semibold text-emerald-600 hover:text-emerald-800 underline flex-shrink-0">ยกเลิก</button>
+          </div>
+        )}
         {/* Stats Banner */}
         <div className="bg-gradient-to-r from-indigo-600 via-indigo-700 to-blue-800 rounded-2xl p-5 text-white relative overflow-hidden shadow-lg shadow-indigo-200">
           <div className="absolute right-0 top-0 w-48 h-full bg-white/5 rounded-l-full" />
@@ -1520,6 +1572,29 @@ export default function SalesMain() {
                         </div>
                       )}
                     </div>
+                    {/* เฟส 2: ประวัติการซื้อของลูกค้านี้ (โชว์ระหว่างปิดการขาย ช่วยอ้างอิง) */}
+                    {custHistory.length > 0 && (
+                      <div className="border border-violet-200 bg-violet-50/40 rounded-xl overflow-hidden">
+                        <button type="button" onClick={() => setShowCustHist(p => !p)}
+                          className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-violet-700 hover:bg-violet-50">
+                          <span className="flex items-center gap-1.5"><History className="w-3.5 h-3.5" />ประวัติการซื้อของลูกค้านี้ ({custHistory.length})</span>
+                          <ChevronDown className={`w-4 h-4 transition-transform ${showCustHist ? "rotate-180" : ""}`} />
+                        </button>
+                        {showCustHist && (
+                          <div className="max-h-44 overflow-y-auto border-t border-violet-100">
+                            {custHistory.map(h => (
+                              <div key={h.id} className="px-3 py-2 flex items-center justify-between gap-2 text-xs border-t border-violet-50 first:border-0">
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-slate-700 truncate">{h.forklift_brand} {h.forklift_model} <span className="text-slate-400 font-normal">· {h.forklift_unit_no}</span></p>
+                                  <p className="text-[11px] text-slate-400">{String(h.created_at).slice(0, 10)} · {h.sales_staff || "—"} · {h.sale_status ?? "ขายแล้ว"}</p>
+                                </div>
+                                <span className="text-xs font-bold text-violet-700 whitespace-nowrap">฿{fmt(Number(h.actual_sale) || 0)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <SField label="เบอร์โทร *" error={errors.customer_tel}><input value={form.customer_tel} onChange={e => setForm({ ...form, customer_tel: e.target.value })} placeholder="0XX-XXX-XXXX" className={si(errors.customer_tel)} /></SField>
                     <div className="grid grid-cols-2 gap-3">
                       <SField label="ประเภทลูกค้า *" error={errors.customer_type}>
@@ -2211,7 +2286,15 @@ export default function SalesMain() {
               </div>
             ) : (
               <div className="overflow-y-auto flex-1 min-h-0 p-4 flex flex-col gap-2.5">
-                {myCustomers.map((c, i) => (
+                {/* เฟส 2: ค้นหาลูกค้า */}
+                <div className="relative flex-shrink-0">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input value={custSearch} onChange={e => setCustSearch(e.target.value)} placeholder="ค้นหาชื่อ / เบอร์ / จังหวัด..."
+                    className="w-full border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                </div>
+                {myCustomersFiltered.length === 0 ? (
+                  <p className="text-center text-sm text-slate-400 py-10">ไม่พบลูกค้าตามที่ค้นหา</p>
+                ) : myCustomersFiltered.map((c, i) => (
                   <div key={i} className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -2232,6 +2315,11 @@ export default function SalesMain() {
                         </button>
                       ))}
                     </div>
+                    {/* เฟส 2: เริ่มดีลใหม่ให้ลูกค้านี้ — เติมข้อมูลไว้ให้ */}
+                    <button type="button" onClick={() => sellToCustomer(c.name, c.tel)}
+                      className="mt-3 w-full flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl py-2 transition-all">
+                      <Plus className="w-3.5 h-3.5" />ขายคันใหม่ให้ลูกค้านี้
+                    </button>
                   </div>
                 ))}
               </div>
