@@ -583,6 +583,26 @@ export default function SalesMain() {
     return e;
   };
 
+  // เคลียร์ error ทันทีเมื่อกรอกช่องนั้นครบ (เดิม error ค้างจนกดปิดการขายใหม่ เช่น วันส่งมอบกรอกแล้วยังแดง)
+  useEffect(() => {
+    setErrors(prev => {
+      if (!Object.keys(prev).length) return prev;
+      const next = { ...prev }; let changed = false;
+      const clear = (k: string, ok: boolean) => { if (ok && next[k]) { delete next[k]; changed = true; } };
+      clear("customer_name", !!form.customer_name.trim());
+      clear("customer_tel", !!form.customer_tel.trim());
+      clear("customer_type", !!form.customer_type);
+      clear("province", !!form.province);
+      clear("payment_type", !!form.payment_type);
+      clear("finance_company", !!form.finance_company);
+      clear("actual_sale", !!String(form.actual_sale).trim());
+      clear("delivery_date", !!form.delivery_date);
+      clear("bill_note_no", !!form.bill_note_no.trim());
+      clear("payment_proof", paymentProofs.length > 0);
+      return changed ? next : prev;
+    });
+  }, [form, paymentProofs]);
+
   // ตรวจ "ลูกค้าเก่า" อัตโนมัติจากประวัติซื้อทั้งหมด (ชื่อ/เบอร์ตรงกัน ไม่ว่าเซลล์ไหน/บิลแบบไหน)
   const custReturning = useMemo(() => {
     const nm = form.customer_name.trim(), tel = form.customer_tel.trim();
