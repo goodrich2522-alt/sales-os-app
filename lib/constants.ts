@@ -93,6 +93,7 @@ export const saleStatusGroup = (status: unknown): string => {
 // เงินสด/บิลเงินสด(CH) = เขียว · บิลแวท(IV) = ฟ้า · ไฟแนนซ์ = ส้ม · ว่าง = เทา "ไม่ระบุ"
 export const PAYMENT_BADGE: Record<string, string> = {
   "เงินสด": "bg-emerald-100 text-emerald-700",
+  "เงินสด (NO VAT)": "bg-teal-100 text-teal-700",
   "บิลเงินสด": "bg-emerald-100 text-emerald-700",
   "บิลแวท": "bg-sky-100 text-sky-700",
   "ไฟแนนซ์": "bg-amber-100 text-amber-700",

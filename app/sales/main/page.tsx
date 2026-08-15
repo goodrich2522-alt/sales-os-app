@@ -1648,7 +1648,8 @@ export default function SalesMain() {
                     <SField label="ประเภทการชำระ *" error={errors.payment_type}>
                       <select value={form.payment_type} onChange={e => setForm({ ...form, payment_type: e.target.value as PaymentType, finance_company: "" })} className={ss(errors.payment_type)}>
                         <option value="">-- เลือก --</option>
-                        {fieldConfig.paymentTypes.map(p => <option key={p} value={p}>{p}</option>)}
+                        {/* รวมค่าเดิมของดีลเก่า (เช่น บิลแวท) ถ้าไม่อยู่ในตัวเลือกปัจจุบัน — จะได้แก้ไขดีลเก่าได้ */}
+                        {[...fieldConfig.paymentTypes, ...(form.payment_type && !fieldConfig.paymentTypes.includes(form.payment_type) ? [form.payment_type] : [])].map(p => <option key={p} value={p}>{p}</option>)}
                       </select>
                     </SField>
                     {form.payment_type === "ไฟแนนซ์" && (

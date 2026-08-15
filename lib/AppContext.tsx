@@ -60,7 +60,7 @@ const DEFAULT_FIELD_CFG: FieldConfig = {
   customerTypes: DEFAULT_CUSTOMER_TYPES,
   financeCompanies: FINANCE_COMPANIES,
   saleTypes: [...SALE_TYPES],
-  paymentTypes: ["บิลแวท", "บิลเงินสด", "ไฟแนนซ์", "เงินสด", "เครดิต"],
+  paymentTypes: ["เงินสด", "ไฟแนนซ์", "เครดิต", "เงินสด (NO VAT)"],
   shippingSuppliers: ["วิชิตรถสไลด์", "แก่นนครรถสไลด์", "พนมดีทัวร์", "นิวสไลด์ออน", "24 ชั่วโมงรถสไลด์"],
   customFieldDefs: [],
   saleExtraFieldDefs: [],
