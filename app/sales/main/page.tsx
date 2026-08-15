@@ -161,6 +161,7 @@ export default function SalesMain() {
   const [commCategory, setCommCategory] = useState(""); // หมวดค่าคอม (โฟล์คลิฟท์) — เลือกตอนปิดการขาย
   const [rentCarNo, setRentCarNo]       = useState(""); // รถเช่า: เบอร์รถเช่า
   const [rentBy, setRentBy]             = useState(""); // รถเช่า: ผู้เบิกรถเช่า
+  const [custFocus, setCustFocus]       = useState(false); // เฟส 1: โฟกัสช่องชื่อลูกค้า → โชว์รายการลูกค้าเก่า
 
   // Custom notification items in checkout
   const [showCustomNotifs, setShowCustomNotifs] = useState(false);
@@ -535,6 +536,66 @@ export default function SalesMain() {
     const pool = editingSale ? sales.filter(s => s.id !== editingSale.id) : sales;
     return priorPurchaseByCustomer(nm, tel, pool);
   }, [form.customer_name, form.customer_tel, sales, editingSale]);
+
+  // ── ทะเบียนลูกค้า (เฟส 1): รวมข้อมูลลูกค้าจากดีลเก่าทุกใบ → เลือกเติมอัตโนมัติ ──
+  // ไม่ต้องมีตารางใหม่ — ดึงจาก sales ที่มีอยู่ · ค่าล่าสุด (created_at ใหม่สุด) ชนะ · เติมช่องว่างจากดีลเก่ากว่า
+  type CustEntry = { name: string; tel: string; customer_type: string; province: string; contact_source: string; count: number; lastAt: string; lastCar: string };
+  const customerDirectory = useMemo(() => {
+    const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+    const m = new Map<string, CustEntry>();
+    for (const s of sales) {
+      const nm = (s.customer_name || "").trim();
+      if (!nm) continue;
+      const key = norm(nm);
+      const at = String(s.created_at || "");
+      const car = `${s.forklift_brand || ""} ${s.forklift_model || ""}`.trim();
+      const g = m.get(key);
+      if (!g) {
+        m.set(key, { name: nm, tel: s.customer_tel || "", customer_type: s.customer_type || "", province: s.province || "", contact_source: s.contact_source || "", count: 1, lastAt: at, lastCar: car });
+      } else {
+        g.count++;
+        if (at.localeCompare(g.lastAt) >= 0) { // ดีลใหม่กว่า → อัปเดตค่าหลัก + ชื่อ/รถล่าสุด
+          g.lastAt = at; g.name = nm; g.lastCar = car;
+          if (s.customer_tel) g.tel = s.customer_tel;
+          if (s.customer_type) g.customer_type = s.customer_type;
+          if (s.province) g.province = s.province;
+          if (s.contact_source) g.contact_source = s.contact_source;
+        } else { // ดีลเก่ากว่า → เติมเฉพาะช่องที่ยังว่าง
+          if (!g.tel && s.customer_tel) g.tel = s.customer_tel;
+          if (!g.customer_type && s.customer_type) g.customer_type = s.customer_type;
+          if (!g.province && s.province) g.province = s.province;
+          if (!g.contact_source && s.contact_source) g.contact_source = s.contact_source;
+        }
+      }
+    }
+    return [...m.values()];
+  }, [sales]);
+
+  // รายการลูกค้าเก่าที่ชื่อตรงกับที่กำลังพิมพ์ (โชว์เป็นดรอปดาวน์)
+  const custMatches = useMemo(() => {
+    const q = form.customer_name.trim().toLowerCase();
+    if (q.length < 2) return [] as CustEntry[];
+    const list = customerDirectory
+      .filter(c => c.name.toLowerCase().includes(q))
+      .sort((a, b) => b.count - a.count || b.lastAt.localeCompare(a.lastAt))
+      .slice(0, 8);
+    // พิมพ์ตรงเป๊ะกับรายการเดียว = เลือกแล้ว ไม่ต้องโชว์
+    if (list.length === 1 && list[0].name.trim().toLowerCase() === q) return [];
+    return list;
+  }, [form.customer_name, customerDirectory]);
+
+  // กดเลือกลูกค้าเก่า → เติมข้อมูลระบุตัวตน (ไม่แตะราคา/การชำระ ซึ่งเปลี่ยนได้ทุกครั้ง)
+  const applyCustomer = (c: CustEntry) => {
+    setForm(f => ({
+      ...f,
+      customer_name: c.name,
+      customer_tel: c.tel || f.customer_tel,
+      customer_type: (c.customer_type || f.customer_type) as CustomerType | "",
+      province: c.province || f.province,
+      contact_source: (c.contact_source || f.contact_source) as ContactSource | "",
+    }));
+    setCustFocus(false);
+  };
 
   const buildSale = (status: SaleStatus): Sale => {
     const customFields: Record<string, string> = {};
@@ -1344,7 +1405,30 @@ export default function SalesMain() {
                       </SField>
                     )}
 
-                    <SField label="ชื่อลูกค้า *" error={errors.customer_name}><input value={form.customer_name} onChange={e => setForm({ ...form, customer_name: e.target.value })} placeholder="ชื่อ-นามสกุล / ชื่อบริษัท" className={si(errors.customer_name)} /></SField>
+                    <div className="relative">
+                      <SField label="ชื่อลูกค้า *" error={errors.customer_name}>
+                        <input value={form.customer_name}
+                          onChange={e => setForm({ ...form, customer_name: e.target.value })}
+                          onFocus={() => setCustFocus(true)}
+                          onBlur={() => setTimeout(() => setCustFocus(false), 150)}
+                          placeholder="ชื่อ-นามสกุล / ชื่อบริษัท" autoComplete="off" className={si(errors.customer_name)} />
+                      </SField>
+                      {/* เฟส 1: ดรอปดาวน์ลูกค้าเก่า — พิมพ์ชื่อแล้วเด้งให้เลือก กดแล้วเติมข้อมูลอัตโนมัติ */}
+                      {custFocus && custMatches.length > 0 && (
+                        <div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto">
+                          <p className="text-[10px] text-slate-400 px-3 pt-2 pb-1 font-semibold uppercase tracking-wide">ลูกค้าเก่า — กดเพื่อเติมข้อมูล</p>
+                          {custMatches.map((c, i) => (
+                            <button key={i} type="button" onMouseDown={e => e.preventDefault()} onClick={() => applyCustomer(c)}
+                              className="w-full text-left px-3 py-2 hover:bg-emerald-50 border-t border-slate-50 flex flex-col gap-0.5">
+                              <span className="text-sm font-semibold text-slate-800">{c.name}</span>
+                              <span className="text-[11px] text-slate-500">
+                                {c.tel ? `${c.tel} · ` : ""}{c.province || "—"} · ซื้อ {c.count} ครั้ง{c.lastCar ? ` · ล่าสุด ${c.lastCar}` : ""}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <SField label="เบอร์โทร *" error={errors.customer_tel}><input value={form.customer_tel} onChange={e => setForm({ ...form, customer_tel: e.target.value })} placeholder="0XX-XXX-XXXX" className={si(errors.customer_tel)} /></SField>
                     <div className="grid grid-cols-2 gap-3">
                       <SField label="ประเภทลูกค้า *" error={errors.customer_type}>
