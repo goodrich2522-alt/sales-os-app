@@ -102,6 +102,14 @@ export const PAYMENT_BADGE: Record<string, string> = {
 export const paymentBadgeClass = (p: unknown): string =>
   PAYMENT_BADGE[String(p ?? "").trim()] ?? "bg-slate-100 text-slate-500";
 
+// ── เซลล์ลาออก — เติม "(ลาออก)" ต่อท้ายชื่อเวลาแสดงผล (ข้อมูลเก่ายังอยู่) ──
+export const isResignedStaff = (name: unknown, resigned: string[] = []): boolean =>
+  !!name && resigned.includes(String(name).trim());
+export const staffLabel = (name: unknown, resigned: string[] = []): string => {
+  const n = String(name ?? "");
+  return isResignedStaff(n, resigned) ? `${n} (ลาออก)` : n;
+};
+
 // รายการสถานะในตัวกรองประวัติการขาย (ชุดเดียว ไม่ซ้ำ)
 export const SALE_STATUS_FILTER_GROUPS = [
   "จอง/รอโอน", "จอง/โอนมัดจำแล้ว", "รอจัดส่ง", "รอไฟแนนซ์", "ขายแล้ว/ปิดการขาย",

@@ -12,6 +12,7 @@ import {
   COMMISSION_FIELD, COMMISSION_CATEGORIES, CommissionLock, warrantyFilled,
 } from "@/lib/commission";
 import { DashboardGuard } from "@/components/DashboardGuard";
+import { staffLabel } from "@/lib/constants";
 import { supabase } from "@/lib/supabaseClient";
 
 const fmt = (n: number) => Number(n || 0).toLocaleString("th-TH");
@@ -20,7 +21,7 @@ const monthLabel = (ym: string) => { const [y, m] = ym.split("-"); return `${MON
 const WARRANTY_GATE_FROM = "2026-08"; // เริ่มบังคับลงรับประกันก่อนจ่ายค่าคอม ตั้งแต่ ส.ค. 2569 (ไม่ย้อนดีลเก่า)
 
 function CommissionPageInner() {
-  const { sales, forklifts, updateSale, fieldConfig, setCommissionLock } = useApp();
+  const { sales, forklifts, updateSale, fieldConfig, setCommissionLock, toggleResignedStaff } = useApp();
   const fkById = useMemo(() => new Map(forklifts.map(f => [f.id, f])), [forklifts]);
 
   // ประวัติซื้อทั้งหมด (รวมบิล GR) — ใช้ตรวจ "ลูกค้าเก่า" (เคยซื้อมาก่อน = ลูกค้าเก่าเสมอ)
@@ -279,7 +280,7 @@ function CommissionPageInner() {
                   {idx === 0 ? <Award className="w-5 h-5" /> : <User className="w-5 h-5" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-slate-800 text-sm">{g.staff}</p>
+                  <p className="font-bold text-slate-800 text-sm">{staffLabel(g.staff, fieldConfig.resignedStaff ?? [])}</p>
                   <p className="text-xs text-slate-500">{g.dealCount} ดีล{g.missing > 0 && !locked && <span className="text-red-600 font-semibold"> · ยังไม่เลือกหมวด {g.missing}</span>}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
@@ -290,6 +291,14 @@ function CommissionPageInner() {
 
               {expanded === g.staff && (
                 <div className="border-t border-slate-100 divide-y divide-slate-50">
+                  {/* ทำเครื่องหมายเซลล์ลาออก — โชว์ "(ลาออก)" ต่อท้ายทุกหน้า · ข้อมูล/ยอดเก่ายังอยู่ครบ */}
+                  {g.staff !== "(ไม่ระบุเซลล์)" && (
+                    <label className="flex items-center gap-2 p-3 bg-slate-50/60 cursor-pointer text-xs text-slate-600">
+                      <input type="checkbox" checked={(fieldConfig.resignedStaff ?? []).includes(g.staff)}
+                        onChange={e => toggleResignedStaff(g.staff, e.target.checked)} className="w-4 h-4 accent-slate-600" />
+                      <span>ทำเครื่องหมายว่า <b>ลาออกแล้ว</b> — ชื่อจะขึ้น &ldquo;{g.staff} (ลาออก)&rdquo; ทุกหน้า (ยอด/ค่าคอมย้อนหลังยังอยู่ครบ)</span>
+                    </label>
+                  )}
                   {g.deals.filter(d => d.group !== "none").map(d => (
                     <div key={d.key} className="p-3.5 flex items-center gap-3 text-sm">
                       <div className="flex-1 min-w-0">

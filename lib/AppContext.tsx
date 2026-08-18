@@ -45,6 +45,8 @@ export interface FieldConfig {
   adminEmails: string[];
   // ล็อก snapshot ค่าคอมรายเดือน (คีย์ = YYYY-MM) — freeze ตัวเลขหลังจ่าย
   commissionLocks: Record<string, CommissionLock>;
+  // รายชื่อเซลล์ที่ลาออก (ตามชื่อบนดีล) — โชว์ "(ลาออก)" ต่อท้าย · ข้อมูลเก่ายังอยู่ครบ
+  resignedStaff: string[];
 }
 
 const DEFAULT_FIELD_CFG: FieldConfig = {
@@ -68,9 +70,10 @@ const DEFAULT_FIELD_CFG: FieldConfig = {
   knownUsers: {},
   adminEmails: ["goodrichforklift@gmail.com"], // แอดมินเริ่มต้น — แก้ได้ที่ /admin/users
   commissionLocks: {},
+  resignedStaff: [],
 };
 
-type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "knownUsers" | "adminEmails" | "commissionLocks">;
+type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "knownUsers" | "adminEmails" | "commissionLocks" | "resignedStaff">;
 
 // ── รูปแบบไฟล์สำรอง/นำเข้าข้อมูล ──
 export interface BackupData {
@@ -129,6 +132,7 @@ interface AppContextType {
   // Sales filter requests
   addSalesFilterRequest: (name: string) => void;
   removeSalesFilterRequest: (name: string) => void;
+  toggleResignedStaff: (name: string, resigned: boolean) => void;
   // ล็อก/ปลดล็อก snapshot ค่าคอมรายเดือน
   setCommissionLock: (month: string, lock: CommissionLock | null) => void;
 }
@@ -645,6 +649,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // เพิ่ม/ถอน เซลล์ลาออก (ตามชื่อบนดีล) — โชว์ "(ลาออก)" ต่อท้าย · ไม่แตะข้อมูลเก่า
+  const toggleResignedStaff = useCallback((name: string, resigned: boolean) => {
+    const n = (name || "").trim(); if (!n) return;
+    setFieldConfig(prev => {
+      const set = new Set(prev.resignedStaff || []);
+      if (resigned) set.add(n); else set.delete(n);
+      return { ...prev, resignedStaff: [...set] };
+    });
+  }, []);
+
   // ── สำรอง / นำเข้าข้อมูล (กันข้อมูลหายถ้าระบบมีปัญหา) ──
   const exportData = useCallback((): BackupData => ({
     app: "SalesOS",
@@ -708,6 +722,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addSaleExtraFieldDef, removeSaleExtraFieldDef, renameSaleExtraFieldDef,
       addSaleExtraFieldOption, removeSaleExtraFieldOption, editSaleExtraFieldOption,
       addSalesFilterRequest, removeSalesFilterRequest,
+      toggleResignedStaff,
       setCommissionLock,
     }}>
       {children}

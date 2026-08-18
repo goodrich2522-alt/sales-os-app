@@ -11,7 +11,7 @@ import { useApp } from "@/lib/AppContext";
 import { getRegion } from "@/lib/mockData";
 import { displayCode } from "@/lib/productId";
 import { buildStaffMonthly, buildStaffWeekly, buildAllMonthlyWeekly } from "@/components/charts/Charts";
-import { CONTACT_SOURCE_COLORS, paymentBadgeClass } from "@/lib/constants";
+import { CONTACT_SOURCE_COLORS, paymentBadgeClass, staffLabel } from "@/lib/constants";
 import { parseSvc, nextDue, daysUntil, SVC_SOON_DAYS } from "@/lib/warranty";
 import { Sale, Forklift, isVoidSale } from "@/lib/types";
 import GoogleLoginButton, { type GoogleUser } from "@/components/GoogleLoginButton";
@@ -76,6 +76,7 @@ export default function Dashboard() {
   // ตัดดีลที่ถูกปฏิเสธจากสต็อก (ไม่ใช่ดีลจริง) ออกจากยอด/รายงานทั้งแดชบอร์ด
   const allSales = useMemo(() => rawSales.filter((s) => !isVoidSale(s)), [rawSales]);
   const staffNames = useMemo(() => Array.from(new Set(allSales.map((s) => s.sales_staff).filter(Boolean))), [allSales]);
+  const resigned = fieldConfig.resignedStaff ?? []; // เซลล์ลาออก → เติม "(ลาออก)" เวลาแสดงผล
   const [selectedStaff, setSelectedStaff] = useState("");
   // เลือกเซลล์จริงคนแรกเสมอ — รีเซ็ตถ้าค่าปัจจุบันไม่มีในรายชื่อ (กัน mock "สมชาย ใจดี" ค้างตอนข้อมูลจริงโหลดมา)
   useEffect(() => {
@@ -463,7 +464,7 @@ export default function Dashboard() {
                 <div key={s.name} className={`flex items-center gap-3 rounded-xl p-3 border ${s.rank <= 3 ? "bg-amber-50/60 border-amber-100" : "bg-slate-50 border-slate-100"}`}>
                   <span className="text-base w-7 text-center flex-shrink-0">{s.badge || <span className="text-xs font-bold text-slate-400">#{s.rank}</span>}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-800 truncate">{s.name}</p>
+                    <p className="text-sm font-semibold text-slate-800 truncate">{staffLabel(s.name, resigned)}</p>
                     <p className="text-xs text-slate-500">{s.sales} คัน</p>
                   </div>
                   <p className="text-sm font-bold text-indigo-700 flex-shrink-0">฿{fmtM(s.revenue)}</p>
@@ -674,7 +675,7 @@ export default function Dashboard() {
             <SectionHeader icon={<User className="w-4 h-4 text-violet-600" />} title="ผลงานรายบุคคล" sub="คลิกแท่งกราฟเพื่อดูรายละเอียดรายเดือน" iconBg="bg-violet-50" />
             <select value={selectedStaff} onChange={(e) => { setSelectedStaff(e.target.value); setDrillMonth(null); }}
               className="border border-slate-200 hover:border-violet-300 rounded-xl px-3.5 py-2 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-500 sm:w-56">
-              {staffNames.map((n) => <option key={n} value={n}>{n}</option>)}
+              {staffNames.map((n) => <option key={n} value={n}>{staffLabel(n, resigned)}</option>)}
             </select>
           </div>
 
@@ -708,7 +709,7 @@ export default function Dashboard() {
 
             {/* Monthly chart — clickable */}
             <div className="lg:col-span-2">
-              <p className="text-xs font-semibold text-slate-600 mb-1">รายได้รายเดือน — {selectedStaff}</p>
+              <p className="text-xs font-semibold text-slate-600 mb-1">รายได้รายเดือน — {staffLabel(selectedStaff, resigned)}</p>
               <p className="text-xs text-slate-400 mb-3 flex items-center gap-1">
                 <Calendar className="w-3 h-3" />คลิกที่แท่งกราฟเดือนใดเพื่อดูรายละเอียด
               </p>
@@ -728,7 +729,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h4 className="font-bold text-slate-800">
-                    {selectedStaff} — เดือน {drillMonth}
+                    {staffLabel(selectedStaff, resigned)} — เดือน {drillMonth}
                   </h4>
                   <p className="text-xs text-slate-500 mt-0.5">
                     ขายทั้งหมด {drillData.allSales.length} คัน · รายได้ ฿{fmt(drillData.allSales.reduce((s, a) => s + a.actual_sale, 0))}
