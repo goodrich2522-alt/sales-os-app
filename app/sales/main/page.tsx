@@ -144,6 +144,7 @@ export default function SalesMain() {
   const [editingTarget, setEditingTarget] = useState(false);
   const [targetInput, setTargetInput]     = useState("");
   const [historyTab, setHistoryTab]       = useState<SaleStatus | "all">("all");
+  const [dealSearch, setDealSearch]       = useState(""); // ค้นหาในดีลของฉัน (ชื่อลูกค้า/SN/รุ่น)
   const [historyView, setHistoryView]     = useState<"deals" | "customers" | "monthly">("deals"); // ดีลของฉัน / ลูกค้าของฉัน / สรุปรายเดือน
   const [histMonth, setHistMonth]         = useState(""); // เดือนที่เลือกในสรุปรายเดือน (YYYY-MM)
   const [detailSale, setDetailSale]       = useState<Sale | null>(null);
@@ -990,9 +991,16 @@ export default function SalesMain() {
     addSalesFilterRequest(newFilterName.trim()); setNewFilterName(""); setShowAddFilter(false);
   };
 
-  const filteredHistory = historyTab === "all"
-    ? mySales
-    : mySales.filter(s => saleMatchesTab(String(s.sale_status ?? "ขายแล้ว"), historyTab));
+  const filteredHistory = (() => {
+    const base = historyTab === "all"
+      ? mySales
+      : mySales.filter(s => saleMatchesTab(String(s.sale_status ?? "ขายแล้ว"), historyTab));
+    const q = dealSearch.trim().toLowerCase();
+    if (!q) return base;
+    // ค้นหาชื่อบริษัท/ลูกค้า + SN/รุ่น/ยี่ห้อ/เบอร์ — หาดีลเก่าง่ายขึ้น
+    return base.filter(s => [s.customer_name, s.customer_tel, s.forklift_unit_no, s.forklift_model, s.forklift_brand]
+      .some(v => String(v ?? "").toLowerCase().includes(q)));
+  })();
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -2217,6 +2225,18 @@ export default function SalesMain() {
                 );
               })}
             </div>
+            )}
+
+            {/* ค้นหาในดีลของฉัน — หาชื่อบริษัท/ลูกค้าที่ซื้อไป (เฉพาะมุมมองดีล) */}
+            {historyView === "deals" && (
+              <div className="px-4 pt-3 flex-shrink-0">
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input value={dealSearch} onChange={e => setDealSearch(e.target.value)} placeholder="ค้นหาชื่อบริษัท / ลูกค้า / SN / รุ่น..."
+                    className="w-full border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                  {dealSearch && <button onClick={() => setDealSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>}
+                </div>
+              </div>
             )}
 
             {/* มุมมองดีลของฉัน */}
