@@ -75,11 +75,12 @@ export default function Dashboard() {
   const isDashAdmin = (fieldConfig.adminEmails ?? []).some(e => e.toLowerCase() === dashEmail);
   // ตัดดีลที่ถูกปฏิเสธจากสต็อก (ไม่ใช่ดีลจริง) ออกจากยอด/รายงานทั้งแดชบอร์ด
   const allSales = useMemo(() => rawSales.filter((s) => !isVoidSale(s)), [rawSales]);
-  const staffNames = Array.from(new Set(allSales.map((s) => s.sales_staff).filter(Boolean)));
+  const staffNames = useMemo(() => Array.from(new Set(allSales.map((s) => s.sales_staff).filter(Boolean))), [allSales]);
   const [selectedStaff, setSelectedStaff] = useState("");
+  // เลือกเซลล์จริงคนแรกเสมอ — รีเซ็ตถ้าค่าปัจจุบันไม่มีในรายชื่อ (กัน mock "สมชาย ใจดี" ค้างตอนข้อมูลจริงโหลดมา)
   useEffect(() => {
-    if (!selectedStaff) { const first = allSales.find((s) => s.sales_staff)?.sales_staff; if (first) setSelectedStaff(first); }
-  }, [allSales, selectedStaff]);
+    if (staffNames.length && !staffNames.includes(selectedStaff)) setSelectedStaff(staffNames[0]);
+  }, [staffNames, selectedStaff]);
   const [drillMonth, setDrillMonth] = useState<string | null>(null);
   const [globalDrillMonth, setGlobalDrillMonth] = useState<string | null>(null);
   const [regionModal, setRegionModal] = useState<string | null>(null);
