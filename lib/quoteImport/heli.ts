@@ -1,6 +1,6 @@
 // lib/quoteImport/heli.ts — อ่านใบ HELI Sales Contract / Proforma Invoice (text layer)
-// รูปแบบ: 1 ใบ = 1 รุ่น (บางใบหลายคันด้วย SN หลายตัว) · มี SN จริงติดมา
-// ตัวอย่างแถวสินค้า: "1 CPCD35-Q22K2 K2 3T Diesel QUANCHA 490 M400 Black Solid 2 Valves & Pipings 1220 ... 010353N6726 THB 252,000.00 ..."
+// 1 ใบมีได้หลายรายการ (item) · แต่ละรายการ = 1 รุ่น + SN หลายตัว + ราคา/เสา/พิกัดของตัวเอง
+// ✅ แยกรุ่นตามรายการ: จับ SN เข้ากับรุ่นที่ถูกต้องต่อ item (เดิมเอารุ่นแรกไปใส่ทุกคัน → ผิดเมื่อใบมีหลายรุ่น)
 
 import { ParsedVehicle, QuoteParseResult } from "./types";
 
@@ -8,11 +8,18 @@ import { ParsedVehicle, QuoteParseResult } from "./types";
 function fuelFromText(s: string): string | undefined {
   if (/diesel/i.test(s)) return "ดีเซล";
   if (/\b(lpg|gas)\b/i.test(s)) return "แก๊ส";
+  if (/semi[- ]?electric/i.test(s)) return "กึ่งไฟฟ้า"; // CBS = semi-electric
   if (/electric|li-?ion|lithium|battery/i.test(s)) return "ไฟฟ้า";
   return undefined;
 }
+/** พลังงานเดาจาก prefix รุ่น (เผื่อข้อความไม่มีคำบอก) */
+function fuelFromModel(model: string): string | undefined {
+  if (/^CPCD/i.test(model)) return "ดีเซล";
+  if (/^(CPD|PCD|CBD|CDD|CQD|CBS)/i.test(model)) return "ไฟฟ้า";
+  return undefined;
+}
 
-/** ราคาทุน = ราคา "no vat" ตัวแรก (unit price ก่อน VAT) */
+/** ราคาทุน = ราคา "no vat" ตัวแรกในช่วงนั้น (unit price ก่อน VAT) */
 function firstPrice(s: string): number | undefined {
   const m = s.match(/THB\s*([\d,]+(?:\.\d{2})?)/i);
   if (!m) return undefined;
@@ -20,62 +27,68 @@ function firstPrice(s: string): number | undefined {
   return isNaN(n) ? undefined : n;
 }
 
+// รุ่น HELI: รถยก CPCD/CPD/PCD · รถคลัง CBD/CDD/CQD/CBS (เรียงยาว→สั้นด้วย \d ต่อท้าย)
+const MODEL_RE = /\b((?:CPCD|CPD|PCD|CBD|CDD|CQD|CBS)\d{1,3}[A-Z0-9-]*)/gi;
+// SN HELI 2 รูปแบบ: 6ตัวเลข+1อักษร+4ตัวเลข (010353N6726) · 5ตัวเลข+3อักษร+3ตัวเลข (08015JVF574)
+const SN_RE = /\b(\d{4,6}[A-Z]{1,3}\d{3,4})\b/g;
+const MAST_RE = /\b(M\d{3}|ZSM\d{3,4}|ZM\d{3})\b/;
+
 export function parseHeli(rawText: string): QuoteParseResult {
   const text = rawText.replace(/\s+/g, " ").trim();
 
-  // รหัสอ้างอิงนำเข้าจริงจากเอกสาร เช่น C20726201-125 หรือ C20726201-110KD — เก็บไว้อ้างอิง
-  // ✅ ตั้งเลข PI จากท้ายรหัสสัญญา (ผู้ใช้เคาะ 18 ส.ค.): C20726201-125 → PI125 · -110KD → PI110KD
-  //    (ท้ายรหัส = เลข PI จริงตามเอกสาร ไม่ใช่เดา) · เป็นค่าตั้งต้นในหน้าตรวจก่อนบันทึก แก้ได้ถ้าไม่ตรง
+  // รหัสอ้างอิง C20726201-125 → ตั้งเลข PI = PI125 (ท้ายรหัส = เลข PI จริง · แก้ได้ในหน้าตรวจ)
   const importRef = text.match(/\b([A-Z]\d{6,9}-\d{2,3}[A-Z]{0,3})\b/)?.[1];
   const piFromRef = importRef ? "PI" + importRef.replace(/^[A-Z]\d{6,9}-/, "") : undefined;
-  // วันที่: 29-Dec-25
   const date = text.match(/\b(\d{1,2}-[A-Z][a-z]{2}-\d{2,4})\b/)?.[1];
 
-  // ── หา "รุ่น" ทั้งหมดในเอกสาร (HELI = CPCD/CPD/CBD/CDD/CQD + เลข) ──
-  // ครอบคลุมทุก prefix HELI: รถยก CPCD/CPD/PCD · รถคลัง CBD/CDD/CQD · รถลากไฟฟ้า CBS (ลงท้าย S ไม่ใช่ D)
-  // เรียงยาว→สั้น (CPCD ก่อน CPD) ให้ match ถูกตัว
-  const modelRe = /\b((?:CPCD|CPD|PCD|CBD|CDD|CQD|CBS)\d{1,3}[A-Z0-9-]*)/gi;
-  const models = [...new Set([...text.matchAll(modelRe)].map((m) => m[1].toUpperCase()))];
-
-  // ── หา SN ทั้งหมด — HELI มี SN 2 รูปแบบ ──
-  //  · 6 ตัวเลข + 1 ตัวอักษร + 4 ตัวเลข  เช่น 010353N6726
-  //  · 5 ตัวเลข + 3 ตัวอักษร + 3 ตัวเลข  เช่น 08015JVF574
-  // ครอบคลุมด้วย \d{4,6}[A-Z]{1,3}\d{3,4} (ไม่ชนเลขทะเบียน/เลขบัญชีที่เป็นตัวเลขล้วน)
-  const sns = [...new Set([...text.matchAll(/\b(\d{4,6}[A-Z]{1,3}\d{3,4})\b/g)].map((m) => m[1]))];
-
-  const vehicles: ParsedVehicle[] = [];
-
-  if (models.length === 0) {
+  const modelMatches = [...text.matchAll(MODEL_RE)];
+  if (modelMatches.length === 0) {
     return { vendor: "HELI", pi_no: piFromRef, quote_date: date, vehicles: [], rawText };
   }
 
-  // กรณีปกติ HELI = 1 รุ่นต่อใบ · จับคู่ SN ให้ครบ (1 คัน/SN)
-  const model = models[0];
-  const num = model.match(/\d{2,3}/)?.[0];            // 35 → 3.5 ตัน
-  const capacity = num ? `${(Number(num) / 10).toFixed(1)} ตัน` : undefined;
-  const fuel = fuelFromText(text) ?? (/^CPCD/.test(model) ? "ดีเซล" : /^(CPD|PCD|CBD|CDD|CQD|CBS)/.test(model) ? "ไฟฟ้า" : undefined);
-  const mast = text.match(/\b(M\d{3}|ZSM\d{3,4}|ZM\d{3})\b/)?.[1];
-  const valve = text.match(/(\d+)\s*Valves?/i)?.[1];
-  const cost = firstPrice(text);
+  const vehicles: ParsedVehicle[] = [];
+  const baseModels = new Set<string>();
 
-  const build = (sn?: string): ParsedVehicle => {
-    const flags: string[] = [];
-    if (!sn) flags.push("ไม่พบ SN");
-    if (!cost) flags.push("ไม่พบราคาทุน");
-    if (!mast) flags.push("ไม่พบ MAST");
-    return {
-      brand: "HELI", model, SN: sn, capacity, fuel, mast, valve,
-      cost_price: cost, pi_no: piFromRef, import_ref: importRef, vendor: "HELI",
-      flags: flags.length ? flags : undefined,
+  // แต่ละ item = ช่วงข้อความตั้งแต่รุ่นนี้ ถึงก่อนรุ่นถัดไป → มี SN/ราคา/เสาของ item นั้นเอง
+  for (let i = 0; i < modelMatches.length; i++) {
+    const start = modelMatches[i].index ?? 0;
+    const end = i + 1 < modelMatches.length ? (modelMatches[i + 1].index ?? text.length) : text.length;
+    const seg = text.slice(start, end);
+
+    const model = modelMatches[i][1].toUpperCase();
+    baseModels.add(model.replace(/-.*$/, ""));
+    const num = model.match(/\d{2,3}/)?.[0];             // CBS15J → 15 → 1.5 ตัน
+    const capacity = num ? `${(Number(num) / 10).toFixed(1)} ตัน` : undefined;
+    const fuel = fuelFromText(seg) ?? fuelFromModel(model);
+    const mast = seg.match(MAST_RE)?.[1];
+    const valve = seg.match(/(\d+)\s*Valves?/i)?.[1];
+    const cost = firstPrice(seg);
+    const sns = [...new Set([...seg.matchAll(SN_RE)].map((m) => m[1]))];
+
+    const build = (sn?: string): ParsedVehicle => {
+      const flags: string[] = [];
+      if (!sn) flags.push("ไม่พบ SN");
+      if (!cost) flags.push("ไม่พบราคาทุน");
+      if (!mast) flags.push("ไม่พบ MAST");
+      return {
+        brand: "HELI", model, SN: sn, capacity, fuel, mast, valve,
+        cost_price: cost, pi_no: piFromRef, import_ref: importRef, vendor: "HELI",
+        flags: flags.length ? flags : undefined,
+      };
     };
-  };
 
-  if (sns.length === 0) vehicles.push(build(undefined));
-  else sns.forEach((sn) => vehicles.push(build(sn)));
+    if (sns.length === 0) {
+      // ไม่มี SN (รถสั่งผลิต/ยังไม่ออก SN) → อ่านจำนวน (qty) ท้ายรายการ สร้าง placeholder ตามจำนวน
+      const qty = Number(seg.match(/THB[\d.,\s]+THB[\d.,\s]+(\d{1,2})\s+THB/)?.[1]) || 1;
+      for (let q = 0; q < qty; q++) vehicles.push(build(undefined));
+    } else {
+      sns.forEach((sn) => vehicles.push(build(sn)));
+    }
+  }
 
-  // ถ้ามีหลายรุ่นในใบเดียว — ติดธงเตือนให้คนตรวจ (ตัวอย่างปัจจุบันไม่เจอ แต่กันไว้)
-  if (models.length > 1) {
-    vehicles.forEach((v) => (v.flags = [...(v.flags ?? []), `ใบนี้มีหลายรุ่น: ${models.join(", ")} — ตรวจว่าจับคู่ SN ถูก`]));
+  // ใบมีหลายรุ่น → ระบบแยกให้แล้ว แต่เตือนให้ตรวจอีกครั้ง (กันจับ SN เข้ารุ่นผิดในใบแปลกๆ)
+  if (baseModels.size > 1) {
+    vehicles.forEach((v) => (v.flags = [...(v.flags ?? []), "ใบนี้มีหลายรุ่น — ระบบแยกให้แล้ว ตรวจว่าจับคู่ SN ถูก"]));
   }
 
   return { vendor: "HELI", pi_no: piFromRef, quote_date: date, vehicles, rawText };
