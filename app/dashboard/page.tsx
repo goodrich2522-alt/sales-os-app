@@ -95,14 +95,15 @@ export default function Dashboard() {
     allSales.forEach((s) => { const d = new Date(s.created_at); if (!isNaN(d.getTime())) ys.add(String(d.getFullYear())); });
     return [...ys].sort((a, b) => b.localeCompare(a)); // ใหม่ → เก่า
   }, [allSales]);
-  // ค่าเริ่มต้น = ปีที่มีดีลมากสุด (กันปีล่าสุดที่มีดีลหลงมาแค่ 1-2 ดีล ทำให้แดชบอร์ดว่าง)
+  // ค่าเริ่มต้น = ปีที่มีดีลมากสุด · รีเซ็ตถ้าปีที่เลือกไม่มีในข้อมูลจริง (กัน mock ปี 2024 ค้างตอนข้อมูลจริงโหลดมา)
   useEffect(() => {
-    if (dashYear || allSales.length === 0) return;
+    if (allSales.length === 0) return;
+    if (dashYear && years.includes(dashYear)) return; // ปีที่เลือกยังมีข้อมูลจริง — คงไว้
     const cnt: Record<string, number> = {};
     allSales.forEach((s) => { const d = new Date(s.created_at); if (!isNaN(d.getTime())) { const y = String(d.getFullYear()); cnt[y] = (cnt[y] ?? 0) + 1; } });
     const top = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0]?.[0];
-    if (top) setDashYear(top);
-  }, [allSales, dashYear]);
+    if (top && top !== dashYear) setDashYear(top);
+  }, [allSales, dashYear, years]);
   const brandOptions = useMemo(() => [...new Set(allSales.map((s) => s.forklift_brand || "อื่นๆ"))].sort(), [allSales]);
   // กรองตามปี (ใช้กับกราฟสัดส่วนแบรนด์ — ให้เห็นทุกแบรนด์ในปีนั้น ไม่ถูก brand filter บีบเหลือ 1)
   const yearSales = useMemo(() => dashYear
