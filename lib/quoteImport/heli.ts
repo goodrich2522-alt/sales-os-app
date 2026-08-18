@@ -23,9 +23,11 @@ function firstPrice(s: string): number | undefined {
 export function parseHeli(rawText: string): QuoteParseResult {
   const text = rawText.replace(/\s+/g, " ").trim();
 
-  // รหัสอ้างอิงนำเข้าจริงจากเอกสาร เช่น C20726201-001 — เก็บไว้อ้างอิง
-  // ⛔ ไม่แปลงเป็นเลข PI เอง (เดิม -001 → PI001 ทำให้ชนเลข PI จริงของคันอื่น) · เว้น pi_no ว่างให้เติมเลข PI จริงทีหลัง
-  const importRef = text.match(/\b([A-Z]\d{6,9}-\d{2,3})\b/)?.[1];
+  // รหัสอ้างอิงนำเข้าจริงจากเอกสาร เช่น C20726201-125 หรือ C20726201-110KD — เก็บไว้อ้างอิง
+  // ✅ ตั้งเลข PI จากท้ายรหัสสัญญา (ผู้ใช้เคาะ 18 ส.ค.): C20726201-125 → PI125 · -110KD → PI110KD
+  //    (ท้ายรหัส = เลข PI จริงตามเอกสาร ไม่ใช่เดา) · เป็นค่าตั้งต้นในหน้าตรวจก่อนบันทึก แก้ได้ถ้าไม่ตรง
+  const importRef = text.match(/\b([A-Z]\d{6,9}-\d{2,3}[A-Z]{0,3})\b/)?.[1];
+  const piFromRef = importRef ? "PI" + importRef.replace(/^[A-Z]\d{6,9}-/, "") : undefined;
   // วันที่: 29-Dec-25
   const date = text.match(/\b(\d{1,2}-[A-Z][a-z]{2}-\d{2,4})\b/)?.[1];
 
@@ -44,7 +46,7 @@ export function parseHeli(rawText: string): QuoteParseResult {
   const vehicles: ParsedVehicle[] = [];
 
   if (models.length === 0) {
-    return { vendor: "HELI", pi_no: undefined, quote_date: date, vehicles: [], rawText };
+    return { vendor: "HELI", pi_no: piFromRef, quote_date: date, vehicles: [], rawText };
   }
 
   // กรณีปกติ HELI = 1 รุ่นต่อใบ · จับคู่ SN ให้ครบ (1 คัน/SN)
@@ -63,7 +65,7 @@ export function parseHeli(rawText: string): QuoteParseResult {
     if (!mast) flags.push("ไม่พบ MAST");
     return {
       brand: "HELI", model, SN: sn, capacity, fuel, mast, valve,
-      cost_price: cost, pi_no: undefined, import_ref: importRef, vendor: "HELI",
+      cost_price: cost, pi_no: piFromRef, import_ref: importRef, vendor: "HELI",
       flags: flags.length ? flags : undefined,
     };
   };
@@ -76,5 +78,5 @@ export function parseHeli(rawText: string): QuoteParseResult {
     vehicles.forEach((v) => (v.flags = [...(v.flags ?? []), `ใบนี้มีหลายรุ่น: ${models.join(", ")} — ตรวจว่าจับคู่ SN ถูก`]));
   }
 
-  return { vendor: "HELI", pi_no: undefined, quote_date: date, vehicles, rawText };
+  return { vendor: "HELI", pi_no: piFromRef, quote_date: date, vehicles, rawText };
 }
