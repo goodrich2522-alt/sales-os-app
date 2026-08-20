@@ -15,6 +15,7 @@ import {
 import { DashboardGuard } from "@/components/DashboardGuard";
 import { staffLabel } from "@/lib/constants";
 import { supabase } from "@/lib/supabaseClient";
+import type { Sale } from "@/lib/types";
 
 const fmt = (n: number) => Number(n || 0).toLocaleString("th-TH");
 const MONTHS_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
@@ -29,6 +30,10 @@ const tabLabel = (k: string) => k === FIRST_BATCH_KEY ? "งวดแรก (ย
 // วันจ่ายค่าคอมของงวด (งวดแรก = 25 ส.ค. · อื่นๆ = 25 เดือนถัดไป)
 const payoutLabelOf = (k: string) => k === FIRST_BATCH_KEY ? FIRST_BATCH_PAYOUT : monthLabel(payoutDateHelper(k));
 function payoutDateHelper(ym: string) { const [y, m] = ym.split("-").map(Number); if (!y || !m) return ym; return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`; }
+// งวดแรก = ดีลที่ "ปิดการขาย" ถึง ก.ค. 69 → เข้างวดด้วย "วันปิดการขาย" ไม่ต้องรอวันรับเงิน (จ่ายรวด 25 ส.ค.)
+const inFirstBatch = (s: Sale) => { const c = closeMonth(s); return !!c && c <= FIRST_BATCH_MAX; };
+// งวดของดีล: งวดแรก(ตามวันปิด) · หรือ เดือนที่รับเงิน(ดีลใหม่ ส.ค.+) · "" = ยังไม่เข้างวด (รอรับเงิน)
+const periodOf = (s: Sale) => inFirstBatch(s) ? FIRST_BATCH_KEY : commissionMonth(s);
 
 function CommissionPageInner() {
   const { sales, forklifts, updateSale, fieldConfig, setCommissionLock, toggleResignedStaff } = useApp();
@@ -39,16 +44,17 @@ function CommissionPageInner() {
   // ดีลที่นำมาคิดค่าคอม = ปิดจริง แต่ตัดดีลนำเข้าบิลภาษี GR ออก (ไม่จ่ายค่าคอม)
   // รวมดีลนำเข้าบิลภาษีมาคิดค่าคอมด้วย (ผู้ใช้เคาะ 20 ส.ค. — ใส่ชื่อเซลล์ให้ดีลนำเข้าแล้ว)
   const closedAll = useMemo(() => sales.filter(s => isClosedSale(s)), [sales]);
-  // งวดค่าคอม = เดือนที่รับเงิน (ผู้ใช้เคาะ 20 ส.ค.) · ยังไม่รับเงิน → แยกกลุ่ม "รอรับเงิน" ไม่เข้างวด
-  const closedSales = useMemo(() => closedAll.filter(s => !isCommPending(s)), [closedAll]);
-  const pendingDeals = useMemo(() => closedAll.filter(s => isCommPending(s)), [closedAll]);
+  // งวดค่าคอม: ดีลเก่า (ปิด ≤ ก.ค.) เข้างวดแรกตามวันปิด · ดีลใหม่ (ส.ค.+) ใช้วันรับเงิน · ยังไม่รับเงิน → "รอรับเงิน"
+  const closedSales = useMemo(() => closedAll.filter(s => periodOf(s) !== ""), [closedAll]);
+  // รอรับเงินจริง = ปิดหลัง ก.ค. + ยังไม่กรอกวันรับเงิน (ดีลเก่าเข้างวดแรกอัตโนมัติ ไม่ต้องกรอก)
+  const pendingDeals = useMemo(() => closedAll.filter(s => !inFirstBatch(s) && isCommPending(s)), [closedAll]);
 
-  // งวด: เดือนหลัง ก.ค.69 แยกรายเดือน (ใหม่→เก่า) + "งวดแรก" รวมยอดสะสม ≤ ก.ค.69 (อยู่ท้าย)
+  // งวด: เดือน (ตามวันรับเงิน) แยกรายเดือน (ใหม่→เก่า) + "งวดแรก" (ดีลปิด ≤ ก.ค.69 อยู่ท้าย)
   const months = useMemo(() => {
-    const raw = [...new Set(closedSales.map(commissionMonth).filter(Boolean))];
+    const raw = [...new Set(closedSales.map(periodOf).filter(Boolean))];
     const lockKeys = Object.keys(fieldConfig.commissionLocks || {});
-    const hasBatch = raw.some(m => m <= FIRST_BATCH_MAX) || lockKeys.includes(FIRST_BATCH_KEY);
-    const later = [...new Set([...raw, ...lockKeys].filter(m => m !== FIRST_BATCH_KEY && m > FIRST_BATCH_MAX))].sort().reverse();
+    const hasBatch = raw.includes(FIRST_BATCH_KEY) || lockKeys.includes(FIRST_BATCH_KEY);
+    const later = [...new Set([...raw, ...lockKeys].filter(m => m !== FIRST_BATCH_KEY))].sort().reverse();
     return [...later, ...(hasBatch ? [FIRST_BATCH_KEY] : [])];
   }, [closedSales, fieldConfig.commissionLocks]);
   const [month, setMonth] = useState<string>("");
@@ -58,7 +64,7 @@ function CommissionPageInner() {
   // ดีลของเดือนที่เลือก + คำนวณค่าคอมต่อดีล
   const rows = useMemo(() => {
     return closedSales
-      .filter(s => activeMonth === FIRST_BATCH_KEY ? commissionMonth(s) <= FIRST_BATCH_MAX : commissionMonth(s) === activeMonth)
+      .filter(s => periodOf(s) === activeMonth)
       .map(s => {
         const f = fkById.get(s.forklift_id);
         const comm0 = calcCommission(s, f, historySales);
@@ -243,15 +249,15 @@ function CommissionPageInner() {
           {/* งวดค่าคอม = เดือนที่เงินเข้าบัญชี · จ่ายวันที่ 25 เดือนถัดไป (งวดแรก = 25 ส.ค.) */}
           {activeMonth && <span className="ml-auto text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5">💰 จ่ายให้ฝ่ายขาย {payoutLabelOf(activeMonth)}</span>}
         </div>
-        <p className="text-[11px] text-slate-400 -mt-3 px-1">งวดค่าคอม = เดือนที่<b className="text-slate-500">เงินเข้าบัญชี</b> (ไม่ใช่วันปิดขาย) · ดีลที่ยังไม่รับเงินอยู่กลุ่ม &ldquo;รอรับเงิน&rdquo; ด้านล่าง</p>
+        <p className="text-[11px] text-slate-400 -mt-3 px-1">งวดแรก = ดีลปิดการขาย <b className="text-slate-500">ถึง ก.ค. 69</b> (จ่าย 25 ส.ค.) · ตั้งแต่ ส.ค. เป็นต้นไป = เดือนที่<b className="text-slate-500">เงินเข้าบัญชี</b> · ดีลใหม่ที่ยังไม่รับเงินอยู่กลุ่ม &ldquo;รอรับเงิน&rdquo;</p>
 
         {/* ⏳ ดีลรอรับเงิน — ยังไม่เข้างวด ไม่คิดค่าคอมจนกว่าจะกรอกวันรับเงิน */}
         {pendingDeals.length > 0 && (
           <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-2.5">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <div>
-              <span className="font-bold">⏳ รอรับเงิน {pendingDeals.length} ดีล</span> — ปิดการขายแล้วแต่ยังไม่กรอก &ldquo;วันที่รับเงิน&rdquo; → <b>ยังไม่เข้างวด ไม่คิดค่าคอม</b>
-              <span className="block text-xs text-amber-600 mt-0.5">พอเงินเข้าบัญชี ให้กรอกวันที่รับเงินในดีล (หน้าขาย/สต็อก) → ค่าคอมจะตกงวดเดือนนั้นทันที</span>
+              <span className="font-bold">⏳ รอรับเงิน {pendingDeals.length} ดีล</span> — ดีลใหม่ (ปิดตั้งแต่ ส.ค. 69) ที่ยังไม่กรอก &ldquo;วันที่รับเงิน&rdquo; → <b>ยังไม่เข้างวด ไม่คิดค่าคอม</b>
+              <span className="block text-xs text-amber-600 mt-0.5">ดีลเก่า (ปิด ≤ ก.ค. 69) เข้า &ldquo;งวดแรก&rdquo; อัตโนมัติแล้ว ไม่ต้องกรอก · ดีลใหม่พอเงินเข้าบัญชีให้กรอกวันที่รับเงิน → ตกงวดเดือนนั้นทันที</span>
             </div>
           </div>
         )}
