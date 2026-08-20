@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
 import {
-  calcCommission, isClosedSale, isImportedSale, closeMonth, closeDate,
+  calcCommission, isClosedSale, closeMonth, closeDate,
   COMMISSION_FIELD, COMMISSION_CATEGORIES, CommissionLock, warrantyFilled,
 } from "@/lib/commission";
 import { DashboardGuard } from "@/components/DashboardGuard";
@@ -27,7 +27,8 @@ function CommissionPageInner() {
   // ประวัติซื้อทั้งหมด (รวมบิล GR) — ใช้ตรวจ "ลูกค้าเก่า" (เคยซื้อมาก่อน = ลูกค้าเก่าเสมอ)
   const historySales = useMemo(() => sales.filter(isClosedSale), [sales]);
   // ดีลที่นำมาคิดค่าคอม = ปิดจริง แต่ตัดดีลนำเข้าบิลภาษี GR ออก (ไม่จ่ายค่าคอม)
-  const closedSales = useMemo(() => sales.filter(s => isClosedSale(s) && !isImportedSale(s)), [sales]);
+  // รวมดีลนำเข้าบิลภาษีมาคิดค่าคอมด้วย (ผู้ใช้เคาะ 20 ส.ค. — ใส่ชื่อเซลล์ให้ดีลนำเข้าแล้ว)
+  const closedSales = useMemo(() => sales.filter(s => isClosedSale(s)), [sales]);
 
   // เดือนที่มีดีลปิด + เดือนที่ถูกล็อกไว้ (ใหม่สุดก่อน) — เดือนที่ล็อกต้องโชว์เสมอแม้ดีลเปลี่ยน
   const months = useMemo(
