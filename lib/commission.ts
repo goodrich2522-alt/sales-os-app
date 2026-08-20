@@ -59,6 +59,18 @@ export const toGregorian = (d?: string): string => {
 export const closeDate = (s: Sale) => toGregorian(String(s.delivery_date || s.created_at || "")).slice(0, 10);
 export const closeMonth = (s: Sale) => closeDate(s).slice(0, 7); // YYYY-MM
 
+// ── งวดค่าคอม = เดือนที่รับเงินเข้าบัญชี (ผู้ใช้เคาะ 20 ส.ค.) · ยังไม่รับเงิน = รอรับเงิน ──
+export const paidDate = (s: Sale) => toGregorian(String(s.payment_received_date || "")).slice(0, 10);
+export const isCommPending = (s: Sale) => !paidDate(s).trim(); // ยังไม่รับเงิน → ไม่เข้างวด
+export const commissionMonth = (s: Sale) => paidDate(s).slice(0, 7); // YYYY-MM ของวันรับเงิน (ว่าง = รอรับเงิน)
+// วันจ่ายค่าคอมของงวด = วันที่ 25 ของเดือนถัดไป (YYYY-MM → YYYY-MM-25 ของเดือนถัดไป)
+export const payoutDate = (ym: string): string => {
+  const [y, m] = ym.split("-").map(Number);
+  if (!y || !m) return "";
+  const ny = m === 12 ? y + 1 : y, nm = m === 12 ? 1 : m + 1;
+  return `${ny}-${String(nm).padStart(2, "0")}-25`;
+};
+
 // ── ตรวจ "ลูกค้าเก่า" = เคยมีประวัติซื้อกับบริษัทมาก่อน (ไม่ว่าเซลล์คนไหน/เปิดบิลแบบไหน) ──
 const normName = (n?: string) => String(n ?? "").toLowerCase().replace(/[\s .\-()]/g, "");
 const normTel  = (t?: string) => String(t ?? "").replace(/\D/g, "");

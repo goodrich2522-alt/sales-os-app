@@ -9,6 +9,7 @@ import {
 import { useApp } from "@/lib/AppContext";
 import {
   calcCommission, isClosedSale, closeMonth, closeDate,
+  commissionMonth, isCommPending, payoutDate,
   COMMISSION_FIELD, COMMISSION_CATEGORIES, CommissionLock, warrantyFilled,
 } from "@/lib/commission";
 import { DashboardGuard } from "@/components/DashboardGuard";
@@ -28,12 +29,15 @@ function CommissionPageInner() {
   const historySales = useMemo(() => sales.filter(isClosedSale), [sales]);
   // ดีลที่นำมาคิดค่าคอม = ปิดจริง แต่ตัดดีลนำเข้าบิลภาษี GR ออก (ไม่จ่ายค่าคอม)
   // รวมดีลนำเข้าบิลภาษีมาคิดค่าคอมด้วย (ผู้ใช้เคาะ 20 ส.ค. — ใส่ชื่อเซลล์ให้ดีลนำเข้าแล้ว)
-  const closedSales = useMemo(() => sales.filter(s => isClosedSale(s)), [sales]);
+  const closedAll = useMemo(() => sales.filter(s => isClosedSale(s)), [sales]);
+  // งวดค่าคอม = เดือนที่รับเงิน (ผู้ใช้เคาะ 20 ส.ค.) · ยังไม่รับเงิน → แยกกลุ่ม "รอรับเงิน" ไม่เข้างวด
+  const closedSales = useMemo(() => closedAll.filter(s => !isCommPending(s)), [closedAll]);
+  const pendingDeals = useMemo(() => closedAll.filter(s => isCommPending(s)), [closedAll]);
 
-  // เดือนที่มีดีลปิด + เดือนที่ถูกล็อกไว้ (ใหม่สุดก่อน) — เดือนที่ล็อกต้องโชว์เสมอแม้ดีลเปลี่ยน
+  // เดือนงวด (จากวันรับเงิน) + เดือนที่ถูกล็อกไว้ (ใหม่สุดก่อน)
   const months = useMemo(
     () => [...new Set([
-      ...closedSales.map(closeMonth).filter(Boolean),
+      ...closedSales.map(commissionMonth).filter(Boolean),
       ...Object.keys(fieldConfig.commissionLocks || {}),
     ])].sort().reverse(),
     [closedSales, fieldConfig.commissionLocks]
@@ -45,7 +49,7 @@ function CommissionPageInner() {
   // ดีลของเดือนที่เลือก + คำนวณค่าคอมต่อดีล
   const rows = useMemo(() => {
     return closedSales
-      .filter(s => closeMonth(s) === activeMonth)
+      .filter(s => commissionMonth(s) === activeMonth)
       .map(s => {
         const f = fkById.get(s.forklift_id);
         const comm0 = calcCommission(s, f, historySales);
@@ -227,7 +231,21 @@ function CommissionPageInner() {
               {monthLabel(m)}
             </button>
           ))}
+          {/* งวดค่าคอม = เดือนที่เงินเข้าบัญชี · จ่ายวันที่ 25 เดือนถัดไป */}
+          {activeMonth && <span className="ml-auto text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5">💰 จ่ายให้ฝ่ายขาย 25 {monthLabel(payoutDate(activeMonth).slice(0, 7))}</span>}
         </div>
+        <p className="text-[11px] text-slate-400 -mt-3 px-1">งวดค่าคอม = เดือนที่<b className="text-slate-500">เงินเข้าบัญชี</b> (ไม่ใช่วันปิดขาย) · ดีลที่ยังไม่รับเงินอยู่กลุ่ม &ldquo;รอรับเงิน&rdquo; ด้านล่าง</p>
+
+        {/* ⏳ ดีลรอรับเงิน — ยังไม่เข้างวด ไม่คิดค่าคอมจนกว่าจะกรอกวันรับเงิน */}
+        {pendingDeals.length > 0 && (
+          <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold">⏳ รอรับเงิน {pendingDeals.length} ดีล</span> — ปิดการขายแล้วแต่ยังไม่กรอก &ldquo;วันที่รับเงิน&rdquo; → <b>ยังไม่เข้างวด ไม่คิดค่าคอม</b>
+              <span className="block text-xs text-amber-600 mt-0.5">พอเงินเข้าบัญชี ให้กรอกวันที่รับเงินในดีล (หน้าขาย/สต็อก) → ค่าคอมจะตกงวดเดือนนั้นทันที</span>
+            </div>
+          </div>
+        )}
 
         {/* ── แบนเนอร์เมื่อเดือนนี้ถูกล็อก ── */}
         {locked && lock && (

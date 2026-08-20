@@ -68,7 +68,7 @@ const emptyCheckout = {
   customer_type: "" as CustomerType | "",
   province: "", payment_type: "" as PaymentType | "",
   finance_company: "", actual_sale: "", deposit: "",
-  delivery_date: "", remark: "",
+  delivery_date: "", payment_received_date: "", remark: "",
   warranty_expiry: "", parts_schedule: "",
   contact_source: "" as ContactSource | "",
   sale_type: "" as SaleType | "",
@@ -748,6 +748,7 @@ export default function SalesMain() {
       finance_company: form.finance_company || undefined,
       actual_sale: Number(form.actual_sale), deposit: Number(form.deposit) || 0,
       delivery_date: toGregorian(form.delivery_date), remark: form.remark || undefined, // กันปีไทย (พ.ศ.) → แปลงเป็น ค.ศ.
+      payment_received_date: toGregorian(form.payment_received_date) || undefined, // วันรับเงิน → งวดค่าคอม
       custom_fields: Object.keys(customFields).length > 0 ? customFields : undefined,
       sale_status: status,
       vehicle_type: vehicleType,
@@ -792,7 +793,7 @@ export default function SalesMain() {
       finance_company: sale.finance_company ?? "",
       actual_sale: sale.actual_sale ? String(sale.actual_sale) : "",
       deposit: sale.deposit ? String(sale.deposit) : "",
-      delivery_date: sale.delivery_date ?? "", remark: sale.remark ?? "",
+      delivery_date: sale.delivery_date ?? "", payment_received_date: sale.payment_received_date ?? "", remark: sale.remark ?? "",
       warranty_expiry: sale.warranty_expiry ?? "", parts_schedule: sale.parts_schedule ?? "",
       contact_source: (sale.contact_source ?? "") as ContactSource | "",
       sale_type: (sale.sale_type ?? "") as SaleType | "",
@@ -1681,6 +1682,11 @@ export default function SalesMain() {
                       <SField label="มัดจำ (฿)" error=""><input type="number" value={form.deposit} onChange={e => setForm({ ...form, deposit: e.target.value })} placeholder="บาท" className={si("")} /></SField>
                     </div>
                     <SField label="วันส่งมอบ *" error={errors.delivery_date}><input type="date" value={form.delivery_date} onChange={e => setForm({ ...form, delivery_date: e.target.value })} className={si(errors.delivery_date)} /></SField>
+                    {/* วันที่รับเงินเข้าบัญชี — กำหนดงวดจ่ายค่าคอม (ยังไม่รับเงิน = เว้นว่าง → ค่าคอมรอรับเงิน) */}
+                    <SField label="วันที่รับเงินเข้าบัญชี (สำหรับงวดค่าคอม)" error="">
+                      <input type="date" value={form.payment_received_date} onChange={e => setForm({ ...form, payment_received_date: e.target.value })} className={si("")} />
+                      <p className="text-[11px] text-slate-400 mt-1">กรอกเมื่อเงินเข้าบัญชีจริง — ค่าคอมจะตกงวดเดือนนี้ (จ่ายวันที่ 25 เดือนถัดไป) · ยังไม่รับเงิน = เว้นว่าง</p>
+                    </SField>
 
                     {/* ── การแจ้งเตือน (Part 4) ── */}
                     <div className="border border-amber-100 rounded-xl p-3.5 bg-amber-50/40">

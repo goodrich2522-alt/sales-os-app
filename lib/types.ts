@@ -92,6 +92,7 @@ export interface Sale {
   actual_sale: number;
   deposit: number;
   delivery_date: string;
+  payment_received_date?: string; // วันที่รับเงินเข้าบัญชี — ใช้กำหนดงวดจ่ายค่าคอม (ว่าง = รอรับเงิน)
   remark?: string;
   custom_fields?: Record<string, string>;
   created_at: string;

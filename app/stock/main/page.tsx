@@ -136,7 +136,7 @@ export default function StockMain() {
   const [histSearch, setHistSearch]       = useState("");
   const [histView, setHistView]           = useState<"deals" | "summary">("deals"); // รายดีล / สรุปรายเซลล์
   const [histDetail, setHistDetail]       = useState<Sale | null>(null); // ดีลที่กางดูรายละเอียด
-  const [histEdit, setHistEdit]           = useState<{ sale_status: string; delivery_date: string; remark: string; eta: string; sn: string; commCat: string; staff: string } | null>(null); // eta=วันคาดรับ · sn=SN จริงรถสั่งผลิต · commCat=หมวดค่าคอม · staff=เซลล์ผู้ขาย (เติมดีลนำเข้าเก่า)
+  const [histEdit, setHistEdit]           = useState<{ sale_status: string; delivery_date: string; payment_received_date: string; remark: string; eta: string; sn: string; commCat: string; staff: string } | null>(null); // eta=วันคาดรับ · sn=SN จริงรถสั่งผลิต · commCat=หมวดค่าคอม · staff=เซลล์ผู้ขาย · payment_received_date=วันรับเงิน (งวดค่าคอม)
 
   // ── แจ้งเตือนเซลล์ทำรายการขาย — คงค้างจนแอดมินอ่าน + กดยืนยันตัดออกจากสต็อก (เก็บ ack ใน localStorage) ──
   type SaleAlert = { id: string; staff: string; status: string; title: string; sub: string };
@@ -727,6 +727,7 @@ export default function StockMain() {
       sn: s.forklift_unit_no ?? "",
       commCat: (s.custom_fields?.[COMMISSION_FIELD] as string) ?? "",
       staff: s.sales_staff ?? "",
+      payment_received_date: s.payment_received_date ?? "",
     });
   };
   const saveHistEdit = () => {
@@ -742,6 +743,7 @@ export default function StockMain() {
     if (histEdit.commCat !== ((histDetail.custom_fields?.[COMMISSION_FIELD] as string) ?? "")) changes.push(`หมวดค่าคอม→${histEdit.commCat || "-"}`);
     const staffChanged = histEdit.staff.trim() !== (histDetail.sales_staff ?? "").trim();
     if (staffChanged) changes.push(`เซลล์→${histEdit.staff.trim() || "-"}`); // เติม/แก้ชื่อเซลล์ (ดีลนำเข้าเก่าไม่มีเซลล์)
+    if (histEdit.payment_received_date !== (histDetail.payment_received_date ?? "")) changes.push(`วันรับเงิน→${histEdit.payment_received_date || "-"}`);
 
     const cf: Record<string, string> = { ...(histDetail.custom_fields ?? {}) };
     if (histEdit.eta.trim()) cf["วันคาดรับรถสั่งผลิต"] = histEdit.eta.trim(); else delete cf["วันคาดรับรถสั่งผลิต"];
@@ -753,6 +755,7 @@ export default function StockMain() {
     }
     const u: Sale = { ...histDetail, sale_status: histEdit.sale_status as Sale["sale_status"], delivery_date: histEdit.delivery_date, remark: histEdit.remark,
       sales_staff: histEdit.staff.trim(),
+      payment_received_date: histEdit.payment_received_date || undefined,
       forklift_unit_no: snChanged ? histEdit.sn.trim() : histDetail.forklift_unit_no,
       custom_fields: Object.keys(cf).length ? cf : undefined };
     updateSale(u); setHistDetail(u);
@@ -1676,6 +1679,10 @@ export default function StockMain() {
                       <input list="hist-staff-opts" value={histEdit.staff} onChange={e => setHistEdit({ ...histEdit, staff: e.target.value })}
                         placeholder="พิมพ์/เลือกชื่อเซลล์ที่ขายดีลนี้" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 bg-white" />
                       <datalist id="hist-staff-opts">{histStaffOptions.map(n => <option key={n} value={n} />)}</datalist>
+                    </label>
+                    <label className="text-xs text-slate-500">วันที่รับเงินเข้าบัญชี (งวดค่าคอม)
+                      <input type="date" value={histEdit.payment_received_date} onChange={e => setHistEdit({ ...histEdit, payment_received_date: e.target.value })} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800" />
+                      <span className="block text-[10px] text-slate-400 mt-0.5">เงินเข้าบัญชีเมื่อไหร่ → ค่าคอมตกงวดเดือนนั้น (จ่าย 25 เดือนถัดไป) · ว่าง = รอรับเงิน</span>
                     </label>
                     <label className="text-xs text-slate-500">วันส่งมอบ
                       <input type="date" value={histEdit.delivery_date} onChange={e => setHistEdit({ ...histEdit, delivery_date: e.target.value })} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800" />
