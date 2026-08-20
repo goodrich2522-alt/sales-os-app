@@ -18,12 +18,13 @@ export const isStackerModel = (model?: string) => /^(RE|CDD|CBS)/i.test(String(m
 // (CNC ไม่เหมาทั้งแบรนด์ เพราะมีบางรุ่นกำกวม — ใช้จำแนกจากรุ่นแทน)
 export const OTHER_GROUP_BRANDS = ["STAXX", "เจนบรรเจิด"];
 
-// รถกลุ่มอื่น (คิด 1% ของยอดรวมทั้งเดือน) — แฮนด์ลิฟท์/รถลากพาเลท/โต๊ะยก/CBD/CNS
+// รถกลุ่มอื่น (คิด 1% ของยอดรวมทั้งเดือน) — แฮนด์ลิฟท์/รถลากพาเลท/โต๊ะยก/CBD/CNS/PD/PTS/DYC
 // ⚠️ จำแนกจาก "รุ่น" ก่อนเสมอ เพราะ vehicle_category ในDB ของรถพวกนี้มักถูกใส่ผิดเป็น "Forklift"
+// PD\d/PTS/DYC = อุปกรณ์คลัง CNC (รถยกพาเลท/โต๊ะยก) — ไม่ชน CPD/CPCD ที่ขึ้นต้นด้วย C (ผู้ใช้เคาะ 20 ส.ค.)
 export const isOtherGroupModel = (model?: string) => {
   const m = String(model ?? "").trim().toUpperCase();
   if (!m) return false;
-  return /^(CBD|CNS|PWH|SDA|DG\d|EPS|PS\d|BF\d|AC\d|WH|WP|CBY|HPT|WMS|WS-)/.test(m) || /HAND\s*PALLET|PALLET\s*TRUCK|LIFT\s*TABLE/.test(m);
+  return /^(CBD|CNS|PWH|SDA|DG\d|EPS|PS\d|PD\d|PTS|DYC|BF\d|AC\d|WH|WP|CBY|HPT|WMS|WS-)/.test(m) || /HAND\s*PALLET|PALLET\s*TRUCK|LIFT\s*TABLE/.test(m);
 };
 
 // จำแนกรถกลุ่มอื่น: จากแบรนด์ (STAXX/เจนบรรเจิด/CNC) หรือ จากรุ่น
