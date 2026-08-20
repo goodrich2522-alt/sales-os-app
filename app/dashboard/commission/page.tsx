@@ -9,7 +9,7 @@ import {
 import { useApp } from "@/lib/AppContext";
 import {
   calcCommission, isClosedSale, closeMonth, closeDate,
-  commissionMonth, isCommPending, payoutDate,
+  commissionMonth, isCommPending,
   COMMISSION_FIELD, COMMISSION_CATEGORIES, CommissionLock, warrantyFilled,
 } from "@/lib/commission";
 import { DashboardGuard } from "@/components/DashboardGuard";
@@ -20,6 +20,15 @@ const fmt = (n: number) => Number(n || 0).toLocaleString("th-TH");
 const MONTHS_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 const monthLabel = (ym: string) => { const [y, m] = ym.split("-"); return `${MONTHS_TH[Number(m) - 1] ?? m} ${Number(y) + 543}`; };
 const WARRANTY_GATE_FROM = "2026-08"; // เริ่มบังคับลงรับประกันก่อนจ่ายค่าคอม ตั้งแต่ ส.ค. 2569 (ไม่ย้อนดีลเก่า)
+// งวดแรก = รวมยอดสะสมทุกดีลที่รับเงินถึง ก.ค. 2569 → จ่ายรวดเดียว 25 ส.ค. 2569 (ผู้ใช้เคาะ 20 ส.ค.)
+const FIRST_BATCH_MAX = "2026-07";
+const FIRST_BATCH_KEY = "งวดแรก";
+const FIRST_BATCH_PAYOUT = "25 ส.ค. 2569";
+// ป้ายแท็บ/หัวข้อ (งวดแรก = ยอดสะสม · อื่นๆ = เดือน)
+const tabLabel = (k: string) => k === FIRST_BATCH_KEY ? "งวดแรก (ยอดสะสม ถึง ก.ค.)" : monthLabel(k);
+// วันจ่ายค่าคอมของงวด (งวดแรก = 25 ส.ค. · อื่นๆ = 25 เดือนถัดไป)
+const payoutLabelOf = (k: string) => k === FIRST_BATCH_KEY ? FIRST_BATCH_PAYOUT : monthLabel(payoutDateHelper(k));
+function payoutDateHelper(ym: string) { const [y, m] = ym.split("-").map(Number); if (!y || !m) return ym; return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`; }
 
 function CommissionPageInner() {
   const { sales, forklifts, updateSale, fieldConfig, setCommissionLock, toggleResignedStaff } = useApp();
@@ -34,14 +43,14 @@ function CommissionPageInner() {
   const closedSales = useMemo(() => closedAll.filter(s => !isCommPending(s)), [closedAll]);
   const pendingDeals = useMemo(() => closedAll.filter(s => isCommPending(s)), [closedAll]);
 
-  // เดือนงวด (จากวันรับเงิน) + เดือนที่ถูกล็อกไว้ (ใหม่สุดก่อน)
-  const months = useMemo(
-    () => [...new Set([
-      ...closedSales.map(commissionMonth).filter(Boolean),
-      ...Object.keys(fieldConfig.commissionLocks || {}),
-    ])].sort().reverse(),
-    [closedSales, fieldConfig.commissionLocks]
-  );
+  // งวด: เดือนหลัง ก.ค.69 แยกรายเดือน (ใหม่→เก่า) + "งวดแรก" รวมยอดสะสม ≤ ก.ค.69 (อยู่ท้าย)
+  const months = useMemo(() => {
+    const raw = [...new Set(closedSales.map(commissionMonth).filter(Boolean))];
+    const lockKeys = Object.keys(fieldConfig.commissionLocks || {});
+    const hasBatch = raw.some(m => m <= FIRST_BATCH_MAX) || lockKeys.includes(FIRST_BATCH_KEY);
+    const later = [...new Set([...raw, ...lockKeys].filter(m => m !== FIRST_BATCH_KEY && m > FIRST_BATCH_MAX))].sort().reverse();
+    return [...later, ...(hasBatch ? [FIRST_BATCH_KEY] : [])];
+  }, [closedSales, fieldConfig.commissionLocks]);
   const [month, setMonth] = useState<string>("");
   const activeMonth = month || months[0] || "";
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -49,7 +58,7 @@ function CommissionPageInner() {
   // ดีลของเดือนที่เลือก + คำนวณค่าคอมต่อดีล
   const rows = useMemo(() => {
     return closedSales
-      .filter(s => commissionMonth(s) === activeMonth)
+      .filter(s => activeMonth === FIRST_BATCH_KEY ? commissionMonth(s) <= FIRST_BATCH_MAX : commissionMonth(s) === activeMonth)
       .map(s => {
         const f = fkById.get(s.forklift_id);
         const comm0 = calcCommission(s, f, historySales);
@@ -126,7 +135,7 @@ function CommissionPageInner() {
   // ล็อกเดือน → เก็บ snapshot ตัวเลขปัจจุบัน · ปลดล็อก → กลับไปคำนวณสด
   const doLock = async () => {
     if (!activeMonth || byStaff.length === 0) return;
-    if (!window.confirm(`ล็อกค่าคอมเดือน ${monthLabel(activeMonth)}?\n\nตัวเลขจะถูกบันทึกคงที่ แม้แก้ไขดีลย้อนหลังก็จะไม่เปลี่ยน (ปลดล็อกได้ภายหลัง)`)) return;
+    if (!window.confirm(`ล็อกค่าคอม${tabLabel(activeMonth)}?\n\nตัวเลขจะถูกบันทึกคงที่ แม้แก้ไขดีลย้อนหลังก็จะไม่เปลี่ยน (ปลดล็อกได้ภายหลัง)`)) return;
     let by = "ฝ่ายสต็อก";
     try { const r = await supabase?.auth.getUser(); by = r?.data.user?.email || by; } catch {}
     const snap: CommissionLock = {
@@ -142,7 +151,7 @@ function CommissionPageInner() {
   };
   const doUnlock = () => {
     if (!activeMonth || !lock) return;
-    if (!window.confirm(`ปลดล็อกค่าคอมเดือน ${monthLabel(activeMonth)}?\n\nระบบจะกลับไปคำนวณสดจากดีลปัจจุบัน (ตัวเลขอาจเปลี่ยน)`)) return;
+    if (!window.confirm(`ปลดล็อกค่าคอม${tabLabel(activeMonth)}?\n\nระบบจะกลับไปคำนวณสดจากดีลปัจจุบัน (ตัวเลขอาจเปลี่ยน)`)) return;
     setCommissionLock(activeMonth, null);
   };
 
@@ -227,12 +236,12 @@ function CommissionPageInner() {
           {months.length === 0 && <span className="text-sm text-slate-400">ยังไม่มีดีลปิดการขาย</span>}
           {months.map(m => (
             <button key={m} onClick={() => { setMonth(m); setExpanded(null); }}
-              className={`px-3 py-1.5 rounded-lg text-sm font-bold border transition-all ${activeMonth === m ? "bg-amber-500 text-white border-amber-500" : "bg-white text-slate-600 border-slate-200 hover:border-amber-300"}`}>
-              {monthLabel(m)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-bold border transition-all ${activeMonth === m ? (m === FIRST_BATCH_KEY ? "bg-violet-500 text-white border-violet-500" : "bg-amber-500 text-white border-amber-500") : (m === FIRST_BATCH_KEY ? "bg-violet-50 text-violet-700 border-violet-200 hover:border-violet-300" : "bg-white text-slate-600 border-slate-200 hover:border-amber-300")}`}>
+              {tabLabel(m)}
             </button>
           ))}
-          {/* งวดค่าคอม = เดือนที่เงินเข้าบัญชี · จ่ายวันที่ 25 เดือนถัดไป */}
-          {activeMonth && <span className="ml-auto text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5">💰 จ่ายให้ฝ่ายขาย 25 {monthLabel(payoutDate(activeMonth).slice(0, 7))}</span>}
+          {/* งวดค่าคอม = เดือนที่เงินเข้าบัญชี · จ่ายวันที่ 25 เดือนถัดไป (งวดแรก = 25 ส.ค.) */}
+          {activeMonth && <span className="ml-auto text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5">💰 จ่ายให้ฝ่ายขาย {payoutLabelOf(activeMonth)}</span>}
         </div>
         <p className="text-[11px] text-slate-400 -mt-3 px-1">งวดค่าคอม = เดือนที่<b className="text-slate-500">เงินเข้าบัญชี</b> (ไม่ใช่วันปิดขาย) · ดีลที่ยังไม่รับเงินอยู่กลุ่ม &ldquo;รอรับเงิน&rdquo; ด้านล่าง</p>
 
