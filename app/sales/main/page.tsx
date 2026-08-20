@@ -20,7 +20,7 @@ import { WarrantyBlock } from "@/components/WarrantyBlock";
 import { parseSvc, nextDue, SVC_SOON_DAYS } from "@/lib/warranty";
 import { formatBaht } from "@/lib/format";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
-import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isStackerModel, isOtherGroup, priorPurchaseByCustomer } from "@/lib/commission";
+import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isStackerModel, isOtherGroup, priorPurchaseByCustomer, toGregorian } from "@/lib/commission";
 import { apiEnabled, uploadImageApi } from "@/lib/api";
 import AiAssistant from "@/components/AiAssistant";
 
@@ -747,7 +747,7 @@ export default function SalesMain() {
       payment_type: form.payment_type as PaymentType,
       finance_company: form.finance_company || undefined,
       actual_sale: Number(form.actual_sale), deposit: Number(form.deposit) || 0,
-      delivery_date: form.delivery_date, remark: form.remark || undefined,
+      delivery_date: toGregorian(form.delivery_date), remark: form.remark || undefined, // กันปีไทย (พ.ศ.) → แปลงเป็น ค.ศ.
       custom_fields: Object.keys(customFields).length > 0 ? customFields : undefined,
       sale_status: status,
       vehicle_type: vehicleType,

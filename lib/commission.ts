@@ -47,8 +47,16 @@ export const isClosedSale = (s: Sale) => {
 export const isImportedSale = (s: Sale) =>
   String(s.custom_fields?.["ที่มา"] ?? "") === "นำเข้าบิลภาษี" || /^sale_gr_/i.test(String(s.id ?? ""));
 
-// วันที่ปิดการขาย (ใช้จัดกลุ่มรายเดือน) = วันส่งมอบ ถ้ามี ไม่งั้นวันที่สร้างดีล
-export const closeDate = (s: Sale) => String(s.delivery_date || s.created_at || "").slice(0, 10);
+// แปลงปี พ.ศ.→ค.ศ. อัตโนมัติ (บางคนพิมพ์ปีไทยในช่องวันที่ เช่น 2569-08-10 → 2026-08-10) — ปี ≥ 2500 ลบ 543
+export const toGregorian = (d?: string): string => {
+  const s = String(d ?? "").trim();
+  const m = s.match(/^(\d{4})(-\d{2}-\d{2}.*)$/);
+  if (!m) return s;
+  const y = Number(m[1]);
+  return y >= 2500 ? `${y - 543}${m[2]}` : s;
+};
+// วันที่ปิดการขาย (ใช้จัดกลุ่มรายเดือน) = วันส่งมอบ ถ้ามี ไม่งั้นวันที่สร้างดีล · normalize ปี พ.ศ. กันเพี้ยน
+export const closeDate = (s: Sale) => toGregorian(String(s.delivery_date || s.created_at || "")).slice(0, 10);
 export const closeMonth = (s: Sale) => closeDate(s).slice(0, 7); // YYYY-MM
 
 // ── ตรวจ "ลูกค้าเก่า" = เคยมีประวัติซื้อกับบริษัทมาก่อน (ไม่ว่าเซลล์คนไหน/เปิดบิลแบบไหน) ──
