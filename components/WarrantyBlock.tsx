@@ -10,8 +10,14 @@ import { Forklift } from "@/lib/types";
 import { parseSvc, roundDue, emptySvcRounds, DEFAULT_WARRANTY, warrantyFilled, SvcData } from "@/lib/warranty";
 import { isForkliftVehicle } from "@/lib/commission";
 
+// รับประกันเริ่มต้นตามหมวดรถ — แฮนด์ลิฟท์/สแตกเกอร์ = ระบบไฮดรอลิค 1 ปี (เติมให้อัตโนมัติเมื่อเลือกหมวด)
+const HYDRAULIC_WARRANTY = "รับประกันระบบไฮดรอลิค 1 ปี";
+const defaultTerms = (f: Forklift, isFork: boolean): string => {
+  if (isFork) return DEFAULT_WARRANTY;
+  return (f.vehicle_category === "Handlift" || f.vehicle_category === "Stacker") ? HYDRAULIC_WARRANTY : "";
+};
 const initSvc = (f: Forklift, isFork: boolean): SvcData =>
-  parseSvc(f) ?? { start: f.received_date || "", terms: isFork ? DEFAULT_WARRANTY : "", rounds: emptySvcRounds(), history: [] };
+  parseSvc(f) ?? { start: f.received_date || "", terms: defaultTerms(f, isFork), rounds: emptySvcRounds(), history: [] };
 
 export function WarrantyBlock({ forklift, actor, onSaved, canEdit = true }: {
   forklift: Forklift; actor: string; onSaved?: (f: Forklift) => void; canEdit?: boolean;
