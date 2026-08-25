@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useApp } from "@/lib/AppContext";
 import { driveImg } from "@/lib/img";
@@ -9,7 +9,7 @@ import { InspectionRecord, DeletedInspectionRecord, Forklift } from "@/lib/types
 import { DashboardGuard } from "@/components/DashboardGuard";
 import {
   ArrowLeft, Camera, ImageOff, Calendar, Truck, User,
-  Trash2, RotateCcw, AlertTriangle, X, ZoomIn, ChevronLeft, ChevronRight, Info, Download
+  Trash2, RotateCcw, AlertTriangle, X, ZoomIn, ChevronLeft, ChevronRight, Info, Download, Search
 } from "lucide-react";
 
 function daysLeft(deletedAt: string) {
@@ -26,8 +26,26 @@ function InspectionsPageInner() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [purgeConfirm, setPurgeConfirm]   = useState<string | null>(null);
 
+  const [q, setQ] = useState("");
+
   const openDetail = (rec: InspectionRecord) => { setDetail(rec); setLightboxIdx(null); };
   const closeDetail = () => { setDetail(null); setLightboxIdx(null); };
+
+  // ค้นหาย้อนหลังง่ายๆ: SN/รหัสรถ · รุ่น/ยี่ห้อ · ผู้ขนส่ง · วันที่ · บทบาท (รับ/ส่ง)
+  const fkByUnit = useMemo(() => {
+    const m = new Map<string, Forklift>();
+    forklifts.forEach(f => { if (f.SN) m.set(String(f.SN).toUpperCase(), f); m.set(String(f.id).toUpperCase(), f); });
+    return m;
+  }, [forklifts]);
+  const filtered = useMemo(() => {
+    const kw = q.trim().toLowerCase();
+    if (!kw) return inspections;
+    return inspections.filter(r => {
+      const f = fkByUnit.get(String(r.unit_no ?? "").toUpperCase());
+      return [r.unit_no, f?.model, f?.brand, f?.pi_no, r.transporter_name, r.date, r.role, r.delivery_company]
+        .some(v => String(v ?? "").toLowerCase().includes(kw));
+    });
+  }, [inspections, fkByUnit, q]);
 
   const handleDelete = (id: string) => { deleteInspection(id); setDeleteConfirm(null); if (detail?.id === id) closeDetail(); };
   const handlePurge  = (id: string) => { purgeInspection(id); setPurgeConfirm(null); };
@@ -129,6 +147,16 @@ function InspectionsPageInner() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-6">
+        {/* ── ค้นหาย้อนหลัง ── */}
+        {inspections.length > 0 && (
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input value={q} onChange={e => setQ(e.target.value)}
+              placeholder="ค้นหา SN / รุ่น / PI / ผู้ขนส่ง / วันที่..."
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            {q && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{filtered.length} รายการ</span>}
+          </div>
+        )}
         {/* ── Active Inspections Grid ── */}
         {inspections.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-slate-400">
@@ -136,9 +164,11 @@ function InspectionsPageInner() {
             <p className="font-semibold text-slate-500 text-lg">ยังไม่มีรูปตรวจรับ</p>
             <p className="text-sm mt-1">เมื่อผู้ขนส่งบันทึกการรับมอบรถ รายการจะแสดงที่นี่</p>
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-16 text-slate-400 text-sm">ไม่พบรายการที่ตรงกับ &ldquo;{q}&rdquo;</div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {inspections.map((rec) => (
+            {filtered.map((rec) => (
               <InspectionCard
                 key={rec.id}
                 rec={rec}

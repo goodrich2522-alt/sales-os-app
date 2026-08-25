@@ -849,6 +849,11 @@ export default function StockMain() {
               className="flex items-center gap-1.5 text-slate-600 hover:text-indigo-700 hover:bg-indigo-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-transparent hover:border-indigo-200">
               <ShoppingCart className="w-4 h-4" /><span className="hidden sm:inline">ประวัติการขาย</span>
             </button>
+            {/* ประวัติการรับรถเข้าคลัง — ไปหน้าแกลเลอรีตรวจรับรถ (ใคร/เมื่อไหร่/รูป 6 ช่อง + Export Excel) */}
+            <button onClick={() => router.push("/dashboard/inspections")}
+              className="flex items-center gap-1.5 text-slate-600 hover:text-cyan-700 hover:bg-cyan-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-transparent hover:border-cyan-200">
+              <PackageCheck className="w-4 h-4" /><span className="hidden sm:inline">ประวัติรับรถ</span>
+            </button>
             <button onClick={() => setShowSettings(true)}
               className="flex items-center gap-1.5 text-slate-600 hover:text-violet-700 hover:bg-violet-50 text-sm font-medium px-3 py-1.5 rounded-lg transition-all border border-transparent hover:border-violet-200">
               <Settings className="w-4 h-4" /><span className="hidden sm:inline">จัดการตัวเลือก</span>

@@ -368,7 +368,7 @@ function CommissionPageInner() {
                             <span className="inline-block mt-1.5 text-[11px] text-slate-500">หมวด: <b className="text-slate-700">{d.category || "— ไม่ได้เลือก —"}</b></span>
                           ) : (
                             <select value={d.category} onChange={e => setCategory(d.saleId, e.target.value)}
-                              className={`mt-1.5 text-xs border rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 ${d.note ? "border-red-300 text-red-700" : "border-slate-200 text-slate-700"}`}>
+                              className={`mt-1.5 text-xs border rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-400 ${d.category ? "bg-violet-50 border-violet-300 text-violet-700 font-bold" : d.note ? "border-red-300 text-red-700 bg-white" : "border-slate-200 text-slate-700 bg-white"}`}>
                               <option value="">-- เลือกหมวดลูกค้า --</option>
                               {COMMISSION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
