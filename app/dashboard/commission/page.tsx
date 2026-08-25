@@ -103,7 +103,8 @@ function CommissionPageInner() {
       const none = g.deals.filter(r => r.comm.group === "none" && r.warranty);
       g.noneCount = none.length;
       g.noneSaleTotal = none.reduce((s, r) => s + (Number(r.sale.actual_sale) || 0), 0);
-      g.noneComm = Math.round(g.noneSaleTotal * 0.01);
+      // รถกลุ่มอื่น (1%) — ยอดรวมทั้งเดือนต้องถึง 100,000 ก่อน ถึงจ่าย · ต่ำกว่า = 0 (ผู้ใช้เคาะ 20 ส.ค.)
+      g.noneComm = g.noneSaleTotal >= 100000 ? Math.round(g.noneSaleTotal * 0.01) : 0;
       g.total += g.noneComm;
     });
     return [...m.values()].sort((a, b) => b.total - a.total);
@@ -390,7 +391,9 @@ function CommissionPageInner() {
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">อื่นๆ · รวมทั้งเดือน</span>
                         </div>
                         <p className="text-[11px] text-slate-500 mt-0.5">{g.noneCount} ใบ · ยอดขายรวมทั้งเดือน ฿{fmt(g.noneSaleTotal)}</p>
-                        <p className="text-[11px] text-blue-600 mt-0.5">คิด 1% ของยอดรวม (ทุก 100,000 บาท = 1,000 บาท)</p>
+                        {g.noneSaleTotal >= 100000
+                          ? <p className="text-[11px] text-blue-600 mt-0.5">คิด 1% ของยอดรวม (ยอดถึง 100,000 แล้ว)</p>
+                          : <p className="text-[11px] text-slate-400 mt-0.5">ยอดรวมยังไม่ถึง 100,000 (ขาดอีก ฿{fmt(100000 - g.noneSaleTotal)}) → ยังไม่จ่ายค่าคอม</p>}
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className={`font-bold ${g.noneComm > 0 ? "text-amber-600" : "text-slate-400"}`}>฿{fmt(g.noneComm)}</p>
@@ -414,7 +417,7 @@ function CommissionPageInner() {
             <div><b className="text-indigo-700">FORKLIFT · ลูกค้าใหม่</b> — ตามกำไรสุทธิ · ≥100k=2,000 · 80k–99,999=1,500 · 50k–79,999=1,000 · 40k–49,999=800 · 30,001–40k=700 · 25k–30k=500 · ต่ำกว่า 25k=0</div>
             <div><b className="text-indigo-700">FORKLIFT · ลูกค้าใหม่+ออกพบเอง</b> — ≥100k=2,000 · 50k–99,999=1,200 · 40k–49,999=800 · ต่ำกว่า 40k=500</div>
             <div><b className="text-indigo-700">FORKLIFT · ลูกค้าเก่า/รับช่วงต่อ</b> — ≥100k=1,500 · 40k–99,999=800 · ต่ำกว่า 40k=500</div>
-            <div><b className="text-blue-700">รถกลุ่มอื่น (แฮนด์ลิฟท์/CBD/CNS ฯลฯ)</b> — 1% ของยอดขาย (ทุก 100,000 บาท = 1,000 บาท) · คำนวณจากยอดรวมทั้งเดือน</div>
+            <div><b className="text-blue-700">รถกลุ่มอื่น (แฮนด์ลิฟท์/CBD/CNS ฯลฯ)</b> — 1% ของยอดรวมทั้งเดือน · <b>ยอดรวมต้องถึง 100,000 ก่อนถึงจ่าย</b> (ต่ำกว่า = ไม่จ่าย)</div>
             <div className="text-slate-400">กำไรสุทธิ = ราคาขาย − ทุน − อุปกรณ์เสริม − ของแถม − ค่าขนส่ง · นับเฉพาะดีลปิด/จัดส่งแล้ว · <b>ไม่รวมดีลนำเข้าจากบิลภาษี GR</b> · ค่าคอมคำนวณอัตโนมัติ (แก้ไขไม่ได้)</div>
             <div className="text-slate-500 flex items-start gap-1.5"><Lock className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-amber-500" /><span><b>ล็อกเดือน:</b> กด &ldquo;ล็อกเดือนนี้&rdquo; หลังจ่ายค่าคอมแล้ว → ตัวเลขจะคงที่ (freeze) แม้แก้ไขดีลย้อนหลัง · ปลดล็อกเพื่อกลับไปคำนวณสด</span></div>
           </div>
