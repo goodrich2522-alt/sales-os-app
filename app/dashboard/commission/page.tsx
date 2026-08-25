@@ -42,6 +42,7 @@ function CommissionPageInner() {
   const saleById = useMemo(() => new Map(sales.map(s => [s.id, s])), [sales]);
   // ดีลที่กำลังเปิดลงข้อมูลรับประกัน (คลิกจากแถวดีลในหน้าค่าคอม)
   const [warrantyDeal, setWarrantyDeal] = useState<{ saleId: string; sn: string; brand: string; model: string } | null>(null);
+  const [showBooked, setShowBooked] = useState(false); // กาง/พับ ส่วนดีลจอง/มัดจำ รอปิดการขาย
   // ลงข้อมูลรับประกัน/บริการหลังการขาย → เขียนลง forklift.custom_fields["บริการหลังการขาย"] (ปลดล็อกค่าคอม)
   const saveWarranty = (sn: string, start: string, terms: string) => {
     const f = fkById.get(sn); if (!f) return;
@@ -59,6 +60,14 @@ function CommissionPageInner() {
   const closedSales = useMemo(() => closedAll.filter(s => periodOf(s) !== ""), [closedAll]);
   // รอรับเงินจริง = ปิดหลัง ก.ค. + ยังไม่กรอกวันรับเงิน (ดีลเก่าเข้างวดแรกอัตโนมัติ ไม่ต้องกรอก)
   const pendingDeals = useMemo(() => closedAll.filter(s => !inHistorical(s) && isCommPending(s)), [closedAll]);
+  // ดีลจอง/มัดจำ ที่ยังไม่ปิดการขาย (เช่น สั่งผลิต จ่ายมัดจำ 20%) — ยังไม่คิดค่าคอม แต่โชว์ให้เห็นว่ากำลังจะมา
+  const bookedDeals = useMemo(() => sales.filter(s => {
+    const st = String(s.sale_status || "");
+    return !isClosedSale(s)
+      && String(s.custom_fields?.["อนุมัติสต็อก"] ?? "") !== "ปฏิเสธ"
+      && /จอง|มัดจำ|รอจัดส่ง|ไฟแนนซ์/.test(st)
+      && String(s.sales_staff || "").trim() !== "";
+  }), [sales]);
 
   // งวด = รายเดือน (ใหม่→เก่า) · แยกทุกเดือน ไม่รวมสะสม
   const months = useMemo(() => {
@@ -271,6 +280,38 @@ function CommissionPageInner() {
               <span className="font-bold">⏳ รอรับเงิน {pendingDeals.length} ดีล</span> — ดีลใหม่ (ปิดตั้งแต่ ส.ค. 69) ที่ยังไม่กรอก &ldquo;วันที่รับเงิน&rdquo; → <b>ยังไม่เข้างวด ไม่คิดค่าคอม</b>
               <span className="block text-xs text-amber-600 mt-0.5">ดีลเก่า (ปิด ≤ ก.ค. 69) เข้าเดือนที่ปิดการขายอัตโนมัติแล้ว ไม่ต้องกรอก · ดีลใหม่พอเงินเข้าบัญชีให้กรอกวันที่รับเงิน → ตกงวดเดือนนั้นทันที</span>
             </div>
+          </div>
+        )}
+
+        {/* ── ดีลจอง/มัดจำ รอปิดการขาย (สั่งผลิต ฯลฯ) — ยังไม่คิดค่าคอม ── */}
+        {bookedDeals.length > 0 && (
+          <div className="bg-white rounded-2xl border border-violet-200 shadow-sm overflow-hidden">
+            <button onClick={() => setShowBooked(v => !v)}
+              className="w-full flex items-center gap-2.5 px-4 py-3 hover:bg-violet-50/50 transition-colors text-left">
+              <span className="text-lg">🔖</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-violet-800">ดีลจอง/มัดจำ รอปิดการขาย ({bookedDeals.length})</p>
+                <p className="text-[11px] text-violet-500">จองแล้ว/จ่ายมัดจำ/สั่งผลิต — <b>ยังไม่คิดค่าคอม</b> จนกว่าจะปิดการขายเต็มจำนวน</p>
+              </div>
+              {showBooked ? <ChevronDown className="w-5 h-5 text-violet-400" /> : <ChevronRight className="w-5 h-5 text-violet-400" />}
+            </button>
+            {showBooked && (
+              <div className="border-t border-violet-100 divide-y divide-violet-50">
+                {bookedDeals.map(s => (
+                  <div key={s.id} className="px-4 py-3 text-sm">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-slate-800">{s.forklift_brand} {s.forklift_model}</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 border border-violet-200">{s.sale_status}</span>
+                      {Number(s.deposit) > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">มัดจำ ฿{fmt(Number(s.deposit))}</span>}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      {staffLabel(s.sales_staff || "(ไม่ระบุเซลล์)", fieldConfig.resignedStaff ?? [])} · {s.customer_name || "—"}
+                    </p>
+                    {s.remark && <p className="text-[11px] text-violet-600 mt-0.5">📝 {s.remark}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
