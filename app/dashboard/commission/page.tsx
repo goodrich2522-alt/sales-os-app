@@ -12,10 +12,11 @@ import {
   commissionMonth, isCommPending,
   COMMISSION_FIELD, COMMISSION_CATEGORIES, CommissionLock, warrantyFilled,
 } from "@/lib/commission";
+import { DEFAULT_WARRANTY, emptySvcRounds } from "@/lib/warranty";
 import { DashboardGuard } from "@/components/DashboardGuard";
 import { staffLabel } from "@/lib/constants";
 import { supabase } from "@/lib/supabaseClient";
-import type { Sale } from "@/lib/types";
+import type { Sale, Forklift } from "@/lib/types";
 
 const fmt = (n: number) => Number(n || 0).toLocaleString("th-TH");
 const MONTHS_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
@@ -36,8 +37,18 @@ const inHistorical = (s: Sale) => { const c = closeMonth(s); return !!c && c <= 
 const periodOf = (s: Sale) => { const c = closeMonth(s); return c && c <= HIST_CUTOFF ? c : commissionMonth(s); };
 
 function CommissionPageInner() {
-  const { sales, forklifts, updateSale, fieldConfig, setCommissionLock, toggleResignedStaff } = useApp();
+  const { sales, forklifts, updateSale, updateForklift, fieldConfig, setCommissionLock, toggleResignedStaff } = useApp();
   const fkById = useMemo(() => new Map(forklifts.map(f => [f.id, f])), [forklifts]);
+  const saleById = useMemo(() => new Map(sales.map(s => [s.id, s])), [sales]);
+  // ดีลที่กำลังเปิดลงข้อมูลรับประกัน (คลิกจากแถวดีลในหน้าค่าคอม)
+  const [warrantyDeal, setWarrantyDeal] = useState<{ saleId: string; sn: string; brand: string; model: string } | null>(null);
+  // ลงข้อมูลรับประกัน/บริการหลังการขาย → เขียนลง forklift.custom_fields["บริการหลังการขาย"] (ปลดล็อกค่าคอม)
+  const saveWarranty = (sn: string, start: string, terms: string) => {
+    const f = fkById.get(sn); if (!f) return;
+    const svc = { start, terms, rounds: emptySvcRounds(), history: [{ by: "ฝ่ายสต็อก (หน้าค่าคอม)", at: new Date().toISOString().slice(0, 10) }] };
+    updateForklift({ ...f, custom_fields: { ...(f.custom_fields || {}), "บริการหลังการขาย": JSON.stringify(svc) } });
+    setWarrantyDeal(null);
+  };
 
   // ประวัติซื้อทั้งหมด (รวมบิล GR) — ใช้ตรวจ "ลูกค้าเก่า" (เคยซื้อมาก่อน = ลูกค้าเก่าเสมอ)
   const historySales = useMemo(() => sales.filter(isClosedSale), [sales]);
@@ -115,7 +126,7 @@ function CommissionPageInner() {
         staff: s.staff, total: s.total, dealCount: s.dealCount, missing: s.missing,
         noneCount: s.noneCount, noneSaleTotal: s.noneSaleTotal, noneComm: s.noneComm,
         deals: lock.deals.filter(d => d.staff === s.staff).map(d => ({
-          key: d.saleId, saleId: d.saleId, brand: d.brand, model: d.model, customer: d.customer,
+          key: d.saleId, saleId: d.saleId, sn: "", brand: d.brand, model: d.model, customer: d.customer,
           group: d.group, basis: d.basis, basisValue: d.basisValue, category: d.category,
           returning: d.returning, amount: d.amount, closeDate: d.closeDate, note: "", warranty: true,
         })),
@@ -125,7 +136,7 @@ function CommissionPageInner() {
       staff: g.staff, total: g.total, dealCount: g.deals.length, missing: g.missing,
       noneCount: g.noneCount, noneSaleTotal: g.noneSaleTotal, noneComm: g.noneComm,
       deals: g.deals.map(r => ({
-        key: r.sale.id, saleId: r.sale.id, brand: r.sale.forklift_brand || "", model: r.sale.forklift_model || "",
+        key: r.sale.id, saleId: r.sale.id, sn: r.sale.forklift_id, brand: r.sale.forklift_brand || "", model: r.sale.forklift_model || "",
         customer: r.sale.customer_name || "", group: r.comm.group, basis: r.comm.basis, basisValue: r.comm.basisValue,
         category: r.comm.category, returning: !!r.comm.returning, amount: r.comm.amount, closeDate: closeDate(r.sale), note: r.comm.note || "", warranty: r.warranty,
       })),
@@ -339,7 +350,10 @@ function CommissionPageInner() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold text-slate-800">{d.brand} {d.model}</span>
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${d.group === "STACKER" ? "bg-teal-100 text-teal-700" : d.group === "FORKLIFT" ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-500"}`}>{d.group === "none" ? "อื่นๆ" : d.group}</span>
-                          {d.warranty === false && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-200">⚠️ ยังไม่ลงรับประกัน · คอม 0</span>}
+                          {d.warranty === false && (locked
+                            ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-200">⚠️ ยังไม่ลงรับประกัน · คอม 0</span>
+                            : <button onClick={() => setWarrantyDeal({ saleId: d.saleId, sn: d.sn, brand: d.brand, model: d.model })}
+                                className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-200 hover:bg-red-600 hover:text-white transition-colors">⚠️ ยังไม่ลงรับประกัน · แตะลงข้อมูล</button>)}
                         </div>
                         <p className="text-[11px] text-slate-500 mt-0.5">
                           {d.customer || "—"} · {d.basis} ฿{fmt(Math.round(d.basisValue))} · ปิด {d.closeDate}
@@ -406,6 +420,62 @@ function CommissionPageInner() {
           </div>
         </details>
       </main>
+
+      {/* ── ลงข้อมูลรับประกัน/บริการหลังการขาย (คลิกจากแถวดีล) ── */}
+      {warrantyDeal && (
+        <WarrantyQuickEdit
+          deal={warrantyDeal}
+          forklift={fkById.get(warrantyDeal.sn)}
+          sale={saleById.get(warrantyDeal.saleId)}
+          onSave={(start, terms) => saveWarranty(warrantyDeal.sn, start, terms)}
+          onClose={() => setWarrantyDeal(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// โมดัลลงข้อมูลรับประกันแบบเร็ว — ปลดล็อกค่าคอมของดีลที่ยังไม่ลงข้อมูล
+function WarrantyQuickEdit({ deal, forklift, sale, onSave, onClose }: {
+  deal: { sn: string; brand: string; model: string };
+  forklift?: Forklift;
+  sale?: Sale;
+  onSave: (start: string, terms: string) => void;
+  onClose: () => void;
+}) {
+  const isoOf = (v?: string) => /^\d{4}-\d{2}-\d{2}/.test(String(v || "")) ? String(v).slice(0, 10) : "";
+  // แฮนด์ลิฟท์/สแตกเกอร์/รถลากไฟฟ้า → รับประกันไฮดรอลิค 1 ปี · อื่น (โฟล์คลิฟท์) → รับประกันเต็ม
+  const cat = forklift?.vehicle_category || "";
+  const isHydraulic = ["Handlift", "Stacker", "Electric Pallet Truck"].includes(cat)
+    || /^(CDD|CBS|RE|BF|AC|PWH|WH|CBD|CNS|SDA|DG\d|PD\d|PTS|DYC|PS\d)/i.test(String(deal.model));
+  const defStart = isoOf(forklift?.received_date) || isoOf(sale?.delivery_date) || isoOf(sale?.payment_received_date) || new Date().toISOString().slice(0, 10);
+  const [start, setStart] = useState(defStart);
+  const [terms, setTerms] = useState(isHydraulic ? "รับประกันระบบไฮดรอลิค 1 ปี" : DEFAULT_WARRANTY);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+        <div>
+          <h3 className="font-bold text-slate-800">ลงข้อมูลรับประกัน / บริการหลังการขาย</h3>
+          <p className="text-xs text-slate-500 mt-0.5">{deal.brand} {deal.model} · SN {deal.sn}</p>
+        </div>
+        <label className="text-sm text-slate-600 flex flex-col gap-1">
+          วันเริ่มรับประกัน (วันส่งมอบ/รับรถ)
+          <input type="date" value={start} onChange={e => setStart(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+        </label>
+        <label className="text-sm text-slate-600 flex flex-col gap-1">
+          เงื่อนไขการรับประกัน
+          <textarea value={terms} onChange={e => setTerms(e.target.value)} rows={3}
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none" />
+        </label>
+        <p className="text-[11px] text-slate-400">บันทึกแล้วรอบเช็คฟรี 4 รอบจะสร้างอัตโนมัติ (ทุก 3 เดือน) · ค่าคอมของดีลนี้จะถูกคำนวณทันที · แก้รายละเอียดเพิ่มได้ที่หน้าสต็อก</p>
+        <div className="flex gap-2 justify-end">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-bold text-slate-600 border border-slate-200 hover:bg-slate-50">ยกเลิก</button>
+          <button onClick={() => onSave(start, terms)} disabled={!start.trim() || !terms.trim()}
+            className="px-4 py-2 rounded-lg text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-40">บันทึก</button>
+        </div>
+      </div>
     </div>
   );
 }
