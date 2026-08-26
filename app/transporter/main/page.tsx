@@ -466,16 +466,40 @@ export default function TransporterMain() {
                       );
                     })()
                   ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                      {piGroups.map(g => (
-                        <button key={g.pi} onClick={() => setOpenPI(g.pi)}
-                          className="flex flex-col items-center gap-1 rounded-2xl border-2 border-amber-200 bg-amber-50/50 hover:border-amber-400 hover:bg-amber-50 p-4 transition-all active:scale-[0.97]">
-                          <Hash className="w-4 h-4 text-amber-500" />
-                          <span className="text-base font-bold text-slate-800 leading-tight text-center break-all">{g.pi}</span>
-                          <span className="text-xs font-semibold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">{g.cars.length} คัน</span>
-                        </button>
-                      ))}
-                    </div>
+                    /* จัดกลุ่มแยกปี พ.ศ. (PI67-=2567 · PI68-=2568 · PIxxx=2569) กันสับสน */
+                    (() => {
+                      const yearOf = (pi: string) => /^PI67-/i.test(pi) ? "2567" : /^PI68-/i.test(pi) ? "2568" : pi === "(ไม่มี PI)" ? "ไม่ระบุปี" : "2569";
+                      const piShort = (pi: string) => pi.replace(/^PI6[78]-/i, "PI"); // PI68-016 → PI016
+                      const order = ["2569", "2568", "2567", "ไม่ระบุปี"];
+                      const byYear = new Map<string, typeof piGroups>();
+                      piGroups.forEach(g => { const y = yearOf(g.pi); const a = byYear.get(y) ?? []; a.push(g); byYear.set(y, a); });
+                      return (
+                        <div className="flex flex-col gap-4">
+                          {order.filter(y => byYear.has(y)).map(y => {
+                            const gs = byYear.get(y)!;
+                            const cars = gs.reduce((s, g) => s + g.cars.length, 0);
+                            return (
+                              <div key={y}>
+                                <div className="flex items-center gap-2 mb-2 sticky top-0">
+                                  <span className={`text-sm font-bold px-2.5 py-1 rounded-lg ${y === "2569" ? "bg-amber-500 text-white" : "bg-slate-200 text-slate-700"}`}>📅 พ.ศ. {y}</span>
+                                  <span className="text-xs text-slate-400">{gs.length} PI · {cars} คัน</span>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                                  {gs.map(g => (
+                                    <button key={g.pi} onClick={() => setOpenPI(g.pi)}
+                                      className="flex flex-col items-center gap-1 rounded-2xl border-2 border-amber-200 bg-amber-50/50 hover:border-amber-400 hover:bg-amber-50 p-4 transition-all active:scale-[0.97]">
+                                      <Hash className="w-4 h-4 text-amber-500" />
+                                      <span className="text-base font-bold text-slate-800 leading-tight text-center break-all">{piShort(g.pi)}</span>
+                                      <span className="text-xs font-semibold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">{g.cars.length} คัน</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()
                   )}
                 </>
               ) : (
