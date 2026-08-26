@@ -8,6 +8,15 @@ import { Sale, Forklift } from "./types";
 
 // หมวดค่าคอมโฟล์คลิฟท์ — เก็บที่ sale.custom_fields["หมวดค่าคอม"]
 export const COMMISSION_FIELD = "หมวดค่าคอม";
+
+// แบ่งค่าคอม (กรณีรับช่วงต่อ) — เก็บ % ที่เซลล์ปัจจุบันได้ ที่ sale.custom_fields["แบ่งค่าคอม%"]
+// เช่น "50" = ส่งรถต่อช่วงให้เซลล์อื่น แบ่งครึ่ง (ได้ครึ่งเดียว) · ว่าง/100 = ได้เต็ม
+export const COMMISSION_SPLIT_FIELD = "แบ่งค่าคอม%";
+export const commissionSplitPct = (s: Sale): number => {
+  const raw = String(s.custom_fields?.[COMMISSION_SPLIT_FIELD] ?? "").trim();
+  const n = Number(raw);
+  return raw !== "" && n > 0 && n < 100 ? n : 100;
+};
 export const COMMISSION_CATEGORIES = ["ลูกค้าใหม่", "ลูกค้าใหม่+ออกพบเอง", "ลูกค้าเก่า/รับช่วงต่อ"] as const;
 export type CommissionCategory = (typeof COMMISSION_CATEGORIES)[number];
 
@@ -150,11 +159,15 @@ export interface CommissionLock {
 export const calcCommission = (s: Sale, f?: Forklift, allSales?: Sale[]): CommissionResult => {
   const model = f?.model ?? s.forklift_model;
   const storedCat = String(s.custom_fields?.[COMMISSION_FIELD] ?? "").trim();
+  // แบ่งค่าคอม (รับช่วงต่อ) — ปัดตามสัดส่วน เช่น 50% → ได้ครึ่งเดียว
+  const splitPct = commissionSplitPct(s);
+  const applySplit = (amt: number) => (splitPct < 100 ? Math.round((amt * splitPct) / 100) : amt);
+  const splitNote = splitPct < 100 ? `แบ่งค่าคอม ${splitPct}% (รับช่วงต่อ)` : undefined;
 
   // STACKER (RE/CDD/CBS) → ตามยอดขาย
   if (isStackerModel(model)) {
     const saleAmount = Number(s.actual_sale) || 0;
-    return { amount: stackerRate(saleAmount), group: "STACKER", basis: "ยอดขาย", basisValue: saleAmount, category: "" };
+    return { amount: applySplit(stackerRate(saleAmount)), group: "STACKER", basis: "ยอดขาย", basisValue: saleAmount, category: "", note: splitNote };
   }
 
   // FORKLIFT → ตามกำไรสุทธิ + หมวดลูกค้า
@@ -179,5 +192,5 @@ export const calcCommission = (s: Sale, f?: Forklift, allSales?: Sale[]): Commis
   if (category === "ลูกค้าใหม่+ออกพบเอง") amount = forkliftNewVisit(profit);
   else if (category === "ลูกค้าเก่า/รับช่วงต่อ") amount = forkliftOld(profit);
   else amount = forkliftNew(profit); // "ลูกค้าใหม่"
-  return { amount, group: "FORKLIFT", basis: "กำไร", basisValue: profit, category, returning };
+  return { amount: applySplit(amount), group: "FORKLIFT", basis: "กำไร", basisValue: profit, category, returning, note: splitNote };
 };

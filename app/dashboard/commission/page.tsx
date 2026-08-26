@@ -105,7 +105,7 @@ function CommissionPageInner() {
       const g = m.get(staff) ?? { staff, deals: [] as typeof rows, total: 0, missing: 0, warrantyMissing: 0, noneCount: 0, noneSaleTotal: 0, noneComm: 0 };
       g.deals.push(r);
       if (r.comm.group !== "none") g.total += r.comm.amount; // รถกลุ่มอื่นคิดรวมทั้งเดือนทีหลัง (ไม่คิดทีละใบ)
-      if (r.comm.group === "FORKLIFT" && r.comm.note && r.warranty) g.missing += 1; // ยังไม่เลือกหมวด (แยกจากขาดรับประกัน)
+      if (r.comm.group === "FORKLIFT" && !r.comm.category && r.warranty) g.missing += 1; // ยังไม่เลือกหมวด (แยกจากขาดรับประกัน)
       if (!r.warranty) g.warrantyMissing += 1;
       m.set(staff, g);
     });
@@ -124,7 +124,7 @@ function CommissionPageInner() {
   const grandTotal = byStaff.reduce((s, g) => s + g.total, 0);
   const totalDeals = rows.length;
   // นับเฉพาะดีลโฟล์คลิฟท์ที่ยังไม่เลือกหมวด (ไม่รวมดีลที่ไม่เข้าเงื่อนไขค่าคอม เช่น STAXX/แฮนด์ลิฟท์)
-  const totalMissing = rows.filter(r => r.comm.group === "FORKLIFT" && r.comm.note && r.warranty).length;
+  const totalMissing = rows.filter(r => r.comm.group === "FORKLIFT" && !r.comm.category && r.warranty).length;
   const totalWarrantyMissing = rows.filter(r => !r.warranty).length; // ดีลที่ยังไม่ลงรับประกัน → ค่าคอม 0
 
   // ── ล็อก snapshot รายเดือน ── ถ้าเดือนนี้ถูกล็อก → แสดงตัวเลขจาก snapshot (คงที่)
@@ -445,6 +445,9 @@ function CommissionPageInner() {
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className={`font-bold ${d.amount > 0 ? "text-amber-600" : "text-slate-400"}`}>฿{fmt(d.amount)}</p>
+                        {d.note?.includes("แบ่งค่าคอม") && (
+                          <span className="inline-block mt-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 whitespace-nowrap">แบ่ง 50% · รับช่วงต่อ</span>
+                        )}
                       </div>
                     </div>
                   ))}
