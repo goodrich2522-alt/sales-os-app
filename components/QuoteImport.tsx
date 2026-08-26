@@ -20,6 +20,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
   const [notice, setNotice] = useState("");
   const [saved, setSaved] = useState(0);
   const [skipped, setSkipped] = useState(0);         // จำนวนที่ข้ามเพราะ SN ซ้ำ
+  const [skippedSns, setSkippedSns] = useState<string[]>([]); // SN ที่ถูกข้าม (โชว์ให้เห็นชัด)
   const [importedIds, setImportedIds] = useState<string[]>([]); // สำหรับปุ่มยกเลิกการนำเข้า
   const [done, setDone] = useState(false);           // บันทึกเสร็จแล้ว → แสดงหน้าสรุป
   const [receivedDate, setReceivedDate] = useState(""); // วันรับรถเข้า — ใส่ให้ทั้งล็อตตอนบันทึก
@@ -132,16 +133,17 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
     // กัน SN ซ้ำ: ถ้ามีในสต็อกแล้ว หรือซ้ำภายในชุดเดียวกัน → ข้าม (ไม่นำเข้าครั้งที่ 2)
     const seen = new Set(existingIds);
     const fresh: Forklift[] = [];
-    let skip = 0;
+    const skipSns: string[] = [];
     rows.forEach((v, i) => {
       const fk = toForklift(v, i);
-      if (seen.has(fk.id)) { skip++; return; }
+      if (seen.has(fk.id)) { skipSns.push(String(fk.id)); return; }
       seen.add(fk.id);
       fresh.push(fk);
     });
     if (fresh.length) addForkliftsBulk(fresh);
     setImportedIds(fresh.map((f) => String(f.id)));
-    setSkipped(skip);
+    setSkipped(skipSns.length);
+    setSkippedSns(skipSns);
     setSaved(fresh.length);
     setDone(true);
   };
@@ -174,7 +176,12 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
             <div className="text-center py-10 text-emerald-700">
               <CheckCircle className="w-12 h-12 mx-auto mb-3" />
               <p className="font-bold">บันทึกเข้าสต็อกแล้ว {saved} คัน (สถานะ "รอรับ")</p>
-              {skipped > 0 && <p className="text-sm text-amber-600 mt-1">ข้าม {skipped} คัน — SN ซ้ำกับที่มีในสต็อกแล้ว</p>}
+              {skipped > 0 && (
+                <p className="text-sm text-amber-600 mt-1">
+                  ข้าม {skipped} คัน — <b>SN ซ้ำกับที่มีในสต็อกแล้ว</b> ไม่นำเข้าซ้ำ<br />
+                  <span className="text-xs text-amber-500">SN ที่ข้าม: {skippedSns.join(", ")}</span>
+                </p>
+              )}
               <div className="flex items-center justify-center gap-2 mt-5">
                 {importedIds.length > 0 && (
                   <button onClick={undoImport} className="px-4 py-2 rounded-xl text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 flex items-center gap-1.5">
