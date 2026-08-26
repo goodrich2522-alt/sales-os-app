@@ -11,6 +11,7 @@ import {
   calcCommission, isClosedSale, closeMonth, closeDate,
   commissionMonth, isCommPending, dealProfit,
   COMMISSION_FIELD, COMMISSION_CATEGORIES, CommissionLock, warrantyFilled,
+  COMMISSION_MANUAL_FIELD,
 } from "@/lib/commission";
 import { DEFAULT_WARRANTY, emptySvcRounds } from "@/lib/warranty";
 import { DashboardGuard } from "@/components/DashboardGuard";
@@ -542,6 +543,8 @@ function CommissionPageInner() {
           forklift={fkById.get(saleById.get(detailSaleId)!.forklift_id)}
           comm={calcCommission(saleById.get(detailSaleId)!, fkById.get(saleById.get(detailSaleId)!.forklift_id), historySales)}
           resigned={fieldConfig.resignedStaff ?? []}
+          locked={locked}
+          onSave={updateSale}
           onClose={() => setDetailSaleId(null)}
         />
       )}
@@ -594,15 +597,30 @@ function WarrantyQuickEdit({ deal, forklift, sale, onSave, onClose }: {
   );
 }
 
-// โมดัลรายละเอียดดีล — คลิกจากแถวค่าคอม โชว์ข้อมูลประกอบครบ
-function DealDetailModal({ sale, forklift, comm, resigned, onClose }: {
-  sale: Sale; forklift?: Forklift; comm: ReturnType<typeof calcCommission>; resigned: string[]; onClose: () => void;
+// โมดัลรายละเอียดดีล — คลิกจากแถวค่าคอม โชว์ข้อมูลประกอบครบ + แก้ค่าคอมกำหนดเอง/ยกยอด
+function DealDetailModal({ sale, forklift, comm, resigned, locked, onSave, onClose }: {
+  sale: Sale; forklift?: Forklift; comm: ReturnType<typeof calcCommission>; resigned: string[];
+  locked: boolean; onSave: (s: Sale) => void; onClose: () => void;
 }) {
   const f = forklift;
   const cf = (f?.custom_fields || {}) as Record<string, string>;
+  const scf = (sale.custom_fields || {}) as Record<string, string>;
   const n = (x: unknown) => Number(x || 0).toLocaleString();
   const profit = f ? dealProfit(sale, f) : 0;
   const hasSvc = !!f?.custom_fields?.["บริการหลังการขาย"];
+  // แก้ค่าคอมกำหนดเอง (override) + ธงยกยอด
+  const [manual, setManual] = useState<string>(String(scf[COMMISSION_MANUAL_FIELD] ?? ""));
+  const [carry, setCarry] = useState<boolean>(!!scf["ยกยอดจ่ายในแอป"]);
+  const [saved, setSaved] = useState(false);
+  const saveEdits = () => {
+    const nc = { ...(sale.custom_fields || {}) } as Record<string, string>;
+    const m = manual.replace(/,/g, "").trim();
+    if (m !== "" && Number.isFinite(Number(m))) nc[COMMISSION_MANUAL_FIELD] = m; else delete nc[COMMISSION_MANUAL_FIELD];
+    if (carry) nc["ยกยอดจ่ายในแอป"] = "true"; else delete nc["ยกยอดจ่ายในแอป"];
+    onSave({ ...sale, custom_fields: nc });
+    setSaved(true); setTimeout(onClose, 500);
+  };
+  const dirty = manual.replace(/,/g, "").trim() !== String(scf[COMMISSION_MANUAL_FIELD] ?? "").trim() || carry !== !!scf["ยกยอดจ่ายในแอป"];
   const Row = ({ label, value }: { label: string; value?: string | number | null }) => (
     <div className="flex justify-between gap-3 py-1.5 border-b border-slate-50">
       <span className="text-slate-500 flex-shrink-0">{label}</span>
@@ -656,7 +674,30 @@ function DealDetailModal({ sale, forklift, comm, resigned, onClose }: {
           <Row label="รับประกัน" value={hasSvc ? "✅ ลงข้อมูลแล้ว" : "⚠️ ยังไม่ลง"} />
         </div>
         {sale.remark && <p className="text-xs text-slate-600 bg-slate-50 rounded-lg p-2">📝 {sale.remark}</p>}
-        <p className="text-[11px] text-slate-400 text-center">แก้ไขข้อมูลดีลได้ที่หน้าขาย/สต็อก</p>
+
+        {/* ── ปรับค่าคอมกำหนดเอง / ยกยอด (สต็อก·แอดมิน · ล็อกเดือนแล้วแก้ไม่ได้) ── */}
+        {locked ? (
+          <p className="text-[11px] text-slate-400 text-center">เดือนนี้ถูกล็อกแล้ว — แก้ค่าคอมไม่ได้ (ปลดล็อกก่อน)</p>
+        ) : (
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-3">
+            <p className="text-[11px] font-bold text-slate-500">⚙️ ปรับค่าคอมดีลนี้</p>
+            <label className="text-xs text-slate-600 flex flex-col gap-1">
+              ค่าคอมกำหนดเอง (บาท) — ใส่เมื่อสูตร/เรตพิเศษไม่ตรงที่บริษัทจ่ายจริง · เว้นว่าง = คิดตามสูตรอัตโนมัติ
+              <input type="text" inputMode="numeric" value={manual} onChange={e => setManual(e.target.value)}
+                placeholder={`อัตโนมัติ = ฿${n(comm.amount)}`}
+                className="border border-amber-300 rounded-lg px-3 py-2 text-sm font-bold text-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+            </label>
+            <label className="flex items-start gap-2 text-xs text-slate-600 cursor-pointer">
+              <input type="checkbox" checked={carry} onChange={e => setCarry(e.target.checked)} className="w-4 h-4 mt-0.5 accent-purple-600" />
+              <span>🔄 <b>ยกยอดมาจ่ายในแอป</b> — ดีลก่อนเริ่มใช้แอป (ปิด ≤ มิ.ย.) ที่ค่าคอมยังไม่จ่าย → ยกเข้างวดตาม &ldquo;วันรับเงิน&rdquo; (ต้องกรอกวันรับเงินที่หน้าขาย/สต็อก)</span>
+            </label>
+            <button onClick={saveEdits} disabled={!dirty || saved}
+              className="self-end px-4 py-2 rounded-lg text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-40">
+              {saved ? "บันทึกแล้ว ✓" : "บันทึก"}
+            </button>
+          </div>
+        )}
+        <p className="text-[11px] text-slate-400 text-center">แก้ไขราคา/ต้นทุน/วันรับเงินได้ที่หน้าขาย/สต็อก</p>
       </div>
     </div>
   );
