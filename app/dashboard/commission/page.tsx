@@ -31,10 +31,16 @@ const tabLabel = (k: string) => monthLabel(k);
 // วันจ่ายค่าคอม = 25 ของเดือนถัดไป
 const payoutLabelOf = (k: string) => monthLabel(payoutDateHelper(k));
 function payoutDateHelper(ym: string) { const [y, m] = ym.split("-").map(Number); if (!y || !m) return ym; return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`; }
-// ดีลเก่า (ปิด ≤ ก.ค. 69) — จัดตามวันปิดการขาย (ไม่ต้องรอวันรับเงิน)
+// ดีลเก่า (ปิด ≤ ก.ค. 69) — จัดตามวันปิดการขาย (ใช้คู่กับ isCommPending ที่แปลว่ายังไม่กรอกวันรับเงิน)
 const inHistorical = (s: Sale) => { const c = closeMonth(s); return !!c && c <= HIST_CUTOFF; };
-// งวดของดีล (YYYY-MM): ดีลเก่า=เดือนที่ปิดการขาย · ดีลใหม่=เดือนที่รับเงิน · "" = ยังไม่รับเงิน (รอรับเงิน)
-const periodOf = (s: Sale) => { const c = closeMonth(s); return c && c <= HIST_CUTOFF ? c : commissionMonth(s); };
+// งวดของดีล (YYYY-MM): ⭐ ถ้ากรอก "วันรับเงิน" แล้ว → ยึดเดือนรับเงินเสมอ (ยกยอดไปจ่ายงวดที่เงินเข้า เช่น ออกบิล มิ.ย. เงินเข้า ก.ค. → งวด ก.ค. จ่าย 25 ส.ค.)
+// · ยังไม่กรอกวันรับเงิน: ดีลเก่า (ปิด ≤ ก.ค.) ตกเดือนปิดบิล (อ้างอิง) · ดีลใหม่ = "" (รอรับเงิน)
+const periodOf = (s: Sale) => {
+  const pm = commissionMonth(s);
+  if (pm) return pm;
+  const c = closeMonth(s);
+  return c && c <= HIST_CUTOFF ? c : "";
+};
 
 function CommissionPageInner() {
   const { sales, forklifts, updateSale, updateForklift, fieldConfig, setCommissionLock, toggleResignedStaff } = useApp();
