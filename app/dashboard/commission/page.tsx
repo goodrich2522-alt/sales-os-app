@@ -476,6 +476,9 @@ function CommissionPageInner() {
                         {d.note?.includes("แบ่งค่าคอม") && (
                           <span className="inline-block mt-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 whitespace-nowrap">แบ่ง 50% · รับช่วงต่อ</span>
                         )}
+                        {d.note?.includes("กำหนดเอง") && (
+                          <span className="inline-block mt-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 whitespace-nowrap">✋ กำหนดเอง (ตามรายงาน)</span>
+                        )}
                       </div>
                     </div>
                   ))}

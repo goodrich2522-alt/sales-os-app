@@ -9,6 +9,16 @@ import { Sale, Forklift } from "./types";
 // หมวดค่าคอมโฟล์คลิฟท์ — เก็บที่ sale.custom_fields["หมวดค่าคอม"]
 export const COMMISSION_FIELD = "หมวดค่าคอม";
 
+// ค่าคอมกำหนดเอง (override ตามรายงานบริษัท) — เก็บจำนวนเงินที่ sale.custom_fields["ค่าคอมกำหนดเอง"]
+// ใช้เมื่อสูตร/เรตพิเศษของแอปไม่ตรงกับที่บริษัทจ่ายจริง (เช่น ดีลใหญ่เรตพิเศษ) → ทับค่าที่คำนวณอัตโนมัติ
+export const COMMISSION_MANUAL_FIELD = "ค่าคอมกำหนดเอง";
+export const commissionManual = (s: Sale): number | null => {
+  const raw = s.custom_fields?.[COMMISSION_MANUAL_FIELD];
+  if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+  const n = Number(String(raw).replace(/,/g, ""));
+  return Number.isFinite(n) ? n : null;
+};
+
 // แบ่งค่าคอม (กรณีรับช่วงต่อ) — เก็บ % ที่เซลล์ปัจจุบันได้ ที่ sale.custom_fields["แบ่งค่าคอม%"]
 // เช่น "50" = ส่งรถต่อช่วงให้เซลล์อื่น แบ่งครึ่ง (ได้ครึ่งเดียว) · ว่าง/100 = ได้เต็ม
 export const COMMISSION_SPLIT_FIELD = "แบ่งค่าคอม%";
@@ -126,7 +136,7 @@ const forkliftOld = (p: number) =>          // ลูกค้าเก่าบ
 export interface CommissionResult {
   amount: number;
   group: "STACKER" | "FORKLIFT" | "none";
-  basis: "ยอดขาย" | "กำไร" | "-";
+  basis: "ยอดขาย" | "กำไร" | "กำหนดเอง" | "-";
   basisValue: number;   // ยอดขาย (stacker) หรือ กำไรสุทธิ (forklift)
   category: string;     // หมวดลูกค้าที่ใช้คิดจริง (เฉพาะ forklift)
   returning?: boolean;  // ระบบตรวจพบว่าเป็นลูกค้าเก่า (มีประวัติซื้อ) → บังคับหมวด "ลูกค้าเก่า"
@@ -159,6 +169,14 @@ export interface CommissionLock {
 export const calcCommission = (s: Sale, f?: Forklift, allSales?: Sale[]): CommissionResult => {
   const model = f?.model ?? s.forklift_model;
   const storedCat = String(s.custom_fields?.[COMMISSION_FIELD] ?? "").trim();
+
+  // ค่าคอมกำหนดเอง (ตามรายงาน) — ทับสูตรอัตโนมัติ · ยังจัดกลุ่ม STACKER/FORKLIFT ไว้ให้เข้ายอดรายคน (ไม่ตกกลุ่มอื่น)
+  const manual = commissionManual(s);
+  if (manual !== null) {
+    const grp = isStackerModel(model) ? "STACKER" : "FORKLIFT";
+    return { amount: manual, group: grp, basis: "กำหนดเอง", basisValue: manual, category: storedCat, note: "กำหนดเอง (ตามรายงาน)" };
+  }
+
   // แบ่งค่าคอม (รับช่วงต่อ) — ปัดตามสัดส่วน เช่น 50% → ได้ครึ่งเดียว
   const splitPct = commissionSplitPct(s);
   const applySplit = (amt: number) => (splitPct < 100 ? Math.round((amt * splitPct) / 100) : amt);
