@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useState, useMemo } from "react";
 import {
   ArrowLeft, DollarSign, Download, ChevronDown, ChevronRight,
-  User, AlertCircle, Award, Calendar, Lock, Unlock,
+  User, AlertCircle, Award, Calendar, Lock, Unlock, X,
 } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
 import {
   calcCommission, isClosedSale, closeMonth, closeDate,
-  commissionMonth, isCommPending,
+  commissionMonth, isCommPending, dealProfit,
   COMMISSION_FIELD, COMMISSION_CATEGORIES, CommissionLock, warrantyFilled,
 } from "@/lib/commission";
 import { DEFAULT_WARRANTY, emptySvcRounds } from "@/lib/warranty";
@@ -44,6 +44,7 @@ function CommissionPageInner() {
   const [warrantyDeal, setWarrantyDeal] = useState<{ saleId: string; sn: string; brand: string; model: string } | null>(null);
   const [showBooked, setShowBooked] = useState(false); // กาง/พับ ส่วนดีลจอง/มัดจำ รอปิดการขาย
   const [showPending, setShowPending] = useState(false); // กาง/พับ ส่วนดีลรอรับเงิน
+  const [detailSaleId, setDetailSaleId] = useState<string | null>(null); // ดีลที่เปิดดูรายละเอียด
   // ลงข้อมูลรับประกัน/บริการหลังการขาย → เขียนลง forklift.custom_fields["บริการหลังการขาย"] (ปลดล็อกค่าคอม)
   const saveWarranty = (sn: string, start: string, terms: string) => {
     const f = fkById.get(sn); if (!f) return;
@@ -409,14 +410,16 @@ function CommissionPageInner() {
                     </label>
                   )}
                   {g.deals.filter(d => d.group !== "none").map(d => (
-                    <div key={d.key} className="p-3.5 flex items-center gap-3 text-sm">
+                    <div key={d.key} onClick={() => setDetailSaleId(d.saleId)}
+                      className="p-3.5 flex items-center gap-3 text-sm cursor-pointer hover:bg-slate-50/70 transition-colors">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold text-slate-800">{d.brand} {d.model}</span>
+                          <span className="text-[10px] text-slate-400">#{d.sn}</span>
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${d.group === "STACKER" ? "bg-teal-100 text-teal-700" : d.group === "FORKLIFT" ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-500"}`}>{d.group === "none" ? "อื่นๆ" : d.group}</span>
                           {d.warranty === false && (locked
                             ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-200">⚠️ ยังไม่ลงรับประกัน · คอม 0</span>
-                            : <button onClick={() => setWarrantyDeal({ saleId: d.saleId, sn: d.sn, brand: d.brand, model: d.model })}
+                            : <button onClick={(e) => { e.stopPropagation(); setWarrantyDeal({ saleId: d.saleId, sn: d.sn, brand: d.brand, model: d.model }); }}
                                 className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-200 hover:bg-red-600 hover:text-white transition-colors">⚠️ ยังไม่ลงรับประกัน · แตะลงข้อมูล</button>)}
                         </div>
                         <p className="text-[11px] text-slate-500 mt-0.5">
@@ -431,7 +434,7 @@ function CommissionPageInner() {
                           ) : locked ? (
                             <span className="inline-block mt-1.5 text-[11px] text-slate-500">หมวด: <b className="text-slate-700">{d.category || "— ไม่ได้เลือก —"}</b></span>
                           ) : (
-                            <select value={d.category} onChange={e => setCategory(d.saleId, e.target.value)}
+                            <select value={d.category} onClick={e => e.stopPropagation()} onChange={e => setCategory(d.saleId, e.target.value)}
                               className={`mt-1.5 text-xs border rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-400 ${d.category ? "bg-violet-50 border-violet-300 text-violet-700 font-bold" : d.note ? "border-red-300 text-red-700 bg-white" : "border-slate-200 text-slate-700 bg-white"}`}>
                               <option value="">-- เลือกหมวดลูกค้า --</option>
                               {COMMISSION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -497,6 +500,17 @@ function CommissionPageInner() {
           onClose={() => setWarrantyDeal(null)}
         />
       )}
+
+      {/* ── รายละเอียดดีล (คลิกจากแถว) ── */}
+      {detailSaleId && saleById.get(detailSaleId) && (
+        <DealDetailModal
+          sale={saleById.get(detailSaleId)!}
+          forklift={fkById.get(saleById.get(detailSaleId)!.forklift_id)}
+          comm={calcCommission(saleById.get(detailSaleId)!, fkById.get(saleById.get(detailSaleId)!.forklift_id), historySales)}
+          resigned={fieldConfig.resignedStaff ?? []}
+          onClose={() => setDetailSaleId(null)}
+        />
+      )}
     </div>
   );
 }
@@ -541,6 +555,74 @@ function WarrantyQuickEdit({ deal, forklift, sale, onSave, onClose }: {
           <button onClick={() => onSave(start, terms)} disabled={!start.trim() || !terms.trim()}
             className="px-4 py-2 rounded-lg text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-40">บันทึก</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// โมดัลรายละเอียดดีล — คลิกจากแถวค่าคอม โชว์ข้อมูลประกอบครบ
+function DealDetailModal({ sale, forklift, comm, resigned, onClose }: {
+  sale: Sale; forklift?: Forklift; comm: ReturnType<typeof calcCommission>; resigned: string[]; onClose: () => void;
+}) {
+  const f = forklift;
+  const cf = (f?.custom_fields || {}) as Record<string, string>;
+  const n = (x: unknown) => Number(x || 0).toLocaleString();
+  const profit = f ? dealProfit(sale, f) : 0;
+  const hasSvc = !!f?.custom_fields?.["บริการหลังการขาย"];
+  const Row = ({ label, value }: { label: string; value?: string | number | null }) => (
+    <div className="flex justify-between gap-3 py-1.5 border-b border-slate-50">
+      <span className="text-slate-500 flex-shrink-0">{label}</span>
+      <span className="text-slate-800 font-medium text-right break-words">{value === 0 || value ? value : "—"}</span>
+    </div>
+  );
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-5 flex flex-col gap-3 text-sm" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h3 className="font-bold text-slate-800">{sale.forklift_brand} {sale.forklift_model}</h3>
+            <p className="text-xs text-slate-500">SN {sale.forklift_id}{f?.pi_no ? ` · ${f.pi_no}` : ""}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 p-1"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center justify-between">
+          <div className="text-xs text-amber-700">ค่าคอมดีลนี้ · กลุ่ม {comm.group} ({comm.basis})</div>
+          <div className="text-lg font-bold text-amber-600">฿{n(comm.amount)}</div>
+        </div>
+        <div>
+          <p className="text-[11px] font-bold text-slate-400 mb-1">👤 ลูกค้า / เซลล์</p>
+          <Row label="ลูกค้า" value={sale.customer_name} />
+          <Row label="เบอร์" value={sale.customer_tel} />
+          <Row label="จังหวัด" value={sale.province} />
+          <Row label="ประเภทลูกค้า" value={sale.customer_type} />
+          <Row label="เซลล์ผู้ขาย" value={staffLabel(sale.sales_staff || "—", resigned)} />
+        </div>
+        <div>
+          <p className="text-[11px] font-bold text-slate-400 mb-1">💰 การเงิน</p>
+          <Row label="ราคาขาย" value={"฿" + n(sale.actual_sale)} />
+          <Row label="ราคาทุน" value={"฿" + n(f?.cost_price)} />
+          {Number(sale.deposit) > 0 && <Row label="มัดจำ" value={"฿" + n(sale.deposit)} />}
+          {comm.group === "FORKLIFT" && <Row label="กำไรสุทธิ" value={"฿" + n(profit)} />}
+          <Row label="หมวดค่าคอม" value={comm.category} />
+          <Row label="ประเภทชำระ" value={sale.payment_type} />
+          <Row label="วันรับเงิน" value={sale.payment_received_date} />
+        </div>
+        <div>
+          <p className="text-[11px] font-bold text-slate-400 mb-1">📅 วันที่ / เอกสาร</p>
+          <Row label="ปิดการขาย" value={closeDate(sale)} />
+          <Row label="วันส่งมอบ" value={sale.delivery_date} />
+          <Row label="เลขที่ IV" value={cf["เลขที่ใบกำกับภาษี"]} />
+          <Row label="สถานะดีล" value={sale.sale_status} />
+        </div>
+        <div>
+          <p className="text-[11px] font-bold text-slate-400 mb-1">🔧 สเปก / รับประกัน</p>
+          <Row label="พิกัดยก" value={f?.capacity} />
+          <Row label="เสา (MAST)" value={cf["MAST"]} />
+          <Row label="พลังงาน" value={f?.fuel} />
+          <Row label="รับประกัน" value={hasSvc ? "✅ ลงข้อมูลแล้ว" : "⚠️ ยังไม่ลง"} />
+        </div>
+        {sale.remark && <p className="text-xs text-slate-600 bg-slate-50 rounded-lg p-2">📝 {sale.remark}</p>}
+        <p className="text-[11px] text-slate-400 text-center">แก้ไขข้อมูลดีลได้ที่หน้าขาย/สต็อก</p>
       </div>
     </div>
   );
