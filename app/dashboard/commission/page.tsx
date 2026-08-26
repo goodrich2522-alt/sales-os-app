@@ -43,6 +43,7 @@ function CommissionPageInner() {
   // ดีลที่กำลังเปิดลงข้อมูลรับประกัน (คลิกจากแถวดีลในหน้าค่าคอม)
   const [warrantyDeal, setWarrantyDeal] = useState<{ saleId: string; sn: string; brand: string; model: string } | null>(null);
   const [showBooked, setShowBooked] = useState(false); // กาง/พับ ส่วนดีลจอง/มัดจำ รอปิดการขาย
+  const [showPending, setShowPending] = useState(false); // กาง/พับ ส่วนดีลรอรับเงิน
   // ลงข้อมูลรับประกัน/บริการหลังการขาย → เขียนลง forklift.custom_fields["บริการหลังการขาย"] (ปลดล็อกค่าคอม)
   const saveWarranty = (sn: string, start: string, terms: string) => {
     const f = fkById.get(sn); if (!f) return;
@@ -272,14 +273,35 @@ function CommissionPageInner() {
         </div>
         <p className="text-[11px] text-slate-400 -mt-3 px-1">แยกรายเดือน · เริ่มจ่ายผ่านแอป <b className="text-slate-500">ก.ค. 69</b> เป็นต้นไป (จ่าย 25 เดือนถัดไป) · ดีลเก่า=เดือนที่<b className="text-slate-500">ปิดการขาย</b> · ดีลใหม่=เดือนที่<b className="text-slate-500">เงินเข้าบัญชี</b></p>
 
-        {/* ⏳ ดีลรอรับเงิน — ยังไม่เข้างวด ไม่คิดค่าคอมจนกว่าจะกรอกวันรับเงิน */}
+        {/* ⏳ ดีลรอรับเงิน — กดกางดู + กรอกวันรับเงินได้เลย */}
         {pendingDeals.length > 0 && (
-          <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-2.5">
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <div>
-              <span className="font-bold">⏳ รอรับเงิน {pendingDeals.length} ดีล</span> — ดีลใหม่ (ปิดตั้งแต่ ส.ค. 69) ที่ยังไม่กรอก &ldquo;วันที่รับเงิน&rdquo; → <b>ยังไม่เข้างวด ไม่คิดค่าคอม</b>
-              <span className="block text-xs text-amber-600 mt-0.5">ดีลเก่า (ปิด ≤ ก.ค. 69) เข้าเดือนที่ปิดการขายอัตโนมัติแล้ว ไม่ต้องกรอก · ดีลใหม่พอเงินเข้าบัญชีให้กรอกวันที่รับเงิน → ตกงวดเดือนนั้นทันที</span>
-            </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl overflow-hidden">
+            <button onClick={() => setShowPending(v => !v)} className="w-full flex items-start gap-2.5 px-4 py-3 text-left hover:bg-amber-100/40 transition-colors">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-700" />
+              <div className="flex-1 min-w-0 text-sm text-amber-800">
+                <span className="font-bold">⏳ รอรับเงิน {pendingDeals.length} ดีล</span> — ดีลใหม่ (ปิดตั้งแต่ ส.ค. 69) ที่ยังไม่กรอก &ldquo;วันที่รับเงิน&rdquo; → <b>ยังไม่เข้างวด ไม่คิดค่าคอม</b>
+                <span className="block text-xs text-amber-600 mt-0.5">แตะเพื่อกางดูรายการ + กรอกวันรับเงินได้เลย · ดีลเก่า (ปิด ≤ ก.ค. 69) เข้าเดือนอัตโนมัติแล้ว ไม่ต้องกรอก</span>
+              </div>
+              {showPending ? <ChevronDown className="w-5 h-5 text-amber-400 flex-shrink-0" /> : <ChevronRight className="w-5 h-5 text-amber-400 flex-shrink-0" />}
+            </button>
+            {showPending && (
+              <div className="border-t border-amber-100 divide-y divide-amber-100/70 bg-white/50">
+                {pendingDeals.map(s => (
+                  <div key={s.id} className="px-4 py-3 flex items-center gap-3 text-sm flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-800">{s.forklift_brand} {s.forklift_model}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">{staffLabel(s.sales_staff || "(ไม่ระบุเซลล์)", fieldConfig.resignedStaff ?? [])} · {s.customer_name || "—"} · ปิด {closeDate(s)}</p>
+                    </div>
+                    <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                      วันรับเงิน:
+                      <input type="date" defaultValue={s.payment_received_date || ""}
+                        onChange={e => { if (e.target.value) updateSale({ ...s, payment_received_date: e.target.value }); }}
+                        className="border border-amber-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                    </label>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
