@@ -33,12 +33,22 @@ const payoutLabelOf = (k: string) => monthLabel(payoutDateHelper(k));
 function payoutDateHelper(ym: string) { const [y, m] = ym.split("-").map(Number); if (!y || !m) return ym; return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`; }
 // ดีลเก่า (ปิด ≤ ก.ค. 69) — จัดตามวันปิดการขาย (ใช้คู่กับ isCommPending ที่แปลว่ายังไม่กรอกวันรับเงิน)
 const inHistorical = (s: Sale) => { const c = closeMonth(s); return !!c && c <= HIST_CUTOFF; };
-// งวดของดีล (YYYY-MM): ⭐ ถ้ากรอก "วันรับเงิน" แล้ว → ยึดเดือนรับเงินเสมอ (ยกยอดไปจ่ายงวดที่เงินเข้า เช่น ออกบิล มิ.ย. เงินเข้า ก.ค. → งวด ก.ค. จ่าย 25 ส.ค.)
-// · ยังไม่กรอกวันรับเงิน: ดีลเก่า (ปิด ≤ ก.ค.) ตกเดือนปิดบิล (อ้างอิง) · ดีลใหม่ = "" (รอรับเงิน)
+
+// ── ดีลยุคก่อนใช้แอป (ปิด ≤ มิ.ย. 69) = จ่ายค่าคอมด้วยมือไปแล้ว → คงอยู่เดือนที่ปิด (บันทึกอ้างอิง) ไม่ดึงเข้างวดแอป ──
+// ⭐ กันดีลก่อนแอปที่มีวันรับเงิน ก.ค./ส.ค. (จาก backfill) โดนลากเข้ามาคิดจ่ายซ้ำในงวดแอป
+const PREAPP_CUTOFF = "2026-06";
+// ธง "ยกยอดจ่ายในแอป" — ดีลก่อนแอปที่ค่าคอม "ยังไม่จ่าย" ต้องการยกมาจ่ายในแอปตามเดือนรับเงิน (เช่น สุดเขต/จอยซุน)
+const CARRY_FIELD = "ยกยอดจ่ายในแอป";
+const isCarryOver = (s: Sale) => !!(s.custom_fields?.[CARRY_FIELD]);
+
+// งวดของดีล (YYYY-MM):
+// · ยุคก่อนแอป (ปิด ≤ มิ.ย.) → คงเดือนที่ปิด (อ้างอิง) เว้นแต่ติดธงยกยอด
+// · ยุคแอป (ปิด ก.ค.+) หรือ ยกยอด → ยึดเดือนรับเงิน (ยกไปจ่ายงวดที่เงินเข้า) · ยังไม่กรอก: ปิด ≤ ก.ค. ตกเดือนปิด มิฉะนั้น "" (รอรับเงิน)
 const periodOf = (s: Sale) => {
+  const c = closeMonth(s);
+  if (c && c <= PREAPP_CUTOFF && !isCarryOver(s)) return c;
   const pm = commissionMonth(s);
   if (pm) return pm;
-  const c = closeMonth(s);
   return c && c <= HIST_CUTOFF ? c : "";
 };
 
@@ -141,24 +151,30 @@ function CommissionPageInner() {
   const displayGroups = useMemo(() => {
     if (lock) {
       return lock.staff.map(s => ({
-        staff: s.staff, total: s.total, dealCount: s.dealCount, missing: s.missing,
+        staff: s.staff, total: s.total, dealCount: s.dealCount, missing: s.missing, carried: 0,
         noneCount: s.noneCount, noneSaleTotal: s.noneSaleTotal, noneComm: s.noneComm,
         deals: lock.deals.filter(d => d.staff === s.staff).map(d => ({
           key: d.saleId, saleId: d.saleId, sn: "", brand: d.brand, model: d.model, customer: d.customer,
           group: d.group, basis: d.basis, basisValue: d.basisValue, category: d.category,
           returning: d.returning, amount: d.amount, closeDate: d.closeDate, note: "", warranty: true,
+          carried: false, carryFrom: "",
         })),
       }));
     }
-    return byStaff.map(g => ({
-      staff: g.staff, total: g.total, dealCount: g.deals.length, missing: g.missing,
-      noneCount: g.noneCount, noneSaleTotal: g.noneSaleTotal, noneComm: g.noneComm,
-      deals: g.deals.map(r => ({
+    return byStaff.map(g => {
+      const deals = g.deals.map(r => ({
         key: r.sale.id, saleId: r.sale.id, sn: r.sale.forklift_id, brand: r.sale.forklift_brand || "", model: r.sale.forklift_model || "",
         customer: r.sale.customer_name || "", group: r.comm.group, basis: r.comm.basis, basisValue: r.comm.basisValue,
         category: r.comm.category, returning: !!r.comm.returning, amount: r.comm.amount, closeDate: closeDate(r.sale), note: r.comm.note || "", warranty: r.warranty,
-      })),
-    }));
+        // ยกยอดมาจากเดือนอื่น (ดีลก่อนแอปที่ยกมาจ่ายในงวดนี้ตามวันรับเงิน) — โชว์ป้ายบ่งชี้
+        carried: isCarryOver(r.sale), carryFrom: monthLabel(closeMonth(r.sale)),
+      }));
+      return {
+        staff: g.staff, total: g.total, dealCount: g.deals.length, missing: g.missing,
+        carried: deals.filter(d => d.carried).length,
+        noneCount: g.noneCount, noneSaleTotal: g.noneSaleTotal, noneComm: g.noneComm, deals,
+      };
+    });
   }, [lock, byStaff]);
 
   const dGrand = locked ? lock!.grandTotal : grandTotal;
@@ -218,10 +234,11 @@ function CommissionPageInner() {
       "ลูกค้า": d.customer,
       // รถกลุ่มอื่นคิดรวมทั้งเดือน (ดูชีตสรุป) → ไม่ลงค่าคอมทีละใบ กันนับซ้ำ
       "ค่าคอม (บาท)": d.group === "none" ? "" : d.amount,
-      "หมายเหตุ": d.group === "none" ? "รวมคิด 1% ที่ยอดเดือน (ดูชีตสรุป)" : (d.note || ""),
+      "ยกยอดมาจาก": d.carried ? d.carryFrom : "",
+      "หมายเหตุ": d.group === "none" ? "รวมคิด 1% ที่ยอดเดือน (ดูชีตสรุป)" : [d.note, d.carried ? `ยกยอดมาจาก ${d.carryFrom}` : ""].filter(Boolean).join(" · "),
     })));
     const ws2 = XLSX.utils.json_to_sheet(detRows);
-    ws2["!cols"] = [18, 12, 22, 10, 8, 16, 18, 14, 20, 12, 22].map(w => ({ wch: w }));
+    ws2["!cols"] = [18, 12, 22, 10, 8, 16, 18, 14, 20, 12, 14, 22].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws1, "สรุปรายคน");
     XLSX.utils.book_append_sheet(wb, ws2, "รายดีล");
@@ -397,7 +414,7 @@ function CommissionPageInner() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-slate-800 text-sm">{staffLabel(g.staff, fieldConfig.resignedStaff ?? [])}</p>
-                  <p className="text-xs text-slate-500">{g.dealCount} ดีล{g.missing > 0 && !locked && <span className="text-red-600 font-semibold"> · ยังไม่เลือกหมวด {g.missing}</span>}</p>
+                  <p className="text-xs text-slate-500">{g.dealCount} ดีล{g.missing > 0 && !locked && <span className="text-red-600 font-semibold"> · ยังไม่เลือกหมวด {g.missing}</span>}{g.carried > 0 && <span className="text-purple-600 font-semibold"> · 🔄 ยกมา {g.carried} ดีล</span>}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="text-lg font-bold text-amber-600 flex items-center gap-1 justify-end">{locked && <Lock className="w-3.5 h-3.5 text-amber-500" />}฿{fmt(g.total)}</p>
@@ -431,6 +448,11 @@ function CommissionPageInner() {
                         <p className="text-[11px] text-slate-500 mt-0.5">
                           {d.customer || "—"} · {d.basis} ฿{fmt(Math.round(d.basisValue))} · ปิด {d.closeDate}
                         </p>
+                        {d.carried && (
+                          <span className="inline-flex items-center gap-1 mt-1.5 text-[11px] font-bold text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-2 py-1">
+                            🔄 ยกยอดมาจาก {d.carryFrom} (ยังไม่จ่ายก่อนใช้แอป → จ่ายในงวดนี้ตามวันรับเงิน)
+                          </span>
+                        )}
                         {/* หมวดลูกค้า: forklift · ลูกค้าเก่า(จากประวัติ)ล็อกอัตโนมัติ · อื่นๆ เลือกเองได้ (ล็อกแล้วดูอย่างเดียว) */}
                         {d.group === "FORKLIFT" && (
                           d.returning ? (
