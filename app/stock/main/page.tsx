@@ -492,12 +492,16 @@ export default function StockMain() {
 
   // รายการสต็อกที่กรองแล้ว (สำหรับ modal) — ค้นหา + หมวด + ยี่ห้อ + สถานะ + เรียงลำดับ
   const hs = (v: unknown) => (v == null ? "" : String(v)).toLowerCase();
+  // ฐานรุ่น = ตัด MAST ท้าย (M###/ZSM###/WS#) ออก → ค้น "CBS15J-M350" ให้เจอ CBS15J ทุก MAST
+  const baseModel = (s: string) => s.replace(/[-\s]*(m\d+|zsm\d+|ws\d\w*)$/i, "").trim();
   const isAvailable = (s: unknown) => String(s ?? "") === "พร้อมขาย"; // "ยังเหลือในสต็อก"
   const mastOf = (f: Forklift) => String((f.custom_fields as Record<string, unknown> | undefined)?.["MAST"] ?? "").trim();
   const listFiltered = useMemo(() => {
     const q = listSearch.trim().toLowerCase();
+    const qBase = baseModel(q); // ฐานรุ่นของคำค้น (ตัด MAST) → เจอทุก MAST ของรุ่นเดียวกัน
     const rows = forklifts.filter(f => {
-      const okQ = !q || hs(f.id).includes(q) || hs(f.SN).includes(q) || hs(f.brand).includes(q) || hs(f.model).includes(q) || hs(f.pi_no).includes(q);
+      const okQ = !q || hs(f.id).includes(q) || hs(f.SN).includes(q) || hs(f.brand).includes(q) || hs(f.model).includes(q) || hs(f.pi_no).includes(q)
+        || (qBase.length >= 3 && baseModel(hs(f.model)).includes(qBase));
       const okCat = listCat === "all" || (f.vehicle_category ?? "Forklift") === listCat;
       const okBrand = listBrand === "all" || (f.brand || "(ไม่ระบุ)") === listBrand;
       const okModel = listModel === "all" || f.model === listModel;
