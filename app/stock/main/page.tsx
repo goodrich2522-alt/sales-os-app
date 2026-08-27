@@ -620,6 +620,18 @@ export default function StockMain() {
     return rows;
   }, [listFiltered, listSort]);
 
+  // ── มุมมอง "ตามรุ่น" จัดกลุ่มใต้หัวแบรนด์ (อ่านง่าย ไม่ปนแบรนด์) ──
+  const byModelBrand = useMemo(() => {
+    const m = new Map<string, { brand: string; available: number; total: number; groups: typeof byModel }>();
+    byModel.forEach(g => {
+      const b = g.brand || "ไม่ระบุยี่ห้อ";
+      const e = m.get(b) ?? { brand: b, available: 0, total: 0, groups: [] as typeof byModel };
+      e.groups.push(g); e.available += g.available; e.total += g.total;
+      m.set(b, e);
+    });
+    return [...m.values()].sort((a, b) => b.available - a.available);
+  }, [byModel]);
+
   // ── แจ้งเตือนเตรียมสั่งสินค้า — forklift เหลือ < 3 · ชนิดอื่น (ยกเว้นรีชทรัค) เหลือ < 15 ──
   const reorderAlerts = useMemo(() => {
     const g = new Map<string, { brand: string; sub: string; cat: string; ready: number; threshold: number }>();
@@ -877,7 +889,7 @@ export default function StockMain() {
       <main className="max-w-4xl mx-auto px-4 py-6 flex flex-col gap-5">
         {/* Stats — แยกตามสถานะให้ฝ่ายสต็อกเห็นชัดทุกกอง */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <StatCard label="เหลือ (พร้อมขาย)" value={available} onClick={() => showStatus("พร้อมขาย")} icon={<TrendingUp className="w-4 h-4" />} color="text-emerald-700" bg="bg-emerald-50 border-emerald-100" iconBg="bg-emerald-100 text-emerald-600" />
+          <StatCard label="เหลือ (พร้อมขาย)" value={available} onClick={() => { showStatus("พร้อมขาย"); setListView("byModel"); }} icon={<TrendingUp className="w-4 h-4" />} color="text-emerald-700" bg="bg-emerald-50 border-emerald-100" iconBg="bg-emerald-100 text-emerald-600" />
           <StatCard label="จอง"              value={reserved}  onClick={() => showStatus("จอง")} icon={<Boxes className="w-4 h-4" />}       color="text-amber-700"   bg="bg-amber-50 border-amber-100"   iconBg="bg-amber-100 text-amber-600" />
           <StatCard label="ติดไฟแนนซ์"       value={financing} onClick={() => showStatus("รอผ่านไฟแนนซ์")} icon={<Clock className="w-4 h-4" />}       color="text-rose-700"    bg="bg-rose-50 border-rose-100"     iconBg="bg-rose-100 text-rose-600" />
           <StatCard label="ขายไปแล้ว"        value={sold}      onClick={() => showStatus("ปิดการขายแล้ว")} icon={<CheckCircle className="w-4 h-4" />} color="text-indigo-700"  bg="bg-indigo-50 border-indigo-100" iconBg="bg-indigo-100 text-indigo-600" />
@@ -1319,29 +1331,39 @@ export default function StockMain() {
               )}
 
               {/* ── มุมมองรวมตามรุ่น: เห็นทันทีว่ารุ่นไหนเหลือ/หมด ── */}
-              {listView === "byModel" && byModel.map(g => {
-                const remainTone = g.available === 0
-                  ? "bg-slate-100 text-slate-500 border-slate-200"          // หมด
-                  : g.available <= 2
-                    ? "bg-red-50 text-red-700 border-red-200"               // ใกล้หมด
-                    : "bg-emerald-50 text-emerald-700 border-emerald-200";  // เหลือเยอะ
-                return (
-                  <button key={`${g.brand}|${g.model}|${g.mast}`}
-                    onClick={() => { setListView("list"); setListSearch(""); setListBrand(g.brand || "all"); setListModel(g.model); setListMast(g.mast || "all"); }}
-                    className="flex items-center gap-3 border border-slate-100 bg-slate-50 hover:bg-slate-100 rounded-xl p-3.5 text-left transition-colors">
-                    <div className="bg-white border border-slate-200 rounded-xl p-2 flex-shrink-0 shadow-sm">
-                      <Package className="w-4 h-4 text-emerald-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-800 text-sm truncate">{g.model}{g.mast ? <span className="text-emerald-600"> · เสา {g.mast}</span> : ""}</p>
-                      <p className="text-xs text-slate-500">{g.brand || "ไม่ระบุยี่ห้อ"} · ทั้งหมด {g.total} คัน · ขายแล้ว {g.sold}</p>
-                    </div>
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full border flex-shrink-0 ${remainTone}`}>
-                      {g.available === 0 ? "หมด" : `เหลือ ${g.available}`}
+              {/* ── มุมมองรวมตามรุ่น จัดกลุ่มใต้หัวแบรนด์ (กะทัดรัด อ่านง่าย) ── */}
+              {listView === "byModel" && byModelBrand.map(bg => (
+                <div key={bg.brand} className="border border-slate-200 rounded-xl overflow-hidden">
+                  {/* หัวแบรนด์ + ยอดรวมเหลือ */}
+                  <div className="flex items-center justify-between gap-2 bg-slate-100 px-3.5 py-2 border-b border-slate-200">
+                    <span className="font-bold text-slate-700 text-sm">{bg.brand}</span>
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-0.5">
+                      เหลือ {bg.available} / {bg.total} คัน
                     </span>
-                  </button>
-                );
-              })}
+                  </div>
+                  {/* รุ่นในแบรนด์ — grid กะทัดรัด 1-2 คอลัมน์ */}
+                  <div className="grid sm:grid-cols-2 divide-y sm:divide-y-0 divide-slate-50">
+                    {bg.groups.map(g => {
+                      const tone = g.available === 0 ? "bg-slate-100 text-slate-400 border-slate-200"
+                        : g.available <= 2 ? "bg-red-50 text-red-700 border-red-200"
+                        : "bg-emerald-50 text-emerald-700 border-emerald-200";
+                      return (
+                        <button key={`${g.brand}|${g.model}|${g.mast}`}
+                          onClick={() => { setListView("list"); setListSearch(""); setListBrand(g.brand || "all"); setListModel(g.model); setListMast(g.mast || "all"); }}
+                          className="flex items-center justify-between gap-2 px-3.5 py-2.5 hover:bg-slate-50 text-left transition-colors border-slate-50 sm:border-b">
+                          <span className="min-w-0 flex-1">
+                            <span className="font-semibold text-slate-800 text-sm block truncate">{g.model}{g.mast ? <span className="text-emerald-600"> · เสา {g.mast}</span> : ""}</span>
+                            <span className="text-[11px] text-slate-400">ทั้งหมด {g.total} · ขายแล้ว {g.sold}</span>
+                          </span>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full border flex-shrink-0 tabular-nums ${tone}`}>
+                            {g.available === 0 ? "หมด" : g.available}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
 
               {/* ── มุมมองรายคัน ── */}
               {listView === "list" && listFiltered.map((item, idx) => (
