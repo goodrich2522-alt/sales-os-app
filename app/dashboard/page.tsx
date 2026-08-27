@@ -363,6 +363,9 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Link href="/dashboard/stock-summary" className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg px-3 py-1.5 transition-all">
+              <Package className="w-4 h-4" /><span className="hidden sm:inline">สรุปสต็อก</span>
+            </Link>
             <Link href="/dashboard/restock" className="flex items-center gap-1.5 text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg px-3 py-1.5 transition-all">
               <Boxes className="w-4 h-4" /><span className="hidden sm:inline">วางแผนสั่งสต็อก</span>
             </Link>
