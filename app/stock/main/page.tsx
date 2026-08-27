@@ -97,6 +97,8 @@ export default function StockMain() {
   const [listFuel, setListFuel]     = useState("all");                                       // กรองพลังงาน
   const [listSort, setListSort]     = useState<"recent" | "model" | "remain" | "sn" | "pi">("recent"); // การเรียง
   const [listView, setListView]     = useState<"list" | "table" | "byModel" | "aging">("list");  // มุมมอง: รายคัน / ตาราง / รวมตามรุ่น / ค้างนาน
+  const [collapsedBrands, setCollapsedBrands] = useState<Set<string>>(new Set()); // แบรนด์ที่ยุบไว้ในมุมมองตามรุ่น
+  const toggleBrand = (b: string) => setCollapsedBrands(prev => { const n = new Set(prev); n.has(b) ? n.delete(b) : n.add(b); return n; });
   const [bulkMode, setBulkMode]     = useState(false);              // โหมดเลือกหลายคัน
   const [selIds, setSelIds]         = useState<Set<string>>(new Set()); // รถที่เลือกไว้
   const [bulkDelConfirm, setBulkDelConfirm] = useState(false);
@@ -1331,17 +1333,34 @@ export default function StockMain() {
               )}
 
               {/* ── มุมมองรวมตามรุ่น: เห็นทันทีว่ารุ่นไหนเหลือ/หมด ── */}
-              {/* ── มุมมองรวมตามรุ่น จัดกลุ่มใต้หัวแบรนด์ (กะทัดรัด อ่านง่าย) ── */}
-              {listView === "byModel" && byModelBrand.map(bg => (
+              {/* ปุ่มกาง/ยุบทั้งหมด */}
+              {listView === "byModel" && byModelBrand.length > 1 && (
+                <div className="flex justify-end -mb-1">
+                  <button onClick={() => setCollapsedBrands(collapsedBrands.size >= byModelBrand.length ? new Set() : new Set(byModelBrand.map(b => b.brand)))}
+                    className="text-xs font-semibold text-slate-500 hover:text-slate-700 px-2 py-1">
+                    {collapsedBrands.size >= byModelBrand.length ? "▸ กางทั้งหมด" : "▾ ยุบทั้งหมด"}
+                  </button>
+                </div>
+              )}
+              {/* ── มุมมองรวมตามรุ่น จัดกลุ่มใต้หัวแบรนด์ (กะทัดรัด · กด ยุบ/กาง ได้) ── */}
+              {listView === "byModel" && byModelBrand.map(bg => {
+                const collapsed = collapsedBrands.has(bg.brand);
+                return (
                 <div key={bg.brand} className="border border-slate-200 rounded-xl overflow-hidden">
-                  {/* หัวแบรนด์ + ยอดรวมเหลือ */}
-                  <div className="flex items-center justify-between gap-2 bg-slate-100 px-3.5 py-2 border-b border-slate-200">
-                    <span className="font-bold text-slate-700 text-sm">{bg.brand}</span>
+                  {/* หัวแบรนด์ (กดยุบ/กาง) + ยอดรวมเหลือ */}
+                  <button onClick={() => toggleBrand(bg.brand)}
+                    className="w-full flex items-center justify-between gap-2 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 border-b border-slate-200 transition-colors">
+                    <span className="flex items-center gap-1.5">
+                      {collapsed ? <ChevronRight className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+                      <span className="font-bold text-slate-700 text-sm">{bg.brand}</span>
+                      <span className="text-[11px] text-slate-400">({bg.groups.length} รุ่น)</span>
+                    </span>
                     <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-0.5">
                       เหลือ {bg.available} / {bg.total} คัน
                     </span>
-                  </div>
-                  {/* รุ่นในแบรนด์ — grid กะทัดรัด 1-2 คอลัมน์ */}
+                  </button>
+                  {/* รุ่นในแบรนด์ — grid กะทัดรัด 1-2 คอลัมน์ (ซ่อนเมื่อยุบ) */}
+                  {!collapsed && (
                   <div className="grid sm:grid-cols-2 divide-y sm:divide-y-0 divide-slate-50">
                     {bg.groups.map(g => {
                       const tone = g.available === 0 ? "bg-slate-100 text-slate-400 border-slate-200"
@@ -1362,8 +1381,10 @@ export default function StockMain() {
                       );
                     })}
                   </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
 
               {/* ── มุมมองรายคัน ── */}
               {listView === "list" && listFiltered.map((item, idx) => (
