@@ -267,22 +267,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     const onChange = () => { clearTimeout(timer); timer = setTimeout(pull, 300); }; // debounce รวมหลาย event
 
-    const channel = supabase?.channel("salesos-db")
-      .on("postgres_changes", { event: "*", schema: "public", table: "forklifts" }, onChange)
-      .on("postgres_changes", { event: "*", schema: "public", table: "sales" }, onChange)
-      .on("postgres_changes", { event: "*", schema: "public", table: "inspections" }, onChange)
-      .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, onChange)
-      .subscribe();
+    // ⭐ ส่ง JWT ล็อกอินให้ realtime ก่อน subscribe — RLS เปิดอยู่ ถ้าไม่ setAuth event จะถูกบล็อก (anon เห็น 0 แถว) = ไม่ instant
+    let channel: ReturnType<NonNullable<typeof supabase>["channel"]> | undefined;
+    let authSub: { subscription: { unsubscribe: () => void } } | undefined;
+    (async () => {
+      try {
+        const { data } = await supabase!.auth.getSession();
+        if (data.session?.access_token) supabase!.realtime.setAuth(data.session.access_token);
+      } catch {}
+      channel = supabase?.channel("salesos-db")
+        .on("postgres_changes", { event: "*", schema: "public", table: "forklifts" }, onChange)
+        .on("postgres_changes", { event: "*", schema: "public", table: "sales" }, onChange)
+        .on("postgres_changes", { event: "*", schema: "public", table: "inspections" }, onChange)
+        .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, onChange)
+        .subscribe();
+      // token refresh → อัปเดตให้ realtime ด้วย (กัน event หลุดหลัง token หมดอายุ)
+      authSub = supabase?.auth.onAuthStateChange((_e, s) => { if (s?.access_token) supabase!.realtime.setAuth(s.access_token); }).data;
+    })();
 
     // สำรอง: กลับมาที่แท็บ = ดึงสด + poll กัน realtime หลุด
     // หน้าผู้ขนส่ง (anon) ไม่ได้ realtime (RLS) → poll ถี่ขึ้น 20 วิ ให้ข้อมูลข้ามฝ่ายอัพเดตพร้อมกัน · หน้าอื่นมี realtime อยู่แล้ว = 60 วิพอ
     const isAnonTransporter = typeof window !== "undefined" && window.location.pathname.includes("/transporter");
     const onVisible = () => { if (document.visibilityState === "visible") pull(); };
     document.addEventListener("visibilitychange", onVisible);
-    const id = setInterval(() => { if (document.visibilityState === "visible") pull(); }, isAnonTransporter ? 20_000 : 60_000);
+    const id = setInterval(() => { if (document.visibilityState === "visible") pull(); }, isAnonTransporter ? 20_000 : 30_000);
 
     return () => {
       if (channel) supabase?.removeChannel(channel);
+      authSub?.subscription.unsubscribe();
       document.removeEventListener("visibilitychange", onVisible);
       clearInterval(id); clearTimeout(timer);
     };
