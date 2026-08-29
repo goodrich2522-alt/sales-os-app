@@ -1359,9 +1359,9 @@ export default function StockMain() {
                       เหลือ {bg.available} / {bg.total} คัน
                     </span>
                   </button>
-                  {/* รุ่นในแบรนด์ — grid กะทัดรัด 1-2 คอลัมน์ (ซ่อนเมื่อยุบ) */}
+                  {/* รุ่นในแบรนด์ — รายการคอลัมน์เดียว (ซ่อนเมื่อยุบ) */}
                   {!collapsed && (
-                  <div className="grid sm:grid-cols-2 divide-y sm:divide-y-0 divide-slate-50">
+                  <div className="flex flex-col divide-y divide-slate-100">
                     {bg.groups.map(g => {
                       const tone = g.available === 0 ? "bg-slate-100 text-slate-400 border-slate-200"
                         : g.available <= 2 ? "bg-red-50 text-red-700 border-red-200"
@@ -1369,13 +1369,13 @@ export default function StockMain() {
                       return (
                         <button key={`${g.brand}|${g.model}|${g.mast}`}
                           onClick={() => { setListView("list"); setListSearch(""); setListBrand(g.brand || "all"); setListModel(g.model); setListMast(g.mast || "all"); }}
-                          className="flex items-center justify-between gap-2 px-3.5 py-2.5 hover:bg-slate-50 text-left transition-colors border-slate-50 sm:border-b">
+                          className="w-full flex items-center justify-between gap-3 px-3.5 py-2.5 hover:bg-slate-50 text-left transition-colors">
                           <span className="min-w-0 flex-1">
-                            <span className="font-semibold text-slate-800 text-sm block truncate">{g.model}{g.mast ? <span className="text-emerald-600"> · เสา {g.mast}</span> : ""}</span>
-                            <span className="text-[11px] text-slate-400">ทั้งหมด {g.total} · ขายแล้ว {g.sold}</span>
+                            <span className="font-semibold text-slate-800 text-sm">{g.model}{g.mast ? <span className="text-emerald-600"> · เสา {g.mast}</span> : ""}</span>
+                            <span className="block text-[11px] text-slate-400">ทั้งหมด {g.total} คัน · ขายแล้ว {g.sold}</span>
                           </span>
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full border flex-shrink-0 tabular-nums ${tone}`}>
-                            {g.available === 0 ? "หมด" : g.available}
+                          <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border flex-shrink-0 tabular-nums ${tone}`}>
+                            {g.available === 0 ? "หมด" : `เหลือ ${g.available}`}
                           </span>
                         </button>
                       );
