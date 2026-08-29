@@ -68,7 +68,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
         const res = parseQuoteText(text);
         vendors.add(res.vendor);
         if (res.vendor === "unknown") { setNotice(`⚠️ "${f.name}" เดาผู้ผลิตไม่ได้`); continue; }
-        if (res.vendor !== "HELI" && res.vendor !== "ROCKMAN") { setNotice(`ℹ️ "${f.name}" เป็น ${res.vendor} — ใบ PDF รองรับ HELI/ROCKMAN (STAXX ใช้ไฟล์ Excel Serial List)`); continue; }
+        if (res.vendor === "STAXX") { setNotice(`ℹ️ "${f.name}" เป็น STAXX — ใบ PDF ได้แค่รุ่น/ราคา · ใช้ไฟล์ Excel Serial List เพื่อดึง SN`); continue; }
         if (res.vehicles.length === 0) { setNotice(`⚠️ "${f.name}" (${res.vendor}) อ่านไม่พบรายการรถ — ตรวจไฟล์`); continue; }
         all.push(...res.vehicles);
       } catch (e) {
@@ -165,7 +165,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
           <div>
             <h3 className="text-base font-bold text-slate-800 flex items-center gap-2"><FileText className="w-4 h-4 text-emerald-600" />นำเข้าจากใบเสนอราคา</h3>
-            <p className="text-xs text-slate-500 mt-0.5">อ่านไฟล์ในเครื่อง 100% · รองรับ HELI (PDF) · STAXX (Excel Serial List){vendor ? ` · อ่านได้: ${vendor}` : ""}</p>
+            <p className="text-xs text-slate-500 mt-0.5">อ่านไฟล์ในเครื่อง 100% · รองรับ HELI / HANGCHA / ROCKMAN (PDF) · STAXX (Excel Serial List){vendor ? ` · อ่านได้: ${vendor}` : ""}</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2 transition-all"><X className="w-5 h-5" /></button>
         </div>
@@ -201,7 +201,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
                 <p className="text-sm font-semibold text-slate-600 mt-2">
                   {ocr ? `🔍 กำลังอ่านรูป "${ocr.name}"... ${ocr.pct}%` : busy ? "กำลังอ่าน..." : "ลากไฟล์มาวาง หรือกดเลือก"}
                 </p>
-                <p className="text-xs text-slate-400 mt-0.5">PDF (HELI) · Excel Serial List (STAXX) · รูป JPEG/PNG (OCR ในเครื่อง) · หลายไฟล์พร้อมกันได้</p>
+                <p className="text-xs text-slate-400 mt-0.5">PDF (HELI/HANGCHA/ROCKMAN) · Excel Serial List (STAXX) · รูป JPEG/PNG (OCR ในเครื่อง) · หลายไฟล์พร้อมกันได้</p>
                 {ocr && <p className="text-[11px] text-slate-400 mt-1">อ่านในเครื่อง 100% · ครั้งแรกโหลดภาษาไทยอาจนานสักครู่</p>}
               </label>
 

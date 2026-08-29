@@ -3,6 +3,7 @@
 import { parseHeli } from "./heli";
 import { parseEp } from "./ep";
 import { parseRockman } from "./rockman";
+import { parseHangcha } from "./hangcha";
 import { parseStaxxSerialSheet, parseStaxxProforma, normalizeStaxxModel } from "./staxx";
 import { QuoteParseResult, QuoteVendor } from "./types";
 
@@ -33,7 +34,8 @@ export function parseQuoteText(text: string): QuoteParseResult {
       return parseRockman(text);
     case "STAXX":
       return parseStaxxProforma(text);   // Proforma PDF → รุ่น+ราคา FOB (SN มาจาก Excel แยก)
-    // HANGCHA (สแกน) — กรอกมือ
+    case "HANGCHA":
+      return parseHangcha(text);         // Proforma Invoice → SN + รุ่น + สเปก + ราคา
     default:
       return { vendor, vehicles: [], rawText: text };
   }
