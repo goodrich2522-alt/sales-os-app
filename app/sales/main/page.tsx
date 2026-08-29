@@ -1065,6 +1065,18 @@ export default function SalesMain() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-5">
+        {/* แถบเตือนค้าง (ปิดไม่ได้) — เตือนไปเรื่อยๆ จนกว่าจะลงข้อมูลรับประกันครบ · หายเองเมื่อครบ */}
+        {blockedDeals.length > 0 && (
+          <button onClick={() => setWarnDismissed(false)}
+            className="flex items-center gap-3 bg-red-50 border border-red-300 rounded-2xl px-4 py-3 text-left hover:bg-red-100 transition-colors animate-pulse">
+            <span className="text-2xl flex-shrink-0">⚠️</span>
+            <span className="flex-1 min-w-0">
+              <span className="font-bold text-red-700 text-sm block">มี {blockedDeals.length} ดีลยังไม่ลงข้อมูลรับประกัน · ค่าคอมยังไม่ออก</span>
+              <span className="text-xs text-red-600">แตะเพื่อลงข้อมูลให้ครบ — แถบนี้จะหายเองเมื่อลงครบทุกดีล</span>
+            </span>
+            <span className="text-xs font-bold text-white bg-red-600 rounded-lg px-3 py-1.5 flex-shrink-0 whitespace-nowrap">ลงข้อมูล</span>
+          </button>
+        )}
         {/* เฟส 2: แถบ "กำลังจะขายให้ลูกค้า X" — เลือกรถแล้วฟอร์มเติมข้อมูลลูกค้าให้เอง */}
         {pendingCustomer && (
           <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 text-sm text-emerald-800">
