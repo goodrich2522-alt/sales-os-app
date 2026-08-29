@@ -618,10 +618,11 @@ export default function StockMain() {
       "พบ (✓)": "", "หมายเหตุ": "",
     }));
     const ws1 = XLSX.utils.json_to_sheet(sumRows); ws1["!cols"] = [8, 14, 20, 10, 16, 14, 10, 20].map(w => ({ wch: w }));
-    const ws2 = XLSX.utils.json_to_sheet(unitRows); ws2["!cols"] = [8, 16, 14, 20, 10, 10, 16, 8, 20].map(w => ({ wch: w }));
+    const ws2 = XLSX.utils.json_to_sheet(unitRows); ws2["!cols"] = [8, 18, 14, 20, 10, 10, 16, 8, 20].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws1, "นับรายรุ่น");
+    // ชีตหลัก = นับรายคัน (SN) มาก่อน · สรุปรายรุ่นเป็นชีตรอง
     XLSX.utils.book_append_sheet(wb, ws2, "นับรายคัน (SN)");
+    XLSX.utils.book_append_sheet(wb, ws1, "สรุปรายรุ่น");
     XLSX.writeFile(wb, `ใบนับสต็อก_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
