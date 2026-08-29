@@ -47,6 +47,8 @@ export interface FieldConfig {
   commissionLocks: Record<string, CommissionLock>;
   // รายชื่อเซลล์ที่ลาออก (ตามชื่อบนดีล) — โชว์ "(ลาออก)" ต่อท้าย · ข้อมูลเก่ายังอยู่ครบ
   resignedStaff: string[];
+  // ชื่อพ้องเซลล์ (alias → ชื่อจริง) — เซลล์คนเดียวกันที่ล็อกอิน/บันทึกคนละชื่อ → รวมเป็นคนเดียว
+  staffAliases: Record<string, string>;
 }
 
 const DEFAULT_FIELD_CFG: FieldConfig = {
@@ -71,9 +73,10 @@ const DEFAULT_FIELD_CFG: FieldConfig = {
   adminEmails: ["goodrichforklift@gmail.com"], // แอดมินเริ่มต้น — แก้ได้ที่ /admin/users
   commissionLocks: {},
   resignedStaff: [],
+  staffAliases: { "เซลล์ดรีม": "ธัญญา (ดรีม)" }, // ค่าเริ่มต้น — แก้/เพิ่มเองได้ที่หน้าค่าคอม
 };
 
-type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "knownUsers" | "adminEmails" | "commissionLocks" | "resignedStaff">;
+type DropdownField = keyof Omit<FieldConfig, "customFieldDefs" | "saleExtraFieldDefs" | "salesFilterRequests" | "knownUsers" | "adminEmails" | "commissionLocks" | "resignedStaff" | "staffAliases">;
 
 // ── รูปแบบไฟล์สำรอง/นำเข้าข้อมูล ──
 export interface BackupData {
@@ -133,6 +136,7 @@ interface AppContextType {
   addSalesFilterRequest: (name: string) => void;
   removeSalesFilterRequest: (name: string) => void;
   toggleResignedStaff: (name: string, resigned: boolean) => void;
+  setStaffAlias: (alias: string, canonical: string | null) => void;
   // ล็อก/ปลดล็อก snapshot ค่าคอมรายเดือน
   setCommissionLock: (month: string, lock: CommissionLock | null) => void;
 }
@@ -659,6 +663,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // ตั้ง/ลบ ชื่อพ้องเซลล์ (alias → ชื่อจริง) — canonical="" หรือ =alias เพื่อลบ · รวมเซลล์คนเดียวกัน
+  const setStaffAlias = useCallback((alias: string, canonical: string | null) => {
+    const a = (alias || "").trim(); if (!a) return;
+    const c = (canonical || "").trim();
+    setFieldConfig(prev => {
+      const m = { ...(prev.staffAliases || {}) };
+      if (c && c !== a) m[a] = c; else delete m[a];
+      return { ...prev, staffAliases: m };
+    });
+  }, []);
+
   // ── สำรอง / นำเข้าข้อมูล (กันข้อมูลหายถ้าระบบมีปัญหา) ──
   const exportData = useCallback((): BackupData => ({
     app: "SalesOS",
@@ -723,6 +738,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addSaleExtraFieldOption, removeSaleExtraFieldOption, editSaleExtraFieldOption,
       addSalesFilterRequest, removeSalesFilterRequest,
       toggleResignedStaff,
+      setStaffAlias,
       setCommissionLock,
     }}>
       {children}

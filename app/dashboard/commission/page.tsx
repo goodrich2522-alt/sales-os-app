@@ -15,7 +15,7 @@ import {
 } from "@/lib/commission";
 import { DEFAULT_WARRANTY, emptySvcRounds } from "@/lib/warranty";
 import { DashboardGuard } from "@/components/DashboardGuard";
-import { staffLabel } from "@/lib/constants";
+import { staffLabel, canonicalStaff } from "@/lib/constants";
 import { supabase } from "@/lib/supabaseClient";
 import type { Sale, Forklift } from "@/lib/types";
 
@@ -54,7 +54,9 @@ const periodOf = (s: Sale) => {
 };
 
 function CommissionPageInner() {
-  const { sales, forklifts, updateSale, updateForklift, fieldConfig, setCommissionLock, toggleResignedStaff } = useApp();
+  const { sales, forklifts, updateSale, updateForklift, fieldConfig, setCommissionLock, toggleResignedStaff, setStaffAlias } = useApp();
+  const [aliasFrom, setAliasFrom] = useState(""); // ชื่อที่จะรวม (alias)
+  const [aliasTo, setAliasTo] = useState("");     // ชื่อจริง (canonical)
   const fkById = useMemo(() => new Map(forklifts.map(f => [f.id, f])), [forklifts]);
   const saleById = useMemo(() => new Map(sales.map(s => [s.id, s])), [sales]);
   // ดีลที่กำลังเปิดลงข้อมูลรับประกัน (คลิกจากแถวดีลในหน้าค่าคอม)
@@ -118,7 +120,7 @@ function CommissionPageInner() {
   const byStaff = useMemo(() => {
     const m = new Map<string, { staff: string; deals: typeof rows; total: number; missing: number; warrantyMissing: number; noneCount: number; noneSaleTotal: number; noneComm: number }>();
     rows.forEach(r => {
-      const staff = r.sale.sales_staff || "(ไม่ระบุเซลล์)";
+      const staff = canonicalStaff(r.sale.sales_staff, fieldConfig.staffAliases) || "(ไม่ระบุเซลล์)";
       const g = m.get(staff) ?? { staff, deals: [] as typeof rows, total: 0, missing: 0, warrantyMissing: 0, noneCount: 0, noneSaleTotal: 0, noneComm: 0 };
       g.deals.push(r);
       if (r.comm.group !== "none") g.total += r.comm.amount; // รถกลุ่มอื่นคิดรวมทั้งเดือนทีหลัง (ไม่คิดทีละใบ)
@@ -509,6 +511,44 @@ function CommissionPageInner() {
             <div className="text-center py-14 text-slate-400"><DollarSign className="w-10 h-10 text-slate-300 mx-auto mb-2" /><p className="text-sm">ไม่มีดีลปิดการขายในเดือนนี้</p></div>
           )}
         </div>
+
+        {/* ── จัดการชื่อพ้องเซลล์ (รวมเป็นคนเดียว) ── */}
+        <details className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 text-sm text-slate-600">
+          <summary className="font-bold text-slate-700 cursor-pointer">รวมชื่อเซลล์ที่ซ้ำ (คนเดียวกันแต่บันทึกคนละชื่อ)</summary>
+          <div className="mt-3 flex flex-col gap-3">
+            <p className="text-xs text-slate-500">ถ้าเซลล์คนเดียวกันมีดีลบันทึกไว้หลายชื่อ (เช่น ล็อกอิน &ldquo;เซลล์ดรีม&rdquo; แต่รายงานใช้ &ldquo;ธัญญา (ดรีม)&rdquo;) ให้รวมเป็นชื่อจริงชื่อเดียว — ดีล/ค่าคอม/ประวัติการขายจะนับรวมเป็นคนเดียว</p>
+            {/* รายการชื่อพ้องปัจจุบัน */}
+            {Object.entries(fieldConfig.staffAliases || {}).length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                {Object.entries(fieldConfig.staffAliases || {}).map(([from, to]) => (
+                  <div key={from} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs">
+                    <span className="font-semibold text-slate-600">{from}</span>
+                    <span className="text-slate-400">→</span>
+                    <span className="font-bold text-emerald-700">{to}</span>
+                    <button onClick={() => setStaffAlias(from, null)} className="ml-auto text-red-500 hover:text-red-700 font-bold">ลบ</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* เพิ่มชื่อพ้องใหม่ */}
+            <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+              <label className="flex-1 flex flex-col gap-1 text-xs text-slate-500">ชื่อที่จะรวม (เช่น เซลล์ดรีม)
+                <input list="staff-names" value={aliasFrom} onChange={e => setAliasFrom(e.target.value)} placeholder="ชื่อรอง"
+                  className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+              </label>
+              <span className="text-slate-400 text-center sm:pb-2">→</span>
+              <label className="flex-1 flex flex-col gap-1 text-xs text-slate-500">รวมเป็นชื่อจริง (เช่น ธัญญา (ดรีม))
+                <input list="staff-names" value={aliasTo} onChange={e => setAliasTo(e.target.value)} placeholder="ชื่อจริง"
+                  className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+              </label>
+              <button onClick={() => { if (aliasFrom.trim() && aliasTo.trim() && aliasFrom.trim() !== aliasTo.trim()) { setStaffAlias(aliasFrom.trim(), aliasTo.trim()); setAliasFrom(""); setAliasTo(""); } }}
+                disabled={!aliasFrom.trim() || !aliasTo.trim() || aliasFrom.trim() === aliasTo.trim()}
+                className="px-4 py-2 rounded-lg text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-40">รวมชื่อ</button>
+            </div>
+            <datalist id="staff-names">{[...new Set(sales.map(s => s.sales_staff).filter(Boolean))].map(n => <option key={n} value={n} />)}</datalist>
+            <p className="text-[11px] text-slate-400">* เปลี่ยนแล้วมีผลทันที · ประวัติการขายของเซลล์ + ยอดค่าคอมจะรวมกัน (ไม่แก้ข้อมูลดีลเดิม แค่ถือเป็นคนเดียว)</p>
+          </div>
+        </details>
 
         {/* ── เกณฑ์ค่าคอม (อ้างอิง) ── */}
         <details className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 text-sm text-slate-600">
