@@ -32,19 +32,32 @@ const isTransporterMode = () =>
   window.location.pathname.includes("/transporter") &&
   !!localStorage.getItem("transporter_name");
 
+// RPC คืน setof — PostgREST cap ที่ 1000 แถว/ครั้ง → วนดึงทีละ 1000 จนครบ (เหมือน fetchAllRows)
+// กันปัญหารถเกิน 1000 คันหายจากหน้าผู้ขนส่ง (เดิมเรียก RPC ครั้งเดียว ได้แค่ 1000 คันแรก)
+async function fetchAllRpc(fn: string): Promise<Record<string, unknown>[]> {
+  const c = sb();
+  const PAGE = 1000;
+  const out: Record<string, unknown>[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await c.rpc(fn).range(from, from + PAGE - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as Record<string, unknown>[];
+    out.push(...rows);
+    if (rows.length < PAGE) break; // ได้ไม่ครบหน้า = หมดแล้ว
+  }
+  return out;
+}
+
 /** โหลดข้อมูลผ่าน RPC เฉพาะที่ผู้ขนส่งจำเป็นต้องใช้ (ไม่มีราคาทุน/ข้อมูลลูกค้า) */
 async function bootstrapTransporter(): Promise<BootstrapData> {
-  const c = sb();
   const [fk, ins] = await Promise.all([
-    c.rpc("transporter_stock"),
-    c.rpc("transporter_inspections"),
+    fetchAllRpc("transporter_stock"),
+    fetchAllRpc("transporter_inspections"),
   ]);
-  if (fk.error) throw fk.error;
-  if (ins.error) throw ins.error;
   return {
-    forklifts: (fk.data ?? []) as Forklift[],
+    forklifts: fk as unknown as Forklift[],
     sales: [],                                   // ผู้ขนส่งไม่มีสิทธิ์เห็นดีลขาย
-    inspections: (ins.data ?? []) as InspectionRecord[],
+    inspections: ins as unknown as InspectionRecord[],
     deletedInspections: [],
     customers: [],                               // ผู้ขนส่งไม่เห็นข้อมูลลูกค้า
     fieldConfig: {},                             // ใช้ค่าเริ่มต้นในเครื่องแทน
