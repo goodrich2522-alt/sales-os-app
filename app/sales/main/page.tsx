@@ -20,7 +20,7 @@ import { WarrantyBlock } from "@/components/WarrantyBlock";
 import { parseSvc, nextDue, SVC_SOON_DAYS } from "@/lib/warranty";
 import { formatBaht } from "@/lib/format";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
-import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isStackerModel, isOtherGroup, priorPurchaseByCustomer, toGregorian } from "@/lib/commission";
+import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isStackerModel, isOtherGroup, priorPurchaseByCustomer, toGregorian, isClosedSale, closeMonth, warrantyFilled } from "@/lib/commission";
 import { apiEnabled, uploadImageApi } from "@/lib/api";
 import AiAssistant from "@/components/AiAssistant";
 
@@ -414,6 +414,16 @@ export default function SalesMain() {
     setFSpecModel(""); setFSpecSN(""); setFForkLength(""); setFForkWidth("");
   };
   const mySales = salesUser ? sales.filter(s => s.sales_staff === salesUser.name) : [];
+
+  // ── ดีลที่ปิดแล้วแต่ยังไม่ลงข้อมูลรับประกัน → ค่าคอมยังไม่ออก (บังคับตั้งแต่ ส.ค. 69) ──
+  const WARRANTY_GATE_FROM = "2026-08";
+  const blockedDeals = useMemo(() => mySales.filter(s => {
+    if (!isClosedSale(s) || closeMonth(s) < WARRANTY_GATE_FROM) return false;
+    const fk = forklifts.find(f => f.id === s.forklift_id);
+    return !warrantyFilled(fk);
+  }), [mySales, forklifts]);
+  const [warnDismissed, setWarnDismissed] = useState(false);
+  const showWarnPopup = !warnDismissed && blockedDeals.length > 0;
 
   // ส่งออกรายงานการขายของเซลล์คนนี้เป็นไฟล์ Excel (.xlsx) — โหลด xlsx ตอนกดเท่านั้น
   const exportMySalesExcel = async () => {
@@ -1992,6 +2002,41 @@ export default function SalesMain() {
                   </button>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ป๊อปอัพเตือนฝ่ายขาย: ดีลที่ยังลงข้อมูลรับประกันไม่ครบ → ค่าคอมยังไม่ออก ── */}
+      {showWarnPopup && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4"
+          onClick={e => { if (e.target === e.currentTarget) setWarnDismissed(true); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start gap-3">
+              <div className="bg-red-100 text-2xl rounded-xl w-11 h-11 flex items-center justify-center flex-shrink-0">⚠️</div>
+              <div className="flex-1">
+                <h3 className="font-bold text-slate-800">ยังลงข้อมูลไม่ครบ · ค่าคอมยังไม่ออก</h3>
+                <p className="text-xs text-slate-500 mt-0.5">มี <b className="text-red-600">{blockedDeals.length} ดีล</b> ที่ยังไม่ลงข้อมูล<b>รับประกัน/บริการหลังการขาย</b> — ต้องลงให้ครบก่อน ค่าคอมถึงจะออก</p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
+              {blockedDeals.map(s => {
+                const fk = forklifts.find(f => f.id === s.forklift_id);
+                return (
+                  <button key={s.id} onClick={() => { setWarnDismissed(true); setDetailSale(s); }}
+                    className="flex items-center justify-between gap-2 border border-red-200 bg-red-50 hover:bg-red-100 rounded-xl px-3 py-2.5 text-left transition-colors">
+                    <span className="min-w-0 flex-1">
+                      <span className="font-semibold text-slate-800 text-sm block truncate">{fk?.brand || s.forklift_brand} {fk?.model || s.forklift_model}</span>
+                      <span className="text-[11px] text-slate-500">{s.customer_name || "—"}{s.delivery_date ? ` · ปิด ${s.delivery_date}` : ""}</span>
+                    </span>
+                    <span className="text-xs font-bold text-red-600 flex-shrink-0 whitespace-nowrap">ลงข้อมูล →</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setWarnDismissed(true)}
+                className="px-4 py-2 rounded-lg text-sm font-bold text-slate-600 border border-slate-200 hover:bg-slate-50">ไว้ทีหลัง</button>
             </div>
           </div>
         </div>
