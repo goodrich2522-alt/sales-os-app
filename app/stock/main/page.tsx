@@ -6,7 +6,7 @@ import {
   Package, Plus, LogOut, CheckCircle, AlertCircle, List, X,
   TrendingUp, Boxes, Trash2, Settings, Pencil, Check, ChevronDown, ChevronRight,
   Clock, Hash, Camera, ImageOff, Eye, Bell, MapPin, History,
-  Download, Upload, FileText, ShoppingCart, User, QrCode, PackageCheck
+  Download, Upload, FileText, ShoppingCart, User, QrCode, PackageCheck, ClipboardList
 } from "lucide-react";
 import { Forklift, Sale, STOCK_APPROVAL_FIELD, isVoidSale } from "@/lib/types";
 import { COMMISSION_FIELD, COMMISSION_CATEGORIES } from "@/lib/commission";
@@ -591,6 +591,40 @@ export default function StockMain() {
     XLSX.writeFile(wb, `รายการสินค้า_${stamp}.xlsx`);
   };
 
+  // ── ใบนับสต็อกประจำเดือน — รถพร้อมขายทั้งหมด (ไม่ขึ้นกับตัวกรอง) 2 ชีต: นับรายรุ่น + นับรายคัน(SN) ──
+  const exportStockCount = async () => {
+    const XLSX = await import("xlsx");
+    const inStock = forklifts.filter(f => isAvailable(f.status))
+      .sort((a, b) => (a.brand || "").localeCompare(b.brand || "") || (a.model || "").localeCompare(b.model || "") || String(a.id).localeCompare(String(b.id)));
+    if (inStock.length === 0) { showToast("ไม่มีรถพร้อมขาย"); return; }
+    // ชีต 1: นับรายรุ่น (สรุป) — จำนวนระบบ + ช่องกรอกนับจริง/ผลต่าง
+    const gmap = new Map<string, { brand: string; model: string; mast: string; sys: number }>();
+    inStock.forEach(f => {
+      const mast = mastOf(f);
+      const key = `${f.brand}|${f.model}|${mast}`;
+      const g = gmap.get(key) ?? { brand: f.brand || "(ไม่ระบุ)", model: f.model || "", mast, sys: 0 };
+      g.sys++; gmap.set(key, g);
+    });
+    const sumRows = [...gmap.values()]
+      .sort((a, b) => a.brand.localeCompare(b.brand) || a.model.localeCompare(b.model))
+      .map((g, i) => ({
+        "ลำดับ": i + 1, "ยี่ห้อ": g.brand, "รุ่น": g.model, "เสา (MAST)": g.mast,
+        "จำนวนระบบ (คัน)": g.sys, "นับจริง (คัน)": "", "ผลต่าง": "", "หมายเหตุ": "",
+      }));
+    // ชีต 2: นับรายคัน (SN) — เช็คลิสต์ทีละคัน
+    const unitRows = inStock.map((f, i) => ({
+      "ลำดับ": i + 1, "SN": f.id ?? "", "ยี่ห้อ": f.brand || "(ไม่ระบุ)", "รุ่น": f.model ?? "",
+      "เสา (MAST)": mastOf(f), "พลังงาน": f.fuel ?? "", "โลเคชั่น": f.location ?? "",
+      "พบ (✓)": "", "หมายเหตุ": "",
+    }));
+    const ws1 = XLSX.utils.json_to_sheet(sumRows); ws1["!cols"] = [8, 14, 20, 10, 16, 14, 10, 20].map(w => ({ wch: w }));
+    const ws2 = XLSX.utils.json_to_sheet(unitRows); ws2["!cols"] = [8, 16, 14, 20, 10, 10, 16, 8, 20].map(w => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws1, "นับรายรุ่น");
+    XLSX.utils.book_append_sheet(wb, ws2, "นับรายคัน (SN)");
+    XLSX.writeFile(wb, `ใบนับสต็อก_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   const catCount = (c: string) => c === "all" ? forklifts.length : forklifts.filter(f => (f.vehicle_category ?? "Forklift") === c).length;
   // ยี่ห้อที่มีจริงในสต็อก (เรียงตามจำนวนมาก→น้อย) — ทำเป็นแท็กกรอง
   const brandList = useMemo(() => {
@@ -1161,10 +1195,17 @@ export default function StockMain() {
                       : `แสดง ${listFiltered.length} จาก ${forklifts.length} คัน`}
                   </p>
                 </div>
-                <button onClick={exportProductsExcel} disabled={listFiltered.length === 0}
-                  className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg px-3 py-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
-                  <Download className="w-4 h-4" /><span className="hidden sm:inline">Export Excel</span>
-                </button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button onClick={exportStockCount}
+                    className="flex items-center gap-1.5 text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg px-3 py-2 transition-all"
+                    title="ออกไฟล์ Excel รถพร้อมขายทั้งหมด สำหรับตรวจนับสต็อกประจำเดือน">
+                    <ClipboardList className="w-4 h-4" /><span className="hidden sm:inline">ใบนับสต็อก</span>
+                  </button>
+                  <button onClick={exportProductsExcel} disabled={listFiltered.length === 0}
+                    className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg px-3 py-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                    <Download className="w-4 h-4" /><span className="hidden sm:inline">Export Excel</span>
+                  </button>
+                </div>
               </div>
               {/* ค้นหา */}
               <input value={listSearch} onChange={e => setListSearch(e.target.value)}
