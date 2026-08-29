@@ -99,6 +99,9 @@ export default function StockMain() {
   const [listView, setListView]     = useState<"list" | "table" | "byModel" | "aging">("list");  // มุมมอง: รายคัน / ตาราง / รวมตามรุ่น / ค้างนาน
   const [collapsedBrands, setCollapsedBrands] = useState<Set<string>>(new Set()); // แบรนด์ที่ยุบไว้ในมุมมองตามรุ่น
   const toggleBrand = (b: string) => setCollapsedBrands(prev => { const n = new Set(prev); n.has(b) ? n.delete(b) : n.add(b); return n; });
+  const [showCount, setShowCount] = useState(100); // แสดงทีละกี่คัน (มุมมองรายคัน/ตาราง) · Infinity = ทั้งหมด
+  // เปลี่ยนตัวกรอง/ค้นหา/มุมมอง → รีเซ็ตจำนวนที่แสดงกลับค่าเริ่ม (กันค้างที่ "ทั้งหมด" แล้วช้า)
+  useEffect(() => { setShowCount(c => (c === Infinity ? Infinity : 100)); }, [listSearch, listCat, listStatus, listBrand, listModel, listMast, listView]);
   const [bulkMode, setBulkMode]     = useState(false);              // โหมดเลือกหลายคัน
   const [selIds, setSelIds]         = useState<Set<string>>(new Set()); // รถที่เลือกไว้
   const [bulkDelConfirm, setBulkDelConfirm] = useState(false);
@@ -527,6 +530,10 @@ export default function StockMain() {
     else rows.sort(recent); // recent / remain (remain ใช้ในมุมมอง byModel)
     return rows;
   }, [forklifts, listSearch, listCat, listBrand, listModel, listMast, listFuel, listStatus, listSort]);
+
+  // รายการที่แสดงจริง (มุมมองรายคัน/ตาราง) — จำกัดตาม showCount กันโหลดพันแถวรวดเดียว
+  const pagedList = showCount === Infinity ? listFiltered : listFiltered.slice(0, showCount);
+  const hasMore = listFiltered.length > pagedList.length;
 
   // ตัวเลือก dropdown — ไล่ระดับ ยี่ห้อ→รุ่น→เสา (นับเฉพาะที่มีจริงในสต็อก)
   const modelOpts = [...new Set(forklifts.filter(f => listBrand === "all" || (f.brand || "(ไม่ระบุ)") === listBrand).map(f => f.model).filter(Boolean))].sort();
@@ -1287,6 +1294,19 @@ export default function StockMain() {
                   <button onClick={() => setListView("aging")}
                     className={`px-2.5 py-1.5 transition ${listView === "aging" ? "bg-amber-500 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>ค้างนาน</button>
                 </div>
+                {/* แสดงทีละกี่คัน — เฉพาะมุมมองรายคัน/ตาราง */}
+                {(listView === "list" || listView === "table") && (
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <span className="hidden sm:inline">แสดง</span>
+                    <select value={showCount === Infinity ? "all" : String(showCount)}
+                      onChange={e => setShowCount(e.target.value === "all" ? Infinity : Number(e.target.value))}
+                      className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 cursor-pointer">
+                      <option value="100">100</option>
+                      <option value="500">500</option>
+                      <option value="all">ทั้งหมด</option>
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
             <div id="stock-list-panel" className="overflow-auto max-h-[72vh] p-4 flex flex-col gap-2">
@@ -1351,7 +1371,7 @@ export default function StockMain() {
                       </tr>
                     </thead>
                     <tbody>
-                      {listFiltered.map((item) => (
+                      {pagedList.map((item) => (
                         <tr key={item.id} onClick={() => bulkMode ? toggleSel(item.id) : setDetailItem(item)}
                           className={`border-b border-slate-50 cursor-pointer transition-colors ${bulkMode && selIds.has(item.id) ? "bg-indigo-50" : "hover:bg-emerald-50/40"}`}>
                           {bulkMode && <td className="px-2 py-2"><input type="checkbox" checked={selIds.has(item.id)} onChange={() => toggleSel(item.id)} onClick={e => e.stopPropagation()} className="w-4 h-4 accent-indigo-600" /></td>}
@@ -1429,7 +1449,7 @@ export default function StockMain() {
               })}
 
               {/* ── มุมมองรายคัน ── */}
-              {listView === "list" && listFiltered.map((item, idx) => (
+              {listView === "list" && pagedList.map((item, idx) => (
                 <div key={item.id} onClick={() => bulkMode ? toggleSel(item.id) : setDetailItem(item)}
                   className={`flex items-center gap-3 border rounded-xl p-3.5 transition-colors group cursor-pointer ${bulkMode && selIds.has(item.id) ? "bg-indigo-50 border-indigo-300 ring-1 ring-indigo-200" : idx === 0 ? "bg-emerald-50/70 border-emerald-200 hover:bg-emerald-50" : "bg-slate-50 hover:bg-slate-100 border-slate-100"}`}>
                   {bulkMode && <input type="checkbox" checked={selIds.has(item.id)} onChange={() => toggleSel(item.id)} onClick={e => e.stopPropagation()} className="w-4 h-4 accent-indigo-600 flex-shrink-0" />}
@@ -1477,6 +1497,21 @@ export default function StockMain() {
                   )}
                 </div>
               ))}
+
+              {/* แสดงเพิ่ม / แสดงทั้งหมด — เฉพาะรายคัน/ตาราง เมื่อยังมีรถเหลือ */}
+              {(listView === "list" || listView === "table") && listFiltered.length > 0 && (
+                <div className="flex flex-col items-center gap-2 pt-1">
+                  <p className="text-xs text-slate-400">แสดง {pagedList.length} จาก {listFiltered.length} คัน</p>
+                  {hasMore && (
+                    <div className="flex gap-2">
+                      <button onClick={() => setShowCount(c => (c === Infinity ? Infinity : c + 100))}
+                        className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg px-4 py-2 transition-all">แสดงเพิ่ม 100</button>
+                      <button onClick={() => setShowCount(Infinity)}
+                        className="text-xs font-bold text-slate-600 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 transition-all">แสดงทั้งหมด ({listFiltered.length})</button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
       </section>
