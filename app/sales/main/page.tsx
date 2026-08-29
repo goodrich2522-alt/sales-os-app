@@ -15,7 +15,7 @@ import { Forklift, PaymentType, CustomerType, Sale, SaleStatus, VehicleType, Con
 import { useApp } from "@/lib/AppContext";
 import { driveImg } from "@/lib/img";
 import { isPendingId, displayCode } from "@/lib/productId";
-import { STATUS_BADGE, SALE_STATUS_BADGE, CONTACT_SOURCE_COLORS, VEHICLE_CATS, paymentBadgeClass } from "@/lib/constants";
+import { STATUS_BADGE, SALE_STATUS_BADGE, CONTACT_SOURCE_COLORS, VEHICLE_CATS, paymentBadgeClass, sameStaff, canonicalStaff } from "@/lib/constants";
 import { WarrantyBlock } from "@/components/WarrantyBlock";
 import { parseSvc, nextDue, SVC_SOON_DAYS } from "@/lib/warranty";
 import { formatBaht } from "@/lib/format";
@@ -413,7 +413,8 @@ export default function SalesMain() {
     setSearch(""); setExtraFilterVals({});
     setFSpecModel(""); setFSpecSN(""); setFForkLength(""); setFForkWidth("");
   };
-  const mySales = salesUser ? sales.filter(s => s.sales_staff === salesUser.name) : [];
+  // จับคู่ดีลของฉันแบบ alias-aware (ล็อกอินคนละชื่อกับที่บันทึกดีลก็ยังเจอ เช่น เซลล์ดรีม = ธัญญา (ดรีม))
+  const mySales = salesUser ? sales.filter(s => sameStaff(s.sales_staff, salesUser.name)) : [];
 
   // ── ดีลที่ปิดแล้วแต่ยังไม่ลงข้อมูลรับประกัน → ค่าคอมยังไม่ออก (บังคับตั้งแต่ ส.ค. 69) ──
   const WARRANTY_GATE_FROM = "2026-08";
@@ -751,7 +752,7 @@ export default function SalesMain() {
       id: editingSale ? editingSale.id : `sale_${Date.now()}`,
       forklift_id: selected!.id, forklift_unit_no: selected!.SN,
       forklift_brand: selected!.brand, forklift_model: selected!.model,
-      sales_staff: salesUser?.name ?? "",
+      sales_staff: canonicalStaff(salesUser?.name), // บันทึกด้วยชื่อจริง (canonical) กันดีลแตกเป็นคนละคน
       customer_name: form.customer_name, customer_tel: form.customer_tel,
       customer_type: form.customer_type as CustomerType, province: form.province,
       payment_type: form.payment_type as PaymentType,

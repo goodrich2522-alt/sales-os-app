@@ -103,6 +103,20 @@ export const paymentBadgeClass = (p: unknown): string =>
   PAYMENT_BADGE[String(p ?? "").trim()] ?? "bg-slate-100 text-slate-500";
 
 // ── เซลล์ลาออก — เติม "(ลาออก)" ต่อท้ายชื่อเวลาแสดงผล (ข้อมูลเก่ายังอยู่) ──
+// ชื่อพ้อง (alias) ของเซลล์คนเดียวกัน — บัญชีล็อกอินชื่อหนึ่ง แต่ดีลบันทึกอีกชื่อ → รวมเป็นชื่อจริงชื่อเดียว
+// (เช่น ล็อกอิน "เซลล์ดรีม" แต่ดีลเป็น "ธัญญา (ดรีม)" ตามรายงานค่าคอม)
+export const STAFF_ALIASES: Record<string, string> = {
+  "เซลล์ดรีม": "ธัญญา (ดรีม)",
+};
+/** แปลงชื่อเซลล์เป็นชื่อจริง (canonical) — ใช้จับคู่ดีลของฉัน/ค่าคอมให้ตรงแม้ล็อกอินคนละชื่อ */
+export const canonicalStaff = (name: unknown): string => {
+  const n = String(name ?? "").trim();
+  return STAFF_ALIASES[n] ?? n;
+};
+/** เซลล์คนเดียวกันไหม (เทียบชื่อจริงหลังแปลง alias) */
+export const sameStaff = (a: unknown, b: unknown): boolean =>
+  !!canonicalStaff(a) && canonicalStaff(a) === canonicalStaff(b);
+
 export const isResignedStaff = (name: unknown, resigned: string[] = []): boolean =>
   !!name && resigned.includes(String(name).trim());
 export const staffLabel = (name: unknown, resigned: string[] = []): string => {
