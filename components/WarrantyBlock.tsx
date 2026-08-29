@@ -87,10 +87,14 @@ export function WarrantyBlock({ forklift, actor, onSaved, canEdit = true }: {
           </div>
         )}
 
-        {canEdit && (
+        {canEdit ? (
           <button onClick={doSave} className="mt-1 px-4 py-2 rounded-xl text-sm font-bold bg-teal-600 text-white hover:bg-teal-700">
             {saved ? "บันทึกแล้ว ✓" : "บันทึกบริการหลังการขาย"}
           </button>
+        ) : filled && (
+          <p className="mt-1 text-[11px] text-slate-500 bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+            🔒 ลงข้อมูลแล้ว — ล็อกไว้ แก้ไขไม่ได้ · หากต้องแก้ไข แจ้งฝ่ายสต็อก/แอดมิน
+          </p>
         )}
 
         {/* ประวัติการแก้ไข */}

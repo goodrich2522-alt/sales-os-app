@@ -2091,7 +2091,8 @@ export default function SalesMain() {
               {/* บริการหลังการขาย / รับประกัน — ฝ่ายขายลงข้อมูลให้ครบ (กันจ่ายค่าคอม) */}
               {(() => {
                 const fk = forklifts.find(f => String(f.id) === String(detailSale.forklift_id) || (detailSale.forklift_unit_no && String(f.SN ?? "").toUpperCase() === String(detailSale.forklift_unit_no).toUpperCase()));
-                return fk ? <WarrantyBlock forklift={fk} actor={salesUser?.name || "ฝ่ายขาย"} /> : null;
+                // กติกา: ฝ่ายขายลงข้อมูลหลังการขายแล้ว → ล็อก แก้ไขไม่ได้ (แก้ที่ฝ่ายสต็อก/แอดมินเท่านั้น)
+                return fk ? <WarrantyBlock forklift={fk} actor={salesUser?.name || "ฝ่ายขาย"} canEdit={!warrantyFilled(fk)} /> : null;
               })()}
 
               {/* ── ยกเลิกการจอง — เฉพาะดีลที่ยังไม่ปิดขาด (ไม่ผ่านไฟแนนซ์/ลูกค้ายกเลิก) ── */}
