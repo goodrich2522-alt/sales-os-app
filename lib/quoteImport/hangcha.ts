@@ -63,8 +63,17 @@ export function parseHangcha(rawText: string): QuoteParseResult {
       (sns.length ? sns : [undefined]).forEach((sn) => vehicles.push(build(sn, unit)));
     }
   } else {
-    // format A: serial เดี่ยว + subtotal เดียว
-    const sns = [...new Set([...text.matchAll(SN_RE)].map((m) => m[1]))];
+    // format A: มี label "Serial No." ครั้งเดียวแต่ SN ได้หลายตัว (เรียงบรรทัด/กระจายในเอกสาร)
+    // → จับ SN ตัวแรกจาก label ก่อน แล้วขยายจับ token "รูปแบบเดียวกัน" ทั้งเอกสาร (กัน SN ตัวที่ 2+ ที่ไม่มี label)
+    const labeled = [...new Set([...text.matchAll(SN_RE)].map((m) => m[1]))];
+    let sns = labeled;
+    if (labeled.length) {
+      // สร้าง regex จากรูปของ SN ตัวแรก (ตัวเลข→\d · อักษร→[A-Za-z]) แล้วหา token รูปเดียวกัน (ต้องมีทั้งเลขและอักษร กันไปโดนวันที่/เบอร์โทร)
+      const shapeRe = new RegExp("\\b" + labeled[0].split("").map((c) => (/[0-9]/.test(c) ? "[0-9]" : "[A-Za-z]")).join("") + "\\b", "g");
+      const found = [...new Set((text.match(shapeRe) || []).map((s) => s.toUpperCase()))]
+        .filter((s) => /[A-Z]/i.test(s) && /\d/.test(s));
+      if (found.length >= labeled.length) sns = found;
+    }
     const subtotal = Number(text.match(/([\d,]+\.\d{2})\s*7\s*%/)?.[1]?.replace(/,/g, "")) || undefined;
     const unit = subtotal ? Math.round(subtotal / Math.max(sns.length, 1)) : undefined;
     (sns.length ? sns : [undefined]).forEach((sn) => vehicles.push(build(sn, unit)));
