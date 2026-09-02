@@ -4,6 +4,7 @@ export type CustomerType = "บุคคลทั่วไป" | "นิติ�
 // 4 สถานะใหม่ (ตามลำดับขั้น) + คงค่าเก่าไว้เพื่อดีลที่บันทึกไปแล้ว
 export type SaleStatus =
   | "จอง/รอโอน" | "จอง/โอนมัดจำแล้ว" | "รอจัดส่ง" | "รอไฟแนนซ์" | "ปิดการขาย/จัดส่งแล้ว"
+  | "คืนสินค้า" // ลูกค้าคืนสินค้า — เก็บประวัติดีลไว้ แต่ตัดออกจากยอด/ค่าคอม (isClosedSale=false)
   | "มัดจำแล้ว" | "ขายแล้ว" | "จอง" | "รอผ่านไฟแนนซ์"; // (เก่า — backward compat)
 export type VehicleType = "Forklift" | "Stacker" | "Handlift" | "Electric Pallet Truck" | "Reach Truck";
 export type ContactSource = "Line" | "Facebook" | "TikTok" | "โทร" | "Google" | "คนอื่นบอกต่อ";

@@ -72,6 +72,7 @@ export const SALE_STATUS_BADGE: Record<string, string> = {
   "ขายแล้ว":        "bg-emerald-100 text-emerald-700 border-emerald-200",
   "จอง":            "bg-amber-100 text-amber-700 border-amber-200",
   "รอผ่านไฟแนนซ์":  "bg-red-100 text-red-700 border-red-200",
+  "คืนสินค้า":       "bg-rose-100 text-rose-700 border-rose-200",
 };
 
 export const saleStatusBadgeClass = (status: unknown): string =>
@@ -81,6 +82,7 @@ export const saleStatusBadgeClass = (status: unknown): string =>
 // ขายแล้ว = ปิดการขาย/จัดส่งแล้ว · รอไฟแนนซ์ = รอผ่านไฟแนนซ์ · มัดจำแล้ว → จอง/โอนมัดจำแล้ว
 export const saleStatusGroup = (status: unknown): string => {
   const st = String(status ?? "ขายแล้ว").trim();
+  if (st.includes("คืนสินค้า") || st.includes("คืนแล้ว")) return "คืนสินค้า"; // ลูกค้าคืน — เก็บประวัติ ไม่นับยอด
   if (!st || st.includes("ปิด") || st.includes("จัดส่งแล้ว") || st.includes("ส่งมอบ") || st === "ขายแล้ว") return "ขายแล้ว/ปิดการขาย";
   if (st.includes("ไฟแนนซ์")) return "รอไฟแนนซ์";
   if (st.includes("มัดจำ")) return "จอง/โอนมัดจำแล้ว";
@@ -126,7 +128,7 @@ export const staffLabel = (name: unknown, resigned: string[] = []): string => {
 
 // รายการสถานะในตัวกรองประวัติการขาย (ชุดเดียว ไม่ซ้ำ)
 export const SALE_STATUS_FILTER_GROUPS = [
-  "จอง/รอโอน", "จอง/โอนมัดจำแล้ว", "รอจัดส่ง", "รอไฟแนนซ์", "ขายแล้ว/ปิดการขาย",
+  "จอง/รอโอน", "จอง/โอนมัดจำแล้ว", "รอจัดส่ง", "รอไฟแนนซ์", "ขายแล้ว/ปิดการขาย", "คืนสินค้า",
 ];
 // สถานะที่ให้เลือกตอนแก้ไข (ตัดตัวซ้ำ/เก่าออก: มัดจำแล้ว, ขายแล้ว, จอง, รอผ่านไฟแนนซ์)
 export const SALE_STATUS_OPTIONS = [

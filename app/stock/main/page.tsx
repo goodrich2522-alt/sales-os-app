@@ -6,10 +6,10 @@ import {
   Package, Plus, LogOut, CheckCircle, AlertCircle, List, X,
   TrendingUp, Boxes, Trash2, Settings, Pencil, Check, ChevronDown, ChevronRight,
   Clock, Hash, Camera, ImageOff, Eye, Bell, MapPin, History,
-  Download, Upload, FileText, ShoppingCart, User, QrCode, PackageCheck, ClipboardList
+  Download, Upload, FileText, ShoppingCart, User, QrCode, PackageCheck, ClipboardList, RotateCcw
 } from "lucide-react";
 import { Forklift, Sale, STOCK_APPROVAL_FIELD, isVoidSale } from "@/lib/types";
-import { COMMISSION_FIELD, COMMISSION_CATEGORIES } from "@/lib/commission";
+import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isClosedSale } from "@/lib/commission";
 import { useApp, FieldConfig } from "@/lib/AppContext";
 import { isPendingId, displayCode } from "@/lib/productId";
 import { thaiMonthShort, today } from "@/lib/format";
@@ -78,7 +78,7 @@ export default function StockMain() {
   const router = useRouter();
   const {
     forklifts, addForkliftsBulk, updateForklift, deleteForklift, inspections, addInspection, sales, updateSale,
-    approveStockSale, rejectStockSale, setActor,
+    returnSale, approveStockSale, rejectStockSale, setActor,
     exportData, importData,
     fieldConfig, updateFieldOptions,
     removeCustomFieldDef, renameCustomFieldDef,
@@ -108,6 +108,7 @@ export default function StockMain() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showSettings, setShowSettings]   = useState(false);
   const [detailItem, setDetailItem]       = useState<Forklift | null>(null); // รถที่กดดูรายละเอียด
+  const [returnPanel, setReturnPanel]     = useState<{ dest: string; reason: string } | null>(null); // แผงรับคืนสินค้า (ลูกค้าคืน)
   const [detailLightbox, setDetailLightbox] = useState<{ imgs: string[]; idx: number } | null>(null);
   const [locEdit, setLocEdit]             = useState(""); // แก้สถานที่ที่รถอยู่ (ใน detail modal)
   const [locSaved, setLocSaved]           = useState(false);
@@ -219,6 +220,7 @@ export default function StockMain() {
     });
     setSpecSaved(false);
     setQrData(null); setDocMsg("");
+    setReturnPanel(null); // ปิดแผงรับคืนเมื่อสลับรถ/ปิด modal
   }, [detailItem]);
 
   // สิทธิ์แก้ไขข้อมูลการเงิน (ต้นทุน/ค่าขนส่ง ฯลฯ) — เฉพาะวรลักษณ์เท่านั้น (ชื่อ หรือ อีเมลของวรลักษณ์)
@@ -748,9 +750,11 @@ export default function StockMain() {
     histFiltered.forEach(s => {
       const staff = s.sales_staff?.trim() || NO_STAFF_LABEL;
       const g = m.get(staff) ?? { staff, deals: 0, revenue: 0, closed: 0, pending: 0 };
+      const grp = saleStatusGroup(s.sale_status);
+      const returned = grp === "คืนสินค้า"; // ลูกค้าคืน — ยังโชว์ในประวัติ แต่ไม่นับดีล/ยอด/ค่าคอม
       g.deals++;
-      g.revenue += Number(s.actual_sale) || 0;
-      if (saleStatusGroup(s.sale_status) === "ขายแล้ว/ปิดการขาย") g.closed++; else g.pending++;
+      if (!returned) g.revenue += Number(s.actual_sale) || 0;
+      if (grp === "ขายแล้ว/ปิดการขาย") g.closed++; else if (!returned) g.pending++;
       m.set(staff, g);
     });
     return [...m.values()].sort((a, b) => b.revenue - a.revenue);
@@ -2177,6 +2181,51 @@ export default function StockMain() {
                   </select>
                   <p className="text-[10px] text-slate-400 mt-1">* เปลี่ยนสถานะรถ (พร้อมขาย/รอรับ/รถเช่า/เคลม ฯลฯ) — อัปเดตทุกฝ่ายทันที</p>
                 </div>
+                {/* รับคืนสินค้า (ลูกค้าคืน) — เฉพาะรถที่ปิดการขายแล้ว + มีดีลผูกอยู่ · เก็บประวัติดีลไว้ ตัดยอด/ค่าคอมออก */}
+                {(() => {
+                  const linkedSale = sales.find(s => s.forklift_id === it.id && isClosedSale(s));
+                  if (!linkedSale) return null;
+                  return (
+                    <div>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><RotateCcw className="w-3.5 h-3.5" />รับคืนสินค้า (ลูกค้าคืน)</p>
+                      {!returnPanel ? (
+                        <button onClick={() => setReturnPanel({ dest: "เคลม/รับกลับ", reason: "" })}
+                          className="w-full text-sm font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-xl px-3 py-2.5 flex items-center justify-center gap-2">
+                          <RotateCcw className="w-4 h-4" />รับคืนสินค้าจากลูกค้า
+                        </button>
+                      ) : (
+                        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex flex-col gap-2.5">
+                          <p className="text-[11px] text-rose-700">
+                            ดีลเดิม: <b>{linkedSale.customer_name || "—"}</b> · เซลล์ {linkedSale.sales_staff || "—"} · ยอด {Number(linkedSale.actual_sale || 0).toLocaleString()} บาท
+                            <br />ระบบจะ<b>เก็บประวัติดีลนี้ไว้</b> (ติดป้าย &ldquo;คืนสินค้าแล้ว&rdquo;) แต่<b>ตัดออกจากยอดขาย/ค่าคอมอัตโนมัติ</b>
+                          </p>
+                          <div>
+                            <p className="text-[11px] font-bold text-slate-500 mb-1">หลังรับคืน ให้รถเป็น:</p>
+                            <div className="flex gap-2">
+                              <button onClick={() => setReturnPanel(p => p && { ...p, dest: "เคลม/รับกลับ" })}
+                                className={`flex-1 text-xs font-bold rounded-lg px-2 py-2 border ${returnPanel.dest === "เคลม/รับกลับ" ? "bg-rose-600 text-white border-rose-600" : "bg-white text-slate-600 border-slate-200"}`}>เคลม/รับกลับ (พักไว้)</button>
+                              <button onClick={() => setReturnPanel(p => p && { ...p, dest: "พร้อมขาย" })}
+                                className={`flex-1 text-xs font-bold rounded-lg px-2 py-2 border ${returnPanel.dest === "พร้อมขาย" ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200"}`}>พร้อมขาย (ขายใหม่)</button>
+                            </div>
+                          </div>
+                          <textarea value={returnPanel.reason} onChange={e => setReturnPanel(p => p && { ...p, reason: e.target.value })}
+                            placeholder="เหตุผลที่คืน (เช่น สินค้าไม่ตรงสเปก / ยกเลิกสัญญา)" rows={2}
+                            className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-300" />
+                          <div className="flex gap-2">
+                            <button onClick={() => setReturnPanel(null)} className="flex-1 text-xs font-bold text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg px-3 py-2">ยกเลิก</button>
+                            <button onClick={() => {
+                                returnSale(linkedSale.id, { forkStatus: returnPanel.dest, reason: returnPanel.reason });
+                                setDetailItem({ ...it, status: returnPanel.dest });
+                                setReturnPanel(null);
+                                showToast(`รับคืนสินค้าแล้ว → รถเป็น “${returnPanel.dest}” ✓`);
+                              }}
+                              className="flex-1 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg px-3 py-2">ยืนยันรับคืน</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {/* QR ต่อคัน — พิมพ์ติดรถ สแกนเปิดข้อมูลรถทันที */}
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><QrCode className="w-3.5 h-3.5" />QR รถคันนี้</p>

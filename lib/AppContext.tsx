@@ -107,6 +107,7 @@ interface AppContextType {
   addSale: (s: Sale) => void;
   updateSale: (s: Sale) => void;
   deleteSale: (saleId: string) => void;
+  returnSale: (saleId: string, opts: { forkStatus: string; reason?: string; date?: string }) => void; // ลูกค้าคืนสินค้า — เก็บประวัติดีลไว้ ตัดยอด/ค่าคอมออก
   approveStockSale: (saleId: string, by?: string) => void;   // ฝ่ายสต็อกอนุมัติคำขอจอง
   rejectStockSale: (saleId: string, reason: string, by?: string) => void; // ฝ่ายสต็อกปฏิเสธ → คืนรถ
   setActor: (name: string) => void;                          // ตั้งชื่อผู้ทำรายการ (สำหรับ audit log)
@@ -502,6 +503,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // ── รับคืนสินค้า (ลูกค้าคืน) ──────────────────────────────────────────────
+  // เก็บ record ขายเดิมไว้ครบ (ลูกค้า/เซลล์/ยอด/ใบกำกับ) แต่ติดสถานะ "คืนสินค้า"
+  // → isClosedSale=false ทำให้หลุดจากยอดขาย/ค่าคอมอัตโนมัติ · ยังโชว์ในประวัติพร้อมป้าย "คืนแล้ว"
+  const returnSale = useCallback((saleId: string, opts: { forkStatus: string; reason?: string; date?: string }) => {
+    lastLocalEditRef.current = Date.now();
+    const sale = salesRef.current.find(s => s.id === saleId);
+    if (!sale) return;
+    const when = opts.date || new Date().toISOString().slice(0, 10);
+    const fStatus = opts.forkStatus || "เคลม/รับกลับ"; // ปลายทางรถ: พร้อมขาย (ขายใหม่) หรือ เคลม/รับกลับ (พักไว้)
+    const ns: Sale = { ...sale, sale_status: "คืนสินค้า", custom_fields: { ...(sale.custom_fields || {}), "คืนสินค้าเมื่อ": when, "เหตุผลคืน": opts.reason || "", "สถานะก่อนคืน": sale.sale_status || "" } };
+    setSales(p => p.map(x => x.id === saleId ? ns : x));
+    setForklifts(p => p.map(f => f.id === sale.forklift_id ? { ...f, status: fStatus } : f));
+    if (api.apiEnabled) {
+      api.updateSaleApi(ns).catch(e => console.warn("returnSale", e));
+      const target = forkliftsRef.current.find(f => f.id === sale.forklift_id);
+      if (target) api.updateForkliftApi({ ...target, status: fStatus }).catch(e => console.warn("updateForklift", e));
+    }
+    logAudit("รับคืนสินค้า", "sale", saleId, { forklift: sale.forklift_id, model: `${sale.forklift_brand} ${sale.forklift_model}`, customer: sale.customer_name, amount: sale.actual_sale, reason: opts.reason || "", ปลายทางรถ: fStatus });
+  }, []);
+
   // ── Inspection CRUD ───────────────────────────────────────────────────────
   const addInspection = useCallback((r: InspectionRecord) => {
     lastLocalEditRef.current = Date.now();
@@ -739,7 +760,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       forklifts, sales, inspections, deletedInspections, customers, fieldConfig,
       addCustomer, updateCustomer, deleteCustomer,
       addForklift, addForkliftsBulk, updateForklift, deleteForklift,
-      addSale, updateSale, deleteSale, approveStockSale, rejectStockSale, setActor,
+      addSale, updateSale, deleteSale, returnSale, approveStockSale, rejectStockSale, setActor,
       exportData, importData,
       addInspection, deleteInspection, restoreInspection, purgeInspection,
       refresh,
