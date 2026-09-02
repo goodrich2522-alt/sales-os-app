@@ -46,6 +46,40 @@ function notSellableReason(status: unknown): string | null {
   return null; // อื่นๆ (เช่น สั่งผลิต) → ขายล่วงหน้าได้ คงพฤติกรรมเดิม
 }
 const isSellable = (f: { status?: unknown }) => notSellableReason(f?.status) === null;
+
+// แถบความคืบหน้าดีล — 4 สเต็ป: จอง → มัดจำ → รอส่ง/ไฟแนนซ์ → ปิดการขาย (ไฮไลต์สเต็ปปัจจุบันจากสถานะ)
+function DealProgress({ status }: { status?: string }) {
+  const s = String(status ?? "").trim();
+  const STAGES = [
+    { label: "จอง", re: /จอง|รอโอน/ },
+    { label: "มัดจำ", re: /มัดจำ/ },
+    { label: "รอส่ง", re: /รอจัดส่ง|ไฟแนนซ์/ },
+    { label: "ปิดการขาย", re: /ปิดการขาย|จัดส่งแล้ว|ส่งมอบ|ขายแล้ว/ },
+  ];
+  let cur = -1;
+  for (let i = STAGES.length - 1; i >= 0; i--) { if (STAGES[i].re.test(s)) { cur = i; break; } }
+  const isFinance = /ไฟแนนซ์/.test(s);
+  return (
+    <div className="flex items-start bg-slate-50 border border-slate-100 rounded-xl px-2 py-2.5">
+      {STAGES.map((st, i) => {
+        const done = i < cur, active = i === cur;
+        const label = i === 2 && isFinance ? "รอไฟแนนซ์" : st.label;
+        return (
+          <div key={i} className="flex-1 flex flex-col items-center">
+            <div className="flex items-center w-full">
+              <div className={`h-0.5 flex-1 ${i === 0 ? "invisible" : i <= cur ? "bg-emerald-400" : "bg-slate-200"}`} />
+              <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${done ? "bg-emerald-500 text-white" : active ? "bg-indigo-600 text-white ring-2 ring-indigo-200" : "bg-slate-200 text-slate-400"}`}>
+                {done ? "✓" : i + 1}
+              </div>
+              <div className={`h-0.5 flex-1 ${i === STAGES.length - 1 ? "invisible" : i < cur ? "bg-emerald-400" : "bg-slate-200"}`} />
+            </div>
+            <span className={`mt-1 text-[10px] font-semibold text-center leading-tight ${active ? "text-indigo-700" : done ? "text-emerald-600" : "text-slate-400"}`}>{label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 // จับคู่รูป inspection กับรถ — เทียบทั้ง SN และ id (รถสั่งผลิตแนบรูปตอนยังไม่มี SN จะผูกด้วย id เช่น EPZL260808#1)
 const insMatches = (unitNo: unknown, sn?: unknown, id?: unknown) => {
   const u = String(unitNo ?? "").trim().toUpperCase();
@@ -1441,6 +1475,11 @@ export default function SalesMain() {
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">
+                  {/* แถบความคืบหน้าดีล — เฉพาะดีลที่อยู่ในขั้นจอง/มัดจำ/รอ อยู่แล้ว */}
+                  {(() => {
+                    const ps = editingSale?.sale_status || (selected.status && selected.status !== "พร้อมขาย" ? selected.status : "");
+                    return ps ? <DealProgress status={ps} /> : null;
+                  })()}
                   {/* Stock price only */}
                   <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3">
                     <p className="text-xs text-indigo-500 font-medium">ราคาต้นทุน</p>
@@ -2072,6 +2111,8 @@ export default function SalesMain() {
               <button onClick={() => { setDetailSale(null); setDetailLightboxIdx(null); }} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl p-2"><X className="w-5 h-5" /></button>
             </div>
             <div className="overflow-y-auto flex-1 min-h-0 p-5 flex flex-col gap-3">
+              {/* แถบความคืบหน้าดีล */}
+              <DealProgress status={detailSale.sale_status} />
               {/* Status badge */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-xs font-bold px-3 py-1 rounded-full border ${SALE_STATUS_BADGE[detailSale.sale_status ?? "ขายแล้ว"]}`}>
