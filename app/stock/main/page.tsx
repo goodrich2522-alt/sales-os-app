@@ -149,6 +149,14 @@ export default function StockMain() {
   const [ackedIds, setAckedIds]   = useState<Set<string>>(new Set());
   const [ackReady, setAckReady]   = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
+  // "อ่านแล้ว" ของศูนย์แจ้งเตือน (รอบเช็ค/รถค้าง) — เก็บ id ที่อ่านแล้วต่อหมวด ใน localStorage · ข้อมูล/ลิสต์ยังอยู่ครบ
+  const [alertReads, setAlertReads] = useState<{ warranty: string[]; aging: string[] }>({ warranty: [], aging: [] });
+  useEffect(() => { try { const r = localStorage.getItem("stock_alert_reads"); if (r) { const p = JSON.parse(r); setAlertReads({ warranty: p.warranty ?? [], aging: p.aging ?? [] }); } } catch {} }, []);
+  const markAlertRead = (cat: "warranty" | "aging", ids: string[]) => setAlertReads(prev => {
+    const next = { ...prev, [cat]: [...new Set([...prev[cat], ...ids])] };
+    try { localStorage.setItem("stock_alert_reads", JSON.stringify(next)); } catch {}
+    return next;
+  });
   const [confirmAllImport, setConfirmAllImport] = useState(false); // ยืนยันนำเข้าทั้งหมด (2 จังหวะกันพลาด)
 
   // Settings modal state
@@ -855,13 +863,18 @@ export default function StockMain() {
       .sort((a, b) => (a.left ?? 0) - (b.left ?? 0)); // เกินมากสุดก่อน
   }, [sales]);
   // ── ศูนย์แจ้งเตือนรวม — นับรอบเช็ครับประกันที่เกิน/ใกล้ถึง + ยอดรวมทุกหมวด ──
-  const warrantyDueCount = useMemo(() => {
-    let n = 0;
-    forklifts.forEach(f => { const svc = parseSvc(f); if (!svc) return; const nd = nextDue(svc); if (!nd) return; const d = daysUntil(nd.due); if (d != null && d <= SVC_SOON_DAYS) n++; });
-    return n;
+  // id ของรถที่ถึงรอบเช็ค (เกิน/ใกล้ถึง) — ใช้ทั้งนับและทำ "อ่านแล้ว"
+  const warrantyDueIds = useMemo(() => {
+    const ids: string[] = [];
+    forklifts.forEach(f => { const svc = parseSvc(f); if (!svc) return; const nd = nextDue(svc); if (!nd) return; const d = daysUntil(nd.due); if (d != null && d <= SVC_SOON_DAYS) ids.push(String(f.id)); });
+    return ids;
   }, [forklifts]); // eslint-disable-line react-hooks/exhaustive-deps
+  const agingIds = useMemo(() => agingRows.filter(r => (r.days ?? 0) > 90).map(r => String(r.f.id)), [agingRows]);
+  // "อ่านแล้ว" ต่อหมวด (เก็บ id ใน localStorage) — ตัดออกจากตัวเลขแจ้งเตือน แต่ลิสต์ยังอยู่ครบดูย้อนหลังได้
+  const warrantyDueCount = warrantyDueIds.filter(id => !alertReads.warranty.includes(id)).length;
+  const agingUnread = agingIds.filter(id => !alertReads.aging.includes(id)).length;
   const overdueMTO = madeToOrderAlerts.filter(x => (x.left ?? 0) < 0); // เกินกำหนดแล้ว → เด้งกระดิ่ง (ข)
-  const notifTotal = pendingAlerts.length + waiting + warrantyDueCount + agingOver90 + overdueMTO.length;
+  const notifTotal = pendingAlerts.length + waiting + warrantyDueCount + agingUnread + overdueMTO.length;
 
   // Settings — standard dropdown handlers
   const saveOption = () => {
@@ -1550,22 +1563,22 @@ export default function StockMain() {
                 </button>
               )}
               {warrantyDueCount > 0 && (
-                <button onClick={() => { setShowAlerts(false); router.push("/dashboard/warranty"); }}
+                <button onClick={() => { markAlertRead("warranty", warrantyDueIds); setShowAlerts(false); router.push("/dashboard/warranty"); }}
                   className="text-left flex items-center gap-2.5 bg-teal-50 border border-teal-200 rounded-xl p-2.5 hover:border-teal-300">
                   <span className="text-lg flex-shrink-0">🔧</span>
                   <div className="flex-1 min-w-0"><p className="text-xs font-bold text-teal-800">รอบเช็ครับประกัน</p><p className="text-[11px] text-teal-600">{warrantyDueCount} คัน เกิน/ใกล้ถึงกำหนด</p></div>
                   <ChevronRight className="w-4 h-4 text-teal-400 flex-shrink-0" />
                 </button>
               )}
-              {agingOver90 > 0 && (
-                <button onClick={() => { setShowAlerts(false); setListView("aging"); }}
+              {agingUnread > 0 && (
+                <button onClick={() => { markAlertRead("aging", agingIds); setShowAlerts(false); setListView("aging"); }}
                   className="text-left flex items-center gap-2.5 bg-amber-50 border border-amber-200 rounded-xl p-2.5 hover:border-amber-300">
                   <span className="text-lg flex-shrink-0">⏳</span>
-                  <div className="flex-1 min-w-0"><p className="text-xs font-bold text-amber-800">รถค้างสต็อกนาน</p><p className="text-[11px] text-amber-600">{agingOver90} คัน ค้าง &gt; 90 วัน</p></div>
+                  <div className="flex-1 min-w-0"><p className="text-xs font-bold text-amber-800">รถค้างสต็อกนาน</p><p className="text-[11px] text-amber-600">{agingUnread} คัน ค้าง &gt; 90 วัน</p></div>
                   <ChevronRight className="w-4 h-4 text-amber-400 flex-shrink-0" />
                 </button>
               )}
-              {(waiting > 0 || warrantyDueCount > 0 || agingOver90 > 0) && (overdueMTO.length > 0 || pendingAlerts.length > 0) && <div className="h-px bg-slate-100 my-0.5" />}
+              {(waiting > 0 || warrantyDueCount > 0 || agingUnread > 0) && (overdueMTO.length > 0 || pendingAlerts.length > 0) && <div className="h-px bg-slate-100 my-0.5" />}
               {/* ข: รถสั่งผลิตเกินกำหนด เด้งในกระดิ่ง */}
               {overdueMTO.length > 0 && (
                 <div className="flex flex-col gap-1.5">
