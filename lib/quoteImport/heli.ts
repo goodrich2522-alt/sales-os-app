@@ -79,7 +79,8 @@ export function parseHeli(rawText: string): QuoteParseResult {
 
     if (sns.length === 0) {
       // ไม่มี SN (รถสั่งผลิต/ยังไม่ออก SN) → อ่านจำนวน (qty) ท้ายรายการ สร้าง placeholder ตามจำนวน
-      const qty = Number(seg.match(/THB[\d.,\s]+THB[\d.,\s]+(\d{1,2})\s+THB/)?.[1]) || 1;
+      // qty = เลขระหว่าง "ราคาต่อหน่วย THB x.xx" กับ "ยอดรวม THB y.yy" (เดิม [\d.,\s]+ greedy กิน qty → ได้ 0 ผิด)
+      const qty = Number(seg.match(/THB\s*[\d,]+\.\d{2}\s+(\d{1,3})\s+THB\s*[\d,]+\.\d{2}/)?.[1]) || 1;
       for (let q = 0; q < qty; q++) vehicles.push(build(undefined));
     } else {
       sns.forEach((sn) => vehicles.push(build(sn)));
