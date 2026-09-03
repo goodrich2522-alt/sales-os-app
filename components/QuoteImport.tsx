@@ -25,6 +25,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
   const [done, setDone] = useState(false);           // บันทึกเสร็จแล้ว → แสดงหน้าสรุป
   const [receivedDate, setReceivedDate] = useState(""); // วันรับรถเข้า — ใส่ให้ทั้งล็อตตอนบันทึก
   const [orderDate, setOrderDate] = useState("");       // วันสั่งซื้อรถ (วันสั่งรถ) — ใส่ให้ทั้งล็อตตอนบันทึก
+  const [lotStatus, setLotStatus] = useState<"auto" | "รอรับ" | "พร้อมขาย">("auto"); // สถานะเริ่มต้นของทั้งล็อต (auto = ตามแบรนด์)
 
   const existingIds = new Set(forklifts.map((f) => String(f.id)));
 
@@ -105,7 +106,11 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
   // เพิ่มรถเอง (กรอกมือ) — สำรองกรณีอ่านไฟล์ PDF ไม่ได้ / เอกสารรูปแบบไม่รองรับ
   const addBlankRow = () => setRows((r) => [...r, { brand: "HELI", model: "", SN: "", vendor: "unknown", flags: ["เพิ่มเอง — ตรวจข้อมูลให้ครบ"] }]);
 
-  const toForklift = (v: ParsedVehicle, i: number): Forklift => ({
+  const toForklift = (v: ParsedVehicle, i: number): Forklift => {
+    // สถานะเริ่มต้น: เลือกเอง (รอรับ/พร้อมขาย) หรือ auto → STAXX/CNC มาเป็นตู้ทั้งล็อต ลงวันรับแล้วขายได้เลย · แบรนด์อื่นต้องผ่านผู้รับรถ = รอรับ
+    const finalStatus = lotStatus !== "auto" ? lotStatus
+      : ((/^(STAXX|CNC)$/i.test(v.brand) && receivedDate) ? "พร้อมขาย" : "รอรับ");
+    return {
     // id: SN จริง > เลข PI ที่คนกรอก > รหัสอ้างอิงนำเข้าจริง > "PI" (กันชนกัน + ไม่โชว์ "#PI" เปล่า)
     id: v.SN || `${v.pi_no || v.import_ref || "PI"}#${i + 1}`,
     SN: v.SN || "",
@@ -113,10 +118,10 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
     capacity: v.capacity || "", capacity_kg: v.capacity_kg || "",
     height: v.height || "", fuel: v.fuel || "",
     cost_price: Number(v.cost_price) || 0, stock_price: 0,
-    // STAXX/CNC ไม่มีขั้นตอนผู้รับรถ (มาเป็นตู้คอนเทนเนอร์ทั้งล็อต) → ลงวันรับรถแล้วขายได้เลย
-    status: (/^(STAXX|CNC)$/i.test(v.brand) && receivedDate) ? "พร้อมขาย" : "รอรับ",
+    status: finalStatus,
     created_at: today(),
-    received_date: receivedDate || undefined, // วันรับรถเข้า (ทั้งล็อต) — ถ้าไม่กรอกเว้นว่าง
+    // "พร้อมขาย" ควรมีวันรับรถ → ถ้าไม่กรอกใช้วันนี้ · "รอรับ" ใช้ค่าที่กรอก (เว้นว่างได้ ค่อยเติมตอนรับ)
+    received_date: receivedDate || (finalStatus === "พร้อมขาย" ? today() : undefined),
     vehicle_category: categorizeModel(v.model),
     pi_no: v.pi_no || undefined,   // เว้นว่างสำหรับใบเสนอราคา — เติมเลข PI จริงทีหลัง
     custom_fields: {
@@ -127,7 +132,8 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
       ...(orderDate ? { "วันสั่งรถ": orderDate } : {}), // วันสั่งซื้อรถ (ทั้งล็อต)
       ชีตต้นทาง: "ใบเสนอราคา",
     },
-  } as Forklift);
+  } as Forklift;
+  };
 
   const save = () => {
     // กัน SN ซ้ำ: ถ้ามีในสต็อกแล้ว หรือซ้ำภายในชุดเดียวกัน → ข้าม (ไม่นำเข้าครั้งที่ 2)
@@ -175,7 +181,7 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
           {done ? (
             <div className="text-center py-10 text-emerald-700">
               <CheckCircle className="w-12 h-12 mx-auto mb-3" />
-              <p className="font-bold">บันทึกเข้าสต็อกแล้ว {saved} คัน (สถานะ "รอรับ")</p>
+              <p className="font-bold">บันทึกเข้าสต็อกแล้ว {saved} คัน{lotStatus === "รอรับ" ? " (สถานะ \"รอรับ\")" : lotStatus === "พร้อมขาย" ? " (สถานะ \"พร้อมขาย\")" : " (สถานะตามแบรนด์)"}</p>
               {skipped > 0 && (
                 <p className="text-sm text-amber-600 mt-1">
                   ข้าม {skipped} คัน — <b>SN ซ้ำกับที่มีในสต็อกแล้ว</b> ไม่นำเข้าซ้ำ<br />
@@ -237,6 +243,25 @@ export function QuoteImport({ onClose }: { onClose: () => void }) {
                       className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white" />
                     {receivedDate && <button onClick={() => setReceivedDate("")} className="text-xs text-slate-400 hover:text-red-500">ล้าง</button>}
                     <span className="text-[11px] text-slate-400">ใส่ให้รถทุกคันในล็อตนี้</span>
+                  </div>
+                  {/* สถานะเริ่มต้นของทั้งล็อต — เลือกได้ว่าจะให้ต้องผ่านผู้รับรถ (รอรับ) หรือพร้อมขายเลย */}
+                  <div className="flex items-center gap-2 bg-sky-50/60 border border-sky-100 rounded-xl px-3 py-2.5 flex-wrap">
+                    <label className="text-sm font-semibold text-slate-700 flex items-center gap-1.5 whitespace-nowrap">🏷️ สถานะเริ่มต้น (ทั้งล็อต)</label>
+                    <div className="flex gap-1.5">
+                      {([
+                        ["auto", "อัตโนมัติ"],
+                        ["รอรับ", "รอรับ (ผ่านผู้รับรถ)"],
+                        ["พร้อมขาย", "พร้อมขายเลย"],
+                      ] as const).map(([val, label]) => (
+                        <button key={val} onClick={() => setLotStatus(val)}
+                          className={`text-xs font-bold rounded-lg px-2.5 py-1.5 border transition-all ${lotStatus === val ? "bg-sky-600 text-white border-sky-600" : "bg-white text-slate-600 border-slate-200 hover:border-sky-300"}`}>{label}</button>
+                      ))}
+                    </div>
+                    <span className="text-[11px] text-slate-400">
+                      {lotStatus === "auto" ? "STAXX/CNC (มีวันรับ) → พร้อมขาย · แบรนด์อื่น → รอรับ"
+                        : lotStatus === "รอรับ" ? "ทุกคันต้องให้ผู้รับรถถ่ายรูปรับก่อนขึ้นขาย"
+                        : "ทุกคันขึ้นขายทันที (ข้ามขั้นตอนรับรถ) — ใช้เมื่อรถอยู่ในคลังพร้อมแล้ว"}
+                    </span>
                   </div>
                   {/* การ์ดต่อคัน — ช่องกว้าง มีป้ายกำกับ อ่าน/แก้ง่ายกว่าตารางแคบ */}
                   <div className="flex flex-col gap-3">
