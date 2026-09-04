@@ -16,6 +16,7 @@ import { useApp } from "@/lib/AppContext";
 import { driveImg } from "@/lib/img";
 import { isPendingId, displayCode } from "@/lib/productId";
 import { STATUS_BADGE, SALE_STATUS_BADGE, CONTACT_SOURCE_COLORS, VEHICLE_CATS, paymentBadgeClass, sameStaff, canonicalStaff } from "@/lib/constants";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { WarrantyBlock } from "@/components/WarrantyBlock";
 import { parseSvc, nextDue, SVC_SOON_DAYS } from "@/lib/warranty";
 import { formatBaht } from "@/lib/format";
@@ -1144,7 +1145,7 @@ export default function SalesMain() {
               </div>
               {editingTarget ? (
                 <div className="flex items-center gap-2">
-                  <input type="number" value={targetInput} onChange={e => setTargetInput(e.target.value)}
+                  <MoneyInput value={targetInput} onChange={v => setTargetInput(v)}
                     onKeyDown={e => { if (e.key === "Enter") handleUpdateTarget(); if (e.key === "Escape") setEditingTarget(false); }} autoFocus
                     className="w-32 text-right bg-white/20 border border-white/30 rounded-lg px-2 py-1 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/50" placeholder="ตั้งเป้า..." />
                   <button onClick={handleUpdateTarget} className="bg-white/20 hover:bg-white/30 text-white rounded-lg p-1.5"><Check className="w-4 h-4" /></button>
@@ -1740,8 +1741,8 @@ export default function SalesMain() {
                       </SField>
                     )}
                     <div className="grid grid-cols-2 gap-3">
-                      <SField label="ราคาขายจริง (฿) *" error={errors.actual_sale}><input type="number" value={form.actual_sale} onChange={e => setForm({ ...form, actual_sale: e.target.value })} placeholder="บาท" className={si(errors.actual_sale)} /></SField>
-                      <SField label="มัดจำ (฿)" error=""><input type="number" value={form.deposit} onChange={e => setForm({ ...form, deposit: e.target.value })} placeholder="บาท" className={si("")} /></SField>
+                      <SField label="ราคาขายจริง (฿) *" error={errors.actual_sale}><MoneyInput value={form.actual_sale} onChange={v => setForm({ ...form, actual_sale: v })} placeholder="บาท" className={si(errors.actual_sale)} /></SField>
+                      <SField label="มัดจำ (฿)" error=""><MoneyInput value={form.deposit} onChange={v => setForm({ ...form, deposit: v })} placeholder="บาท" className={si("")} /></SField>
                     </div>
                     <SField label="วันส่งมอบ *" error={errors.delivery_date}><input type="date" value={form.delivery_date} onChange={e => setForm({ ...form, delivery_date: e.target.value })} className={si(errors.delivery_date)} /></SField>
                     {/* วันที่รับเงินเข้าบัญชี — กำหนดงวดจ่ายค่าคอม (ยังไม่รับเงิน = เว้นว่าง → ค่าคอมรอรับเงิน) */}
@@ -1917,7 +1918,7 @@ export default function SalesMain() {
                             )}
                             <div className="flex items-center gap-2">
                               <span className="text-sm text-slate-600 flex-shrink-0">ค่าขนส่ง (บาท)</span>
-                              <input type="number" value={shippingCost} onChange={e => setShippingCost(e.target.value)} placeholder="0"
+                              <MoneyInput value={shippingCost} onChange={v => setShippingCost(v)} placeholder="0"
                                 className="w-24 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
                             </div>
                           </div>
@@ -1949,7 +1950,7 @@ export default function SalesMain() {
                           <option value="">เลือกอุปกรณ์...</option>
                           {ADDON_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
-                        <input type="number" value={newAddon.price} onChange={e => setNewAddon({ ...newAddon, price: e.target.value })}
+                        <MoneyInput value={newAddon.price} onChange={v => setNewAddon({ ...newAddon, price: v })}
                           placeholder="ราคา" className="w-20 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
                         <button type="button" onClick={() => { if (newAddon.name && newAddon.price) { setAddOns([...addOns, { name: newAddon.name, price: Number(newAddon.price) }]); setNewAddon({ name: "", price: "" }); } }}
                           className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 text-sm font-bold flex-shrink-0">เพิ่ม</button>

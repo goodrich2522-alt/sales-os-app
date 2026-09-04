@@ -39,12 +39,14 @@ function InspectionsPageInner() {
   }, [forklifts]);
   const filtered = useMemo(() => {
     const kw = q.trim().toLowerCase();
-    if (!kw) return inspections;
-    return inspections.filter(r => {
+    const base = !kw ? inspections : inspections.filter(r => {
       const f = fkByUnit.get(String(r.unit_no ?? "").toUpperCase());
       return [r.unit_no, f?.model, f?.brand, f?.pi_no, r.transporter_name, r.date, r.role, r.delivery_company]
         .some(v => String(v ?? "").toLowerCase().includes(kw));
     });
+    // เรียงรับรถล่าสุดอยู่บนสุด — วันที่มากไปน้อย · วันเดียวกันใช้ id (ins_<เวลา>) ตัดสิน
+    return [...base].sort((a, b) =>
+      String(b.date ?? "").localeCompare(String(a.date ?? "")) || String(b.id ?? "").localeCompare(String(a.id ?? "")));
   }, [inspections, fkByUnit, q]);
 
   const handleDelete = (id: string) => { deleteInspection(id); setDeleteConfirm(null); if (detail?.id === id) closeDetail(); };

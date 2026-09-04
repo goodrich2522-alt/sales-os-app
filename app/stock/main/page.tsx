@@ -16,6 +16,7 @@ import { thaiMonthShort, today } from "@/lib/format";
 import { Lightbox } from "@/components/ui/Lightbox";
 import { Chip } from "@/components/ui/Chip";
 import { StatusBadge } from "@/components/ui/Badge";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { VEHICLE_CATS, CatFilter, categorizeModel, staffLabel, SALE_STATUS_BADGE, saleStatusGroup, SALE_STATUS_FILTER_GROUPS, SALE_STATUS_OPTIONS } from "@/lib/constants";
 import { QuoteImport } from "@/components/QuoteImport";
 import { parseForkliftCsv, assignIdsAndStamp, buildCsvTemplate } from "@/lib/forkliftCsv";
@@ -2338,21 +2339,21 @@ export default function StockMain() {
                         <label className="text-[11px] text-slate-500 col-span-2">เลขที่ PI (ใบสั่งซื้อ)
                           <input type="text" value={finEdit.pi} onChange={e => { setFinEdit({ ...finEdit, pi: e.target.value }); setFinSaved(false); }} placeholder="เช่น PI034 / C6907-001" className={inp} /></label>
                         <label className="text-[11px] text-slate-500">ต้นทุน (บาท)
-                          <input type="number" value={finEdit.cost} onChange={e => { setFinEdit({ ...finEdit, cost: e.target.value }); setFinSaved(false); }} className={inp} /></label>
+                          <MoneyInput value={finEdit.cost} onChange={v => { setFinEdit({ ...finEdit, cost: v }); setFinSaved(false); }} className={inp} /></label>
                         <label className="text-[11px] text-slate-500">ราคาขายจริง (บาท)
-                          <input type="number" value={finEdit.sale} onChange={e => { setFinEdit({ ...finEdit, sale: e.target.value }); setFinSaved(false); }} className={inp} /></label>
+                          <MoneyInput value={finEdit.sale} onChange={v => { setFinEdit({ ...finEdit, sale: v }); setFinSaved(false); }} className={inp} /></label>
                         <label className="text-[11px] text-slate-500">ค่าขนส่งจริง (บาท)
-                          <input type="number" value={finEdit.ship} onChange={e => { setFinEdit({ ...finEdit, ship: e.target.value }); setFinSaved(false); }} className={inp} /></label>
+                          <MoneyInput value={finEdit.ship} onChange={v => { setFinEdit({ ...finEdit, ship: v }); setFinSaved(false); }} className={inp} /></label>
                         <label className="text-[11px] text-slate-500">ทุนอุปกรณ์/งาเท (บาท)
-                          <input type="number" value={finEdit.addon} onChange={e => { setFinEdit({ ...finEdit, addon: e.target.value }); setFinSaved(false); }} className={inp} /></label>
+                          <MoneyInput value={finEdit.addon} onChange={v => { setFinEdit({ ...finEdit, addon: v }); setFinSaved(false); }} className={inp} /></label>
                         <label className="text-[11px] text-slate-500 col-span-2">ของแถม (บาท) — หักออกจากกำไร
                           <div className="flex gap-1.5 items-center mt-0.5">
-                            <input type="number" value={finEdit.freebie} onChange={e => { setFinEdit({ ...finEdit, freebie: e.target.value }); setFinSaved(false); }} placeholder="ปกติ 2,800" className={inp + " mt-0"} />
+                            <MoneyInput value={finEdit.freebie} onChange={v => { setFinEdit({ ...finEdit, freebie: v }); setFinSaved(false); }} placeholder="ปกติ 2,800" className={inp + " mt-0"} />
                             <button type="button" onClick={() => { setFinEdit({ ...finEdit, freebie: "2800" }); setFinSaved(false); }}
                               className="flex-shrink-0 text-[11px] font-bold text-violet-700 bg-violet-100 hover:bg-violet-200 border border-violet-200 rounded-lg px-2.5 py-1.5 whitespace-nowrap">ใส่ 2,800</button>
                           </div></label>
                         <label className="text-[11px] text-slate-500 col-span-2">กำไรที่บันทึกในไฟล์ (บาท · ไม่บังคับ)
-                          <input type="number" value={finEdit.profit} onChange={e => { setFinEdit({ ...finEdit, profit: e.target.value }); setFinSaved(false); }} className={inp} /></label>
+                          <MoneyInput value={finEdit.profit} onChange={v => { setFinEdit({ ...finEdit, profit: v }); setFinSaved(false); }} className={inp} /></label>
                       </div>
                       <button onClick={() => {
                           const ncf = { ...(it.custom_fields || {}) } as Record<string, string>;

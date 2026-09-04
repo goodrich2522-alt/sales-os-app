@@ -7,6 +7,7 @@ import {
   User, AlertCircle, Award, Calendar, Lock, Unlock, X,
 } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import {
   calcCommission, isClosedSale, closeMonth, closeDate,
   commissionMonth, isCommPending, dealProfit,
@@ -723,7 +724,7 @@ function DealDetailModal({ sale, forklift, comm, resigned, locked, onSave, onClo
             <p className="text-[11px] font-bold text-slate-500">⚙️ ปรับค่าคอมดีลนี้</p>
             <label className="text-xs text-slate-600 flex flex-col gap-1">
               ค่าคอมกำหนดเอง (บาท) — ใส่เมื่อสูตร/เรตพิเศษไม่ตรงที่บริษัทจ่ายจริง · เว้นว่าง = คิดตามสูตรอัตโนมัติ
-              <input type="text" inputMode="numeric" value={manual} onChange={e => setManual(e.target.value)}
+              <MoneyInput value={manual} onChange={v => setManual(v)}
                 placeholder={`อัตโนมัติ = ฿${n(comm.amount)}`}
                 className="border border-amber-300 rounded-lg px-3 py-2 text-sm font-bold text-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-400" />
             </label>
