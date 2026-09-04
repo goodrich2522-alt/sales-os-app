@@ -174,6 +174,7 @@ function InspectionsPageInner() {
               <InspectionCard
                 key={rec.id}
                 rec={rec}
+                fk={fkByUnit.get(String(rec.unit_no ?? "").toUpperCase())}
                 onOpen={() => openDetail(rec)}
                 onDelete={() => setDeleteConfirm(rec.id)}
                 deleteConfirm={deleteConfirm === rec.id}
@@ -387,9 +388,10 @@ function InspectionsPageInner() {
 
 // ── Inspection Card Component ──────────────────────────────────────────────────
 function InspectionCard({
-  rec, onOpen, onDelete, deleteConfirm, onDeleteConfirm, onDeleteCancel
+  rec, fk, onOpen, onDelete, deleteConfirm, onDeleteConfirm, onDeleteCancel
 }: {
   rec: InspectionRecord;
+  fk?: Forklift;   // รถจริงจากสต็อก (เอา PI/ยี่ห้อ/รุ่นจริงมาโชว์)
   onOpen: () => void;
   onDelete: () => void;
   deleteConfirm: boolean;
@@ -397,6 +399,9 @@ function InspectionCard({
   onDeleteCancel: () => void;
 }) {
   const specs = mockTransporterData[rec.unit_no];
+  const brand = fk?.brand ?? specs?.brand;
+  const model = fk?.model ?? specs?.model;
+  const pi = fk?.pi_no;
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-shadow duration-200 group">
@@ -429,11 +434,12 @@ function InspectionCard({
         <button onClick={onOpen} className="text-left">
           <div className="flex items-start justify-between">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <div className="bg-amber-100 rounded-lg p-1"><Truck className="w-3.5 h-3.5 text-amber-600" /></div>
                 <span className="font-bold text-slate-800">{rec.unit_no}</span>
+                {pi && <span className="text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-100 px-1.5 py-0.5 rounded-full">PI {pi}</span>}
               </div>
-              {specs && <p className="text-xs text-slate-500 mt-1">{specs.brand} {specs.model} · {specs.capacity}</p>}
+              {(brand || model) && <p className="text-xs text-slate-500 mt-1">{brand} {model}{specs?.capacity ? ` · ${specs.capacity}` : ""}</p>}
             </div>
             <span className="text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full flex-shrink-0">
               {rec.images.length} รูป
