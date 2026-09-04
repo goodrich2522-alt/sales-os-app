@@ -252,16 +252,10 @@ export default function StockMain() {
     } finally { setPhotoBusy(false); }
   };
 
-  // ── ฝ่ายสต็อกกดรับรถแทนผู้ขนส่ง (ลงข้อมูลเก่า) — รอรับ → พร้อมขาย + ตั้งวันรับ + สร้าง inspection ถ้ายังไม่มี ──
+  // ── ฝ่ายสต็อกกดรับรถแทนผู้ขนส่ง — รอรับ → พร้อมขาย + ตั้งวันรับ ──
+  // ⚠️ ไม่สร้าง record รับเปล่า (ไม่มีรูป) อีกต่อไป — รูปรับรถต้องมาจากผู้ขนส่งไปรับจริง
+  //    หรือฝ่ายสต็อกใช้ปุ่ม "บันทึกรับรถย้อนหลัง" (ที่แนบรูปจริง) แทน
   const receiveInStock = (target: Forklift) => {
-    const key = String(target.SN || target.id).toUpperCase();
-    const idKey = String(target.id).toUpperCase();
-    const hasRecv = inspections.some(r => {
-      const u = String(r.unit_no ?? "").toUpperCase();
-      return (u === key || u === idKey) && (r.role ?? "ผู้รับรถ") === "ผู้รับรถ";
-    });
-    // ยังไม่มีบันทึกผู้รับ → สร้างให้ (ระบุว่าฝ่ายสต็อกรับแทน) · ถ้าแนบรูปไว้แล้วจะมี inspection อยู่แล้ว
-    if (!hasRecv) addInspection({ id: `ins_stock_${Date.now()}`, unit_no: target.SN || target.id, transporter_name: `${username} (สต็อก)`, date: today(), images: [], role: "ผู้รับรถ" });
     // รถที่ติดจอง/มัดจำ/ไฟแนนซ์ไว้แล้ว → คงสถานะเดิม (กันขายซ้ำ) · รถทั่วไป → พร้อมขาย
     const cur = String(target.status || "").trim();
     const keepStatus = /จอง|มัดจำ|ไฟแนนซ์/.test(cur);
