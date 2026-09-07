@@ -523,6 +523,7 @@ function DailyReport({ daily, pending, fromDate, toDate, setFromDate, setToDate,
   daily: DailyData; pending: PendingData; fromDate: string; toDate: string;
   setFromDate: (v: string) => void; setToDate: (v: string) => void; onExport: () => void;
 }) {
+  const [openPis, setOpenPis] = useState<Set<string>>(new Set()); // PI ที่กางดูรายคันในรายการค้างรับ
   const thisMonth = () => { const d = new Date(); const m = d.toISOString().slice(0, 7); setFromDate(`${m}-01`); setToDate(new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10)); };
   const inp = "border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white";
   return (
@@ -551,25 +552,42 @@ function DailyReport({ daily, pending, fromDate, toDate, setFromDate, setToDate,
         {pending.total === 0 ? (
           <p className="text-xs text-slate-400 mt-1">✅ ไม่มีรถค้างรับ — รับเข้าครบทุกคันแล้ว</p>
         ) : (
-          <div className="flex flex-col gap-2 mt-2">
-            {pending.byPi.map(([pi, cars]) => (
-              <div key={pi} className="bg-white border border-amber-100 rounded-lg p-2.5">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="text-[11px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full">PI {pi}</span>
-                  <span className="text-[11px] font-semibold text-slate-500">{cars.length} คัน</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  {cars.map(({ f, wait }) => (
-                    <div key={f.id} className="flex items-center gap-2 text-[11px] flex-wrap">
-                      <span className="font-bold text-slate-700">{f.SN ? f.SN : `#${displayCode(f)}`}</span>
-                      <span className="text-slate-500">{f.brand} {f.model}</span>
-                      {wait != null && <span className={`ml-auto font-semibold ${wait > 30 ? "text-red-600" : "text-slate-400"}`}>ค้างมา {wait} วัน</span>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+          <>
+            <p className="text-[11px] text-amber-700 mb-2">รวม {pending.total} คัน · {pending.byPi.length} PI — แตะแต่ละแถวเพื่อดูรายคัน</p>
+            <div className="flex flex-col gap-1.5">
+              {pending.byPi.map(([pi, cars]) => {
+                const open = openPis.has(pi);
+                const maxWait = cars.reduce((m, c) => Math.max(m, c.wait ?? 0), 0);
+                const models = [...new Set(cars.map(c => c.f.model).filter(Boolean))];
+                const brand = cars[0]?.f.brand || "";
+                return (
+                  <div key={pi} className="bg-white border border-amber-100 rounded-lg overflow-hidden">
+                    {/* แถวสรุป PI — กดพับ/กาง */}
+                    <button onClick={() => setOpenPis(p => { const n = new Set(p); n.has(pi) ? n.delete(pi) : n.add(pi); return n; })}
+                      className="w-full flex items-center gap-2 p-2.5 text-left hover:bg-amber-50/60">
+                      <ChevronRight className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform ${open ? "rotate-90" : ""}`} />
+                      <span className="text-[11px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full flex-shrink-0">PI {pi}</span>
+                      <span className="text-xs font-bold text-slate-700 flex-shrink-0">{cars.length} คัน</span>
+                      <span className="text-[11px] text-slate-500 truncate">{brand} {models.join(", ")}</span>
+                      <span className={`ml-auto text-[11px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${maxWait > 30 ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-500"}`}>ค้างสุด {maxWait} วัน</span>
+                    </button>
+                    {/* รายคัน (กางแล้ว) */}
+                    {open && (
+                      <div className="px-2.5 pb-2.5 pt-0.5 flex flex-col gap-1 border-t border-amber-50">
+                        {cars.map(({ f, wait }) => (
+                          <div key={f.id} className="flex items-center gap-2 text-[11px] flex-wrap pl-6">
+                            <span className="font-bold text-slate-700">{f.SN ? f.SN : `#${displayCode(f)}`}</span>
+                            <span className="text-slate-500">{f.brand} {f.model}</span>
+                            {wait != null && <span className={`ml-auto font-semibold ${wait > 30 ? "text-red-600" : "text-slate-400"}`}>ค้างมา {wait} วัน</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
 
