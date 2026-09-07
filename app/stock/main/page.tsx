@@ -9,7 +9,7 @@ import {
   Download, Upload, FileText, ShoppingCart, User, QrCode, PackageCheck, ClipboardList, RotateCcw
 } from "lucide-react";
 import { Forklift, Sale, STOCK_APPROVAL_FIELD, isVoidSale } from "@/lib/types";
-import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isClosedSale } from "@/lib/commission";
+import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isClosedSale, isForkliftVehicle } from "@/lib/commission";
 import { useApp, FieldConfig } from "@/lib/AppContext";
 import { isPendingId, displayCode } from "@/lib/productId";
 import { thaiMonthShort, today } from "@/lib/format";
@@ -878,7 +878,7 @@ export default function StockMain() {
   // id ของรถที่ถึงรอบเช็ค (เกิน/ใกล้ถึง) — ใช้ทั้งนับและทำ "อ่านแล้ว"
   const warrantyDueIds = useMemo(() => {
     const ids: string[] = [];
-    forklifts.forEach(f => { const svc = parseSvc(f); if (!svc) return; const nd = nextDue(svc); if (!nd) return; const d = daysUntil(nd.due); if (d != null && d <= SVC_SOON_DAYS) ids.push(String(f.id)); });
+    forklifts.forEach(f => { if (!isForkliftVehicle(f.brand, f.model)) return; const svc = parseSvc(f); if (!svc) return; const nd = nextDue(svc); if (!nd) return; const d = daysUntil(nd.due); if (d != null && d <= SVC_SOON_DAYS) ids.push(String(f.id)); });
     return ids;
   }, [forklifts]); // eslint-disable-line react-hooks/exhaustive-deps
   const agingIds = useMemo(() => agingRows.filter(r => (r.days ?? 0) > 90).map(r => String(r.f.id)), [agingRows]);

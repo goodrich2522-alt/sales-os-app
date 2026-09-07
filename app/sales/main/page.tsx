@@ -21,7 +21,7 @@ import { WarrantyBlock } from "@/components/WarrantyBlock";
 import { parseSvc, nextDue, SVC_SOON_DAYS } from "@/lib/warranty";
 import { formatBaht } from "@/lib/format";
 import { hasActiveSession, signOutSupabase } from "@/lib/auth";
-import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isStackerModel, isOtherGroup, priorPurchaseByCustomer, toGregorian, isClosedSale, closeMonth, warrantyFilled } from "@/lib/commission";
+import { COMMISSION_FIELD, COMMISSION_CATEGORIES, isStackerModel, isOtherGroup, priorPurchaseByCustomer, toGregorian, isClosedSale, closeMonth, warrantyFilled, isForkliftVehicle } from "@/lib/commission";
 import { apiEnabled, uploadImageApi } from "@/lib/api";
 import AiAssistant from "@/components/AiAssistant";
 
@@ -555,9 +555,9 @@ export default function SalesMain() {
         const d = daysUntil(n.date);
         if (d != null && d >= 0 && d <= 7) result.push({ sale: s, type: "custom", days: d, label: n.label });
       });
-      // รอบเช็ครับประกัน (บริการหลังการขาย) — แจ้งเซลล์ผู้ขายคันนี้ · ใกล้ถึง ≤30 วัน หรือเกินกำหนด
+      // รอบเช็ครับประกัน (บริการหลังการขาย) — เฉพาะโฟล์คลิฟท์ · รถอื่น (แฮนด์ลิฟท์/สแตกเกอร์) ไม่มีรอบเซอร์วิส
       const fk = forklifts.find(f => f.id === s.forklift_id);
-      const svc = fk ? parseSvc(fk) : undefined;
+      const svc = fk && isForkliftVehicle(fk.brand, fk.model) ? parseSvc(fk) : undefined;
       const nd = svc ? nextDue(svc) : undefined;
       if (nd?.due) {
         const d = daysUntil(nd.due);

@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
 import { parseSvc, nextDue, daysUntil, SVC_SOON_DAYS, SVC_ROUNDS } from "@/lib/warranty";
+import { isForkliftVehicle } from "@/lib/commission";
 import { displayCode } from "@/lib/productId";
 import { WarrantyBlock } from "@/components/WarrantyBlock";
 import { DashboardGuard } from "@/components/DashboardGuard";
@@ -41,6 +42,7 @@ function WarrantyPageInner() {
     return forklifts.flatMap(f => {
       const svc = parseSvc(f);
       if (!svc) return [];
+      if (!isForkliftVehicle(f.brand, f.model)) return []; // รถประเภทอื่น (แฮนด์ลิฟท์/สแตกเกอร์/STAXX) ไม่มีรอบเซอร์วิส — แค่รับประกัน 1 ปี
       const nd = nextDue(svc);
       const doneCount = svc.rounds.filter(r => r.done).length;
       const days = nd ? daysUntil(nd.due, today) : null;

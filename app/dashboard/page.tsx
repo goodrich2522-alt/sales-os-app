@@ -13,6 +13,7 @@ import { displayCode } from "@/lib/productId";
 import { buildStaffMonthly, buildStaffWeekly, buildAllMonthlyWeekly } from "@/components/charts/Charts";
 import { CONTACT_SOURCE_COLORS, paymentBadgeClass, staffLabel } from "@/lib/constants";
 import { parseSvc, nextDue, daysUntil, SVC_SOON_DAYS } from "@/lib/warranty";
+import { isForkliftVehicle } from "@/lib/commission";
 import { Sale, Forklift, isVoidSale } from "@/lib/types";
 import GoogleLoginButton, { type GoogleUser } from "@/components/GoogleLoginButton";
 import { checkAccess, hasActiveSession } from "@/lib/auth";
@@ -200,7 +201,7 @@ export default function Dashboard() {
   const warrantyDueCount = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     let n = 0;
-    forklifts.forEach(f => { const svc = parseSvc(f); if (!svc) return; const nd = nextDue(svc); if (!nd) return; const d = daysUntil(nd.due, today); if (d != null && d <= SVC_SOON_DAYS) n++; });
+    forklifts.forEach(f => { if (!isForkliftVehicle(f.brand, f.model)) return; const svc = parseSvc(f); if (!svc) return; const nd = nextDue(svc); if (!nd) return; const d = daysUntil(nd.due, today); if (d != null && d <= SVC_SOON_DAYS) n++; });
     return n;
   }, [forklifts]);
 
