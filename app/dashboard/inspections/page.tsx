@@ -27,6 +27,9 @@ function InspectionsPageInner() {
   const [purgeConfirm, setPurgeConfirm]   = useState<string | null>(null);
 
   const [q, setQ] = useState("");
+  const [view, setView] = useState<"list" | "daily">("list"); // มุมมอง: แกลเลอรีรายคัน / สรุปรับรถรายวัน
+  const [fromDate, setFromDate] = useState(""); // ช่วงวันที่ของรายงานรายวัน (เว้นว่าง = ทั้งหมด)
+  const [toDate, setToDate] = useState("");
 
   const openDetail = (rec: InspectionRecord) => { setDetail(rec); setLightboxIdx(null); };
   const closeDetail = () => { setDetail(null); setLightboxIdx(null); };
@@ -48,6 +51,53 @@ function InspectionsPageInner() {
     return [...base].sort((a, b) =>
       String(b.date ?? "").localeCompare(String(a.date ?? "")) || String(b.id ?? "").localeCompare(String(a.id ?? "")));
   }, [inspections, fkByUnit, q]);
+
+  // ── สรุปการรับรถเข้าคลังรายวัน (เฉพาะ role "ผู้รับรถ") + สรุปช่วงเวลา ──
+  const daily = useMemo(() => {
+    const recv = inspections.filter(r => (r.role ?? "ผู้รับรถ") === "ผู้รับรถ");
+    const inRange = recv.filter(r => {
+      const d = String(r.date ?? "").slice(0, 10);
+      if (fromDate && d < fromDate) return false;
+      if (toDate && d > toDate) return false;
+      return true;
+    });
+    const fkOf = (r: InspectionRecord) => fkByUnit.get(String(r.unit_no ?? "").toUpperCase());
+    // จัดกลุ่มตามวัน
+    const dayMap = new Map<string, InspectionRecord[]>();
+    inRange.forEach(r => { const d = String(r.date ?? "—").slice(0, 10) || "—"; if (!dayMap.has(d)) dayMap.set(d, []); dayMap.get(d)!.push(r); });
+    const days = [...dayMap.entries()].map(([date, recs]) => {
+      const brands = new Map<string, number>();
+      const receivers = new Set<string>();
+      const pis = new Set<string>();
+      let withPhotos = 0;
+      recs.forEach(r => {
+        const fk = fkOf(r);
+        const b = fk?.brand || "—"; brands.set(b, (brands.get(b) ?? 0) + 1);
+        if (r.transporter_name) receivers.add(r.transporter_name);
+        if (fk?.pi_no) pis.add(fk.pi_no);
+        if ((r.images?.length ?? 0) > 0) withPhotos++;
+      });
+      return { date, count: recs.length, withPhotos,
+        brands: [...brands.entries()].sort((a, b) => b[1] - a[1]),
+        receivers: [...receivers], pis: [...pis], recs };
+    }).sort((a, b) => b.date.localeCompare(a.date)); // วันล่าสุดบนสุด
+    // สรุปช่วงเวลา
+    const brandTotals = new Map<string, number>(), receiverTotals = new Map<string, number>(), piTotals = new Map<string, number>();
+    inRange.forEach(r => {
+      const fk = fkOf(r);
+      brandTotals.set(fk?.brand || "—", (brandTotals.get(fk?.brand || "—") ?? 0) + 1);
+      receiverTotals.set(r.transporter_name || "—", (receiverTotals.get(r.transporter_name || "—") ?? 0) + 1);
+      if (fk?.pi_no) piTotals.set(fk.pi_no, (piTotals.get(fk.pi_no) ?? 0) + 1);
+    });
+    const busiest = days.reduce<{ date: string; count: number } | null>((m, d) => !m || d.count > m.count ? { date: d.date, count: d.count } : m, null);
+    return {
+      days, total: inRange.length, dayCount: days.length,
+      avg: days.length ? inRange.length / days.length : 0, busiest,
+      brandTotals: [...brandTotals.entries()].sort((a, b) => b[1] - a[1]),
+      receiverTotals: [...receiverTotals.entries()].sort((a, b) => b[1] - a[1]),
+      piTotals: [...piTotals.entries()].sort((a, b) => b[1] - a[1]),
+    };
+  }, [inspections, fkByUnit, fromDate, toDate]);
 
   const handleDelete = (id: string) => { deleteInspection(id); setDeleteConfirm(null); if (detail?.id === id) closeDetail(); };
   const handlePurge  = (id: string) => { purgeInspection(id); setPurgeConfirm(null); };
@@ -106,6 +156,46 @@ function InspectionsPageInner() {
     XLSX.writeFile(wb, `ประวัติรับ-ส่งรถ_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
+  // ── Export รายงานรับรถรายวัน → Excel (3 ชีต: รายวัน · รายคัน · สรุปตามแบรนด์/ผู้รับ) ──
+  const exportDailyExcel = async () => {
+    if (daily.total === 0) return;
+    const XLSX = await import("xlsx");
+    const wb = XLSX.utils.book_new();
+    // ชีต 1: สรุปรายวัน
+    const dayRows = daily.days.map(d => ({
+      "วันที่": d.date, "รับเข้ากี่คัน": d.count, "รูปครบ": d.withPhotos, "ขาดรูป": d.count - d.withPhotos,
+      "แบรนด์": d.brands.map(([b, n]) => `${b} ${n}`).join(", "),
+      "ผู้รับรถ": d.receivers.join(", "), "PI": d.pis.join(", "),
+    }));
+    const ws1 = XLSX.utils.json_to_sheet(dayRows.length ? dayRows : [{ "วันที่": "-", "รับเข้ากี่คัน": 0 }]);
+    ws1["!cols"] = [12, 12, 8, 8, 28, 22, 20].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws1, "สรุปรายวัน");
+    // ชีต 2: รายคัน (เรียงวันล่าสุด)
+    const carRows = daily.days.flatMap(d => d.recs.map(r => {
+      const fk = fkByUnit.get(String(r.unit_no ?? "").toUpperCase());
+      return {
+        "วันที่": d.date, "SN": r.unit_no ?? "", "ยี่ห้อ": fk?.brand ?? "", "รุ่น": fk?.model ?? "",
+        "PI": fk?.pi_no ?? "", "ผู้รับรถ": r.transporter_name ?? "", "จำนวนรูป": r.images?.length ?? 0,
+      };
+    }));
+    const ws2 = XLSX.utils.json_to_sheet(carRows);
+    ws2["!cols"] = [12, 16, 12, 18, 12, 20, 8].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws2, "รายคัน");
+    // ชีต 3: สรุปตามแบรนด์ / ผู้รับ
+    const sumRows = [
+      { "หัวข้อ": "— รวมทั้งช่วง —", "รายการ": "", "จำนวน (คัน)": daily.total },
+      { "หัวข้อ": "จำนวนวันที่มีรับรถ", "รายการ": "", "จำนวน (คัน)": daily.dayCount },
+      { "หัวข้อ": "เฉลี่ยต่อวัน", "รายการ": "", "จำนวน (คัน)": Math.round(daily.avg * 10) / 10 },
+      ...daily.brandTotals.map(([b, n]) => ({ "หัวข้อ": "ตามแบรนด์", "รายการ": b, "จำนวน (คัน)": n })),
+      ...daily.receiverTotals.map(([r, n]) => ({ "หัวข้อ": "ตามผู้รับรถ", "รายการ": r, "จำนวน (คัน)": n })),
+    ];
+    const ws3 = XLSX.utils.json_to_sheet(sumRows);
+    ws3["!cols"] = [18, 24, 12].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws3, "สรุปแบรนด์-ผู้รับ");
+    const range = fromDate || toDate ? `_${fromDate || "เริ่ม"}_ถึง_${toDate || "ล่าสุด"}` : "";
+    XLSX.writeFile(wb, `รายงานรับรถรายวัน${range}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
@@ -149,8 +239,17 @@ function InspectionsPageInner() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-6">
-        {/* ── ค้นหาย้อนหลัง ── */}
-        {inspections.length > 0 && (
+        {/* ── สลับมุมมอง: แกลเลอรีรายคัน / สรุปรับรถรายวัน ── */}
+        {inspections.length > 0 && !showBin && (
+          <div className="flex bg-slate-100 rounded-xl p-1 self-start">
+            <button onClick={() => setView("list")}
+              className={`text-xs font-bold px-4 py-1.5 rounded-lg transition-all ${view === "list" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>แกลเลอรีรายคัน</button>
+            <button onClick={() => setView("daily")}
+              className={`text-xs font-bold px-4 py-1.5 rounded-lg transition-all ${view === "daily" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>📅 สรุปรับรถรายวัน</button>
+          </div>
+        )}
+        {/* ── ค้นหาย้อนหลัง (เฉพาะมุมมองรายคัน) ── */}
+        {inspections.length > 0 && view === "list" && !showBin && (
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input value={q} onChange={e => setQ(e.target.value)}
@@ -159,8 +258,12 @@ function InspectionsPageInner() {
             {q && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{filtered.length} รายการ</span>}
           </div>
         )}
-        {/* ── Active Inspections Grid ── */}
-        {inspections.length === 0 ? (
+        {/* ── มุมมองสรุปรายวัน ── */}
+        {inspections.length > 0 && view === "daily" && !showBin && (
+          <DailyReport daily={daily} fromDate={fromDate} toDate={toDate} setFromDate={setFromDate} setToDate={setToDate} onExport={exportDailyExcel} />
+        )}
+        {/* ── Active Inspections Grid (มุมมองรายคัน) ── */}
+        {view === "daily" && !showBin ? null : inspections.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-slate-400">
             <div className="bg-slate-100 rounded-2xl p-6 mb-4"><Camera className="w-12 h-12 text-slate-300" /></div>
             <p className="font-semibold text-slate-500 text-lg">ยังไม่มีรูปตรวจรับ</p>
@@ -380,6 +483,109 @@ function InspectionsPageInner() {
           <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm">
             {lightboxIdx + 1} / {detail.images.length}
           </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── รายงานสรุปรับรถรายวัน ──────────────────────────────────────────────────────
+type DailyData = {
+  days: { date: string; count: number; withPhotos: number; brands: [string, number][]; receivers: string[]; pis: string[] }[];
+  total: number; dayCount: number; avg: number; busiest: { date: string; count: number } | null;
+  brandTotals: [string, number][]; receiverTotals: [string, number][]; piTotals: [string, number][];
+};
+function DailyReport({ daily, fromDate, toDate, setFromDate, setToDate, onExport }: {
+  daily: DailyData; fromDate: string; toDate: string;
+  setFromDate: (v: string) => void; setToDate: (v: string) => void; onExport: () => void;
+}) {
+  const thisMonth = () => { const d = new Date(); const m = d.toISOString().slice(0, 7); setFromDate(`${m}-01`); setToDate(new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10)); };
+  const inp = "border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white";
+  return (
+    <div className="flex flex-col gap-4">
+      {/* ตัวกรองช่วงวัน + export */}
+      <div className="flex items-center gap-2 flex-wrap bg-white border border-slate-100 rounded-xl p-3 shadow-sm">
+        <span className="text-xs font-semibold text-slate-500">ช่วงวันที่:</span>
+        <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className={inp} />
+        <span className="text-slate-400 text-xs">ถึง</span>
+        <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className={inp} />
+        <button onClick={thisMonth} className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg px-2.5 py-1.5">เดือนนี้</button>
+        {(fromDate || toDate) && <button onClick={() => { setFromDate(""); setToDate(""); }} className="text-xs text-slate-400 hover:text-red-500">ล้าง (ดูทั้งหมด)</button>}
+        <button onClick={onExport} disabled={daily.total === 0}
+          className="ml-auto flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">
+          <Download className="w-3.5 h-3.5" />Export รายงาน
+        </button>
+      </div>
+
+      {/* การ์ดสรุปช่วงเวลา */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "รับเข้าทั้งหมด", value: `${daily.total} คัน`, c: "text-indigo-700 bg-indigo-50 border-indigo-100" },
+          { label: "จำนวนวัน", value: `${daily.dayCount} วัน`, c: "text-slate-700 bg-slate-50 border-slate-200" },
+          { label: "เฉลี่ยต่อวัน", value: `${Math.round(daily.avg * 10) / 10} คัน`, c: "text-teal-700 bg-teal-50 border-teal-100" },
+          { label: "วันรับมากสุด", value: daily.busiest ? `${daily.busiest.count} คัน` : "—", sub: daily.busiest?.date, c: "text-amber-700 bg-amber-50 border-amber-100" },
+        ].map((s, i) => (
+          <div key={i} className={`rounded-xl border p-3 ${s.c}`}>
+            <p className="text-[11px] font-semibold opacity-70">{s.label}</p>
+            <p className="text-lg font-bold leading-tight mt-0.5">{s.value}</p>
+            {s.sub && <p className="text-[10px] opacity-60 mt-0.5">{s.sub}</p>}
+          </div>
+        ))}
+      </div>
+
+      {/* แยกตามแบรนด์ / ผู้รับ */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="bg-white border border-slate-100 rounded-xl p-3 shadow-sm">
+          <p className="text-xs font-bold text-slate-600 mb-2">📦 แยกตามแบรนด์</p>
+          {daily.brandTotals.length === 0 ? <p className="text-xs text-slate-400">— ไม่มีข้อมูล</p> : (
+            <div className="flex flex-col gap-1.5">
+              {daily.brandTotals.map(([b, n]) => (
+                <div key={b} className="flex items-center gap-2">
+                  <span className="text-xs text-slate-600 w-24 truncate">{b}</span>
+                  <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden"><div className="bg-indigo-400 h-full" style={{ width: `${(n / daily.total) * 100}%` }} /></div>
+                  <span className="text-xs font-bold text-slate-700 w-10 text-right">{n} คัน</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="bg-white border border-slate-100 rounded-xl p-3 shadow-sm">
+          <p className="text-xs font-bold text-slate-600 mb-2">🚚 แยกตามผู้รับรถ</p>
+          {daily.receiverTotals.length === 0 ? <p className="text-xs text-slate-400">— ไม่มีข้อมูล</p> : (
+            <div className="flex flex-col gap-1.5">
+              {daily.receiverTotals.map(([r, n]) => (
+                <div key={r} className="flex items-center gap-2">
+                  <span className="text-xs text-slate-600 flex-1 truncate">{r}</span>
+                  <span className="text-xs font-bold text-slate-700">{n} คัน</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* รายการรายวัน */}
+      {daily.days.length === 0 ? (
+        <div className="text-center py-12 text-slate-400 text-sm">ไม่มีการรับรถในช่วงที่เลือก</div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {daily.days.map(d => (
+            <div key={d.date} className="bg-white border border-slate-100 rounded-xl p-3.5 shadow-sm">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Calendar className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                <span className="font-bold text-slate-800 text-sm">{d.date}</span>
+                <span className="text-xs font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">รับเข้า {d.count} คัน</span>
+                {d.withPhotos < d.count && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">ขาดรูป {d.count - d.withPhotos}</span>}
+              </div>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {d.brands.map(([b, n]) => <span key={b} className="text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded-full">{b} × {n}</span>)}
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1.5">
+                {d.receivers.length > 0 && <>ผู้รับ: <b className="text-slate-600">{d.receivers.join(", ")}</b></>}
+                {d.pis.length > 0 && <> · PI: {d.pis.join(", ")}</>}
+              </p>
+            </div>
+          ))}
         </div>
       )}
     </div>
