@@ -6,6 +6,7 @@ import { useApp } from "@/lib/AppContext";
 import { driveImg } from "@/lib/img";
 import { mockTransporterData } from "@/lib/mockData";
 import { InspectionRecord, DeletedInspectionRecord, Forklift } from "@/lib/types";
+import { displayCode } from "@/lib/productId";
 import { DashboardGuard } from "@/components/DashboardGuard";
 import {
   ArrowLeft, Camera, ImageOff, Calendar, Truck, User,
@@ -98,6 +99,21 @@ function InspectionsPageInner() {
       piTotals: [...piTotals.entries()].sort((a, b) => b[1] - a[1]),
     };
   }, [inspections, fkByUnit, fromDate, toDate]);
+
+  // ── รายการค้างรับ (รถสถานะ "รอรับ" — ผู้ขนส่งยังไม่ได้ไปรับ) จัดกลุ่มตาม PI ──
+  const pending = useMemo(() => {
+    const daysWait = (f: Forklift): number | null => {
+      const c = String(f.created_at ?? "").slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(c)) return null;
+      return Math.floor((Date.now() - new Date(c).getTime()) / 86400000);
+    };
+    const list = forklifts.filter(f => String(f.status ?? "").trim() === "รอรับ")
+      .map(f => ({ f, wait: daysWait(f) }))
+      .sort((a, b) => (b.wait ?? -1) - (a.wait ?? -1)); // ค้างนานสุดบนสุด
+    const byPi = new Map<string, typeof list>();
+    list.forEach(x => { const pi = x.f.pi_no || "— ไม่ระบุ PI"; if (!byPi.has(pi)) byPi.set(pi, []); byPi.get(pi)!.push(x); });
+    return { total: list.length, byPi: [...byPi.entries()].sort((a, b) => b[1].length - a[1].length) };
+  }, [forklifts]);
 
   const handleDelete = (id: string) => { deleteInspection(id); setDeleteConfirm(null); if (detail?.id === id) closeDetail(); };
   const handlePurge  = (id: string) => { purgeInspection(id); setPurgeConfirm(null); };
@@ -192,6 +208,13 @@ function InspectionsPageInner() {
     const ws3 = XLSX.utils.json_to_sheet(sumRows);
     ws3["!cols"] = [18, 24, 12].map(w => ({ wch: w }));
     XLSX.utils.book_append_sheet(wb, ws3, "สรุปแบรนด์-ผู้รับ");
+    // ชีต 4: รายการค้างรับ (รอรับ)
+    const pendRows = pending.byPi.flatMap(([pi, cars]) => cars.map(({ f, wait }) => ({
+      "PI": pi, "รหัส/SN": f.SN || f.id, "ยี่ห้อ": f.brand ?? "", "รุ่น": f.model ?? "", "ค้างมา (วัน)": wait ?? "",
+    })));
+    const ws4 = XLSX.utils.json_to_sheet(pendRows.length ? pendRows : [{ "PI": "-", "รหัส/SN": "ไม่มีรถค้างรับ" }]);
+    ws4["!cols"] = [14, 16, 12, 18, 12].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws4, "ค้างรับ");
     const range = fromDate || toDate ? `_${fromDate || "เริ่ม"}_ถึง_${toDate || "ล่าสุด"}` : "";
     XLSX.writeFile(wb, `รายงานรับรถรายวัน${range}_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
@@ -260,7 +283,7 @@ function InspectionsPageInner() {
         )}
         {/* ── มุมมองสรุปรายวัน ── */}
         {inspections.length > 0 && view === "daily" && !showBin && (
-          <DailyReport daily={daily} fromDate={fromDate} toDate={toDate} setFromDate={setFromDate} setToDate={setToDate} onExport={exportDailyExcel} />
+          <DailyReport daily={daily} pending={pending} fromDate={fromDate} toDate={toDate} setFromDate={setFromDate} setToDate={setToDate} onExport={exportDailyExcel} />
         )}
         {/* ── Active Inspections Grid (มุมมองรายคัน) ── */}
         {view === "daily" && !showBin ? null : inspections.length === 0 ? (
@@ -495,8 +518,9 @@ type DailyData = {
   total: number; dayCount: number; avg: number; busiest: { date: string; count: number } | null;
   brandTotals: [string, number][]; receiverTotals: [string, number][]; piTotals: [string, number][];
 };
-function DailyReport({ daily, fromDate, toDate, setFromDate, setToDate, onExport }: {
-  daily: DailyData; fromDate: string; toDate: string;
+type PendingData = { total: number; byPi: [string, { f: Forklift; wait: number | null }[]][] };
+function DailyReport({ daily, pending, fromDate, toDate, setFromDate, setToDate, onExport }: {
+  daily: DailyData; pending: PendingData; fromDate: string; toDate: string;
   setFromDate: (v: string) => void; setToDate: (v: string) => void; onExport: () => void;
 }) {
   const thisMonth = () => { const d = new Date(); const m = d.toISOString().slice(0, 7); setFromDate(`${m}-01`); setToDate(new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10)); };
@@ -517,7 +541,39 @@ function DailyReport({ daily, fromDate, toDate, setFromDate, setToDate, onExport
         </button>
       </div>
 
-      {/* การ์ดสรุปช่วงเวลา */}
+      {/* รายการค้างรับ — รถสถานะ "รอรับ" ที่ผู้ขนส่งยังไม่ได้ไปรับ (ไม่ผูกกับช่วงวันที่) */}
+      <div className={`rounded-xl border p-3.5 shadow-sm ${pending.total > 0 ? "bg-amber-50 border-amber-200" : "bg-white border-slate-100"}`}>
+        <div className="flex items-center gap-2 flex-wrap mb-1">
+          <Truck className={`w-4 h-4 flex-shrink-0 ${pending.total > 0 ? "text-amber-600" : "text-slate-400"}`} />
+          <p className="text-sm font-bold text-slate-700">รายการค้างรับ (รอผู้ขนส่งไปรับ)</p>
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pending.total > 0 ? "bg-amber-500 text-white" : "bg-slate-200 text-slate-500"}`}>{pending.total} คัน</span>
+        </div>
+        {pending.total === 0 ? (
+          <p className="text-xs text-slate-400 mt-1">✅ ไม่มีรถค้างรับ — รับเข้าครบทุกคันแล้ว</p>
+        ) : (
+          <div className="flex flex-col gap-2 mt-2">
+            {pending.byPi.map(([pi, cars]) => (
+              <div key={pi} className="bg-white border border-amber-100 rounded-lg p-2.5">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-[11px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full">PI {pi}</span>
+                  <span className="text-[11px] font-semibold text-slate-500">{cars.length} คัน</span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  {cars.map(({ f, wait }) => (
+                    <div key={f.id} className="flex items-center gap-2 text-[11px] flex-wrap">
+                      <span className="font-bold text-slate-700">{f.SN ? f.SN : `#${displayCode(f)}`}</span>
+                      <span className="text-slate-500">{f.brand} {f.model}</span>
+                      {wait != null && <span className={`ml-auto font-semibold ${wait > 30 ? "text-red-600" : "text-slate-400"}`}>ค้างมา {wait} วัน</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* การ์ดสรุปช่วงเวลา (รับเข้าจริง ตามช่วงวันที่) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: "รับเข้าทั้งหมด", value: `${daily.total} คัน`, c: "text-indigo-700 bg-indigo-50 border-indigo-100" },
